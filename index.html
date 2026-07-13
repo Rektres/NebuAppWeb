@@ -10,6 +10,8 @@
 </head>
 <body>
 
+  <canvas id="bgCanvas" aria-hidden="true"></canvas>
+
   <!-- ==================== PANTALLA DE LOGIN ==================== -->
   <div id="authScreen" class="auth-screen hidden">
     <div class="auth-card">
@@ -46,20 +48,39 @@
 
       <!-- ========== PESTAÑA 1: ESTADÍSTICAS ========== -->
       <section id="tab-stats" class="tab active">
+        <div class="card seg-card">
+          <div class="seg">
+            <button class="seg-btn active" data-mode="semana">Barras · 7 días</button>
+            <button class="seg-btn" data-mode="diario">Línea · 3 días</button>
+          </div>
+          <p class="form-hint seg-hint hidden" id="segHint">Pellizca (o usa la rueda) para acercar, arrastra para moverte · ⟲ restablece</p>
+        </div>
         <div class="card chart-card">
-          <h2>🍼 Leche · últimos 7 días (ml)</h2>
+          <div class="chart-head">
+            <h2 id="tituloLeche">🍼 Leche · últimos 7 días (ml)</h2>
+            <button class="zoom-reset hidden" data-key="leche" title="Restablecer zoom">⟲</button>
+          </div>
           <div class="chart-wrap"><canvas id="chartLeche"></canvas></div>
         </div>
         <div class="card chart-card">
-          <h2>💊 Vitaminas · últimos 7 días (gotas)</h2>
+          <div class="chart-head">
+            <h2 id="tituloVitaminas">💊 Vitaminas · últimos 7 días (gotas)</h2>
+            <button class="zoom-reset hidden" data-key="vitaminas" title="Restablecer zoom">⟲</button>
+          </div>
           <div class="chart-wrap"><canvas id="chartVitaminas"></canvas></div>
         </div>
         <div class="card chart-card">
-          <h2>🧷 Pañales · últimos 7 días</h2>
+          <div class="chart-head">
+            <h2 id="tituloPanales">🧷 Pañales · últimos 7 días</h2>
+            <button class="zoom-reset hidden" data-key="panales" title="Restablecer zoom">⟲</button>
+          </div>
           <div class="chart-wrap"><canvas id="chartPanales"></canvas></div>
         </div>
         <div class="card chart-card">
-          <h2>😴 Sueño · últimos 7 días (horas)</h2>
+          <div class="chart-head">
+            <h2 id="tituloSueno">😴 Sueño · últimos 7 días (horas)</h2>
+            <button class="zoom-reset hidden" data-key="sueno" title="Restablecer zoom">⟲</button>
+          </div>
           <div class="chart-wrap"><canvas id="chartSueno"></canvas></div>
         </div>
       </section>
@@ -74,7 +95,7 @@
             </div>
             <div class="goal-input-wrap">
               <label for="objetivoInput" class="stat-label">Objetivo diario (ml)</label>
-              <input type="number" id="objetivoInput" min="1" step="10" value="800">
+              <input type="number" id="objetivoInput" step="any" inputmode="decimal" value="800">
             </div>
           </div>
           <div class="progress-track"><div class="progress-fill" id="lecheProgress"></div></div>
@@ -85,7 +106,7 @@
           <h2>Registrar toma</h2>
           <div class="form-grid">
             <label>Cantidad (ml)
-              <input type="number" id="lecheCantidad" min="1" step="5" required placeholder="120">
+              <input type="number" id="lecheCantidad" step="any" inputmode="decimal" required placeholder="120">
             </label>
             <label>Fecha
               <input type="date" id="lecheFecha" required>
@@ -109,7 +130,7 @@
           <h2>Registrar vitaminas</h2>
           <div class="form-grid">
             <label>Gotas
-              <input type="number" id="vitGotas" min="1" value="5" required>
+              <input type="number" id="vitGotas" step="any" inputmode="decimal" value="5" required>
             </label>
             <label>Fecha
               <input type="date" id="vitFecha" required>
@@ -223,6 +244,15 @@
         </div>
       </div>
 
+      <div class="field-label">Fondo animado
+        <div class="bg-row" id="bgRow">
+          <button type="button" class="bg-opt" data-bg="none">Ninguno</button>
+          <button type="button" class="bg-opt" data-bg="mar">🌊 Mar</button>
+          <button type="button" class="bg-opt" data-bg="espacio">🌌 Espacio</button>
+          <button type="button" class="icon-btn" id="bgPauseBtn" title="Pausar / reanudar">⏸️</button>
+        </div>
+      </div>
+
       <div class="field-label">Color de la app
         <div class="swatch-row" id="swatchRow">
           <button class="swatch" data-palette="celeste" style="--sw:#3987e5" title="Celeste"></button>
@@ -242,6 +272,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
