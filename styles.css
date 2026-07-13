@@ -43,7 +43,7 @@
 :root[data-theme="light"][data-palette="lila"]    { --accent: #6a5cd8; --accent-ink: #ffffff; }
 :root[data-theme="light"][data-palette="ambar"]   { --accent: #b37400; --accent-ink: #ffffff; }
 
-html { font-size: 16px; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
 
 body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -51,6 +51,7 @@ body {
   color: var(--text);
   min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 .hidden { display: none !important; }
@@ -67,7 +68,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 14px;
+  padding: 10px max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left));
   padding-top: calc(10px + env(safe-area-inset-top));
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -115,8 +116,7 @@ body {
 
 /* ---------- Layout ---------- */
 main {
-  padding: 14px;
-  padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  padding: 14px max(14px, env(safe-area-inset-right)) calc(84px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
   max-width: 640px;
   margin: 0 auto;
 }
@@ -148,21 +148,32 @@ label {
   gap: 5px;
   font-size: 0.8rem;
   color: var(--muted);
+  min-width: 0;
 }
 
 input[type="number"], input[type="date"], input[type="time"],
 input[type="email"], input[type="password"], input[type="text"] {
+  appearance: none;
+  -webkit-appearance: none;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 11px 12px;
+  height: 46px;
+  padding: 0 12px;
   font-size: 1rem;
+  font-family: inherit;
   color: var(--text);
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   color-scheme: dark;
 }
 :root[data-theme="light"] input { color-scheme: light; }
 input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* iOS/Safari: los inputs date/time centran su valor y no respetan el ancho — normalizar */
+input::-webkit-date-and-time-value { text-align: left; }
+input[type="date"], input[type="time"] { display: block; line-height: 44px; }
 
 .form-hint { font-size: 0.75rem; color: var(--muted); margin-bottom: 12px; }
 
@@ -277,7 +288,7 @@ td.td-action { text-align: right; width: 36px; }
 .goal-row { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 12px; }
 .goal-row > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .goal-input-wrap { align-items: flex-end; text-align: right; }
-.goal-input-wrap input { width: 110px; text-align: right; padding: 9px 10px; }
+.goal-input-wrap input { width: 110px; height: 42px; text-align: right; padding: 0 10px; }
 .stat-value { line-height: 1.15; }
 
 .progress-track {
@@ -378,6 +389,21 @@ td.td-action { text-align: right; width: 36px; }
 .auth-logo { font-size: 3rem; margin-bottom: 8px; }
 .auth-card h1 { font-size: 1.3rem; margin-bottom: 18px; }
 .auth-card form { display: flex; flex-direction: column; gap: 10px; }
+
+.pass-wrap { position: relative; }
+.pass-wrap input { padding-right: 44px; }
+.pass-eye {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  padding: 6px;
+  cursor: pointer;
+  opacity: 0.75;
+}
 .auth-error { color: var(--danger); font-size: 0.85rem; margin-top: 12px; }
 
 /* ---------- Modal configuración ---------- */

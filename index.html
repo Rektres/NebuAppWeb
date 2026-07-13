@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es" data-theme="dark" data-palette="celeste">
+<html lang="es-CL" data-theme="dark" data-palette="celeste">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -19,7 +19,10 @@
       <h1 id="authTitle">Iniciar sesión</h1>
       <form id="authForm">
         <input type="email" id="authEmail" placeholder="Correo electrónico" required autocomplete="email">
-        <input type="password" id="authPass" placeholder="Contraseña" required minlength="6" autocomplete="current-password">
+        <div class="pass-wrap">
+          <input type="password" id="authPass" placeholder="Contraseña" required minlength="6" autocomplete="current-password">
+          <button type="button" id="passToggle" class="pass-eye" title="Mostrar contraseña">👁️</button>
+        </div>
         <button type="submit" id="authSubmit" class="btn-primary">Entrar</button>
       </form>
       <p id="authError" class="auth-error hidden"></p>

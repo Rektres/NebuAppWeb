@@ -387,7 +387,7 @@ function baseOptsDiario(ini, fin, labelFn) {
         padding: 10,
         callbacks: {
           title: (items) =>
-            new Date(items[0].parsed.x).toLocaleString('es', { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+            new Date(items[0].parsed.x).toLocaleString('es', { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }),
           label: labelFn,
         },
       },
@@ -669,6 +669,13 @@ $('logoutBtn').addEventListener('click', async () => {
 
 // ---------- Autenticación ----------
 let modoRegistro = false;
+
+$('passToggle').addEventListener('click', () => {
+  const input = $('authPass');
+  const visible = input.type === 'text';
+  input.type = visible ? 'password' : 'text';
+  $('passToggle').textContent = visible ? '👁️' : '🙈';
+});
 
 $('authToggle').addEventListener('click', () => {
   modoRegistro = !modoRegistro;
