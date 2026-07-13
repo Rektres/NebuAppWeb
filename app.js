@@ -69,7 +69,9 @@ function setNowDefaults() {
 
 // ---------- Estado ----------
 const cache = { tomas: null, vitaminas: null, panales: null, sueno: null };
-let cfg = { nombre_bebe: 'Mi bebé', foto_base64: null, paleta: 'celeste' };
+let bebe = null;    // fila de la tabla bebes (nombre, foto, paleta, codigo)
+let miRol = null;   // 'madre' | 'padre'
+let usuario = null; // session.user
 let statsDirty = true;
 let appStarted = false;
 let currentTab = 'stats';
@@ -77,7 +79,9 @@ let fotoPendiente; // base64 elegido en el modal, aún sin guardar
 
 // ---------- Datos ----------
 async function fetchTable(tabla, campoOrden) {
-  const { data, error } = await db.from(tabla).select('*').order(campoOrden, { ascending: false }).limit(500);
+  const { data, error } = await db.from(tabla).select('*')
+    .eq('bebe_id', bebe.id)
+    .order(campoOrden, { ascending: false }).limit(500);
   if (error) { toast(`Error cargando ${tabla}: ${error.message}`, true); return []; }
   return data;
 }
@@ -92,6 +96,7 @@ async function loadAll() {
 }
 
 async function insertar(tabla, valores) {
+  valores.bebe_id = bebe.id;
   const { error } = await db.from(tabla).insert(valores);
   if (error) { toast(`Error al guardar: ${error.message}`, true); return false; }
   await loadData(tabla);
@@ -573,34 +578,42 @@ $('themeBtn').addEventListener('click', () => {
   applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 });
 
-// ---------- Configuración (nombre, foto, paleta) ----------
-function applyConfig() {
-  $('babyName').textContent = cfg.nombre_bebe || 'Mi bebé';
-  document.documentElement.dataset.palette = cfg.paleta || 'celeste';
+// ---------- Configuración (bebé: nombre, foto, paleta, código; mi rol) ----------
+function aplicarBebe() {
+  $('babyName').textContent = bebe?.nombre || 'Mi bebé';
+  document.documentElement.dataset.palette = bebe?.paleta || 'celeste';
   const img = $('babyPhoto'), fb = $('avatarFallback');
-  if (cfg.foto_base64) { img.src = cfg.foto_base64; img.classList.remove('hidden'); fb.classList.add('hidden'); }
+  if (bebe?.foto_base64) { img.src = bebe.foto_base64; img.classList.remove('hidden'); fb.classList.add('hidden'); }
   else { img.classList.add('hidden'); fb.classList.remove('hidden'); }
-}
-
-async function loadConfig() {
-  const { data, error } = await db.from('config').select('*').eq('id', 1).maybeSingle();
-  if (error) { toast(`Error cargando configuración: ${error.message}`, true); return; }
-  if (data) cfg = data;
-  applyConfig();
+  const badge = $('rolBadge');
+  badge.textContent = miRol === 'padre' ? '👨 Padre' : '👩 Madre';
+  badge.classList.toggle('hidden', !miRol);
 }
 
 function abrirModal() {
-  fotoPendiente = cfg.foto_base64;
-  $('cfgNombre').value = cfg.nombre_bebe || '';
+  fotoPendiente = bebe?.foto_base64;
+  $('cfgNombre').value = bebe?.nombre || '';
+  $('cfgCodigo').textContent = bebe?.codigo || '——————';
+  const rolInput = document.querySelector(`input[name="cfgRol"][value="${miRol}"]`);
+  if (rolInput) rolInput.checked = true;
   actualizarPreviewFoto();
-  marcarSwatch(cfg.paleta);
+  marcarSwatch(bebe?.paleta || 'celeste');
   $('settingsModal').classList.remove('hidden');
 }
 
 function cerrarModal() {
   $('settingsModal').classList.add('hidden');
-  document.documentElement.dataset.palette = cfg.paleta || 'celeste'; // revierte paleta no guardada
+  document.documentElement.dataset.palette = bebe?.paleta || 'celeste'; // revierte paleta no guardada
 }
+
+$('copiarCodigo').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(bebe?.codigo || '');
+    toast('Código copiado ✓');
+  } catch {
+    toast('No se pudo copiar el código', true);
+  }
+});
 
 function actualizarPreviewFoto() {
   const img = $('cfgFotoPreview'), fb = $('cfgAvatarFallback');
@@ -647,17 +660,21 @@ $('cfgFoto').addEventListener('change', () => {
 });
 
 $('cfgGuardar').addEventListener('click', async () => {
-  const nueva = {
-    id: 1,
-    nombre_bebe: $('cfgNombre').value.trim() || 'Mi bebé',
+  const cambios = {
+    nombre: $('cfgNombre').value.trim() || 'Mi bebé',
     foto_base64: fotoPendiente || null,
     paleta: document.querySelector('.swatch.selected')?.dataset.palette || 'celeste',
-    updated_at: new Date().toISOString(),
   };
-  const { error } = await db.from('config').upsert(nueva);
+  const rolSel = document.querySelector('input[name="cfgRol"]:checked')?.value || miRol;
+  const [rBebe, rRol] = await Promise.all([
+    db.from('bebes').update(cambios).eq('id', bebe.id),
+    db.from('miembros').update({ rol: rolSel }).eq('user_id', usuario.id),
+  ]);
+  const error = rBebe.error || rRol.error;
   if (error) { toast(`Error al guardar: ${error.message}`, true); return; }
-  cfg = nueva;
-  applyConfig();
+  bebe = { ...bebe, ...cambios };
+  miRol = rolSel;
+  aplicarBebe();
   $('settingsModal').classList.add('hidden');
   toast('Configuración guardada ✓');
 });
@@ -693,6 +710,10 @@ $('authForm').addEventListener('submit', async (e) => {
   $('authError').classList.add('hidden');
   try {
     if (modoRegistro) {
+      // Whitelist: solo correos autorizados pueden crear cuenta
+      const { data: autorizado, error: errWl } = await db.rpc('email_autorizado', { correo: email });
+      if (errWl) throw errWl;
+      if (!autorizado) throw new Error('Este correo no está autorizado para registrarse.');
       const { data, error } = await db.auth.signUp({ email, password });
       if (error) throw error;
       if (!data.session) {
@@ -704,27 +725,82 @@ $('authForm').addEventListener('submit', async (e) => {
       if (error) throw error;
     }
   } catch (err) {
-    $('authError').textContent = err.message === 'Invalid login credentials' ? 'Correo o contraseña incorrectos' : err.message;
+    let msg = err.message;
+    if (msg === 'Invalid login credentials') msg = 'Correo o contraseña incorrectos';
+    else if (/database error/i.test(msg)) msg = 'Este correo no está autorizado para registrarse.';
+    $('authError').textContent = msg;
     $('authError').classList.remove('hidden');
   } finally {
     $('authSubmit').disabled = false;
   }
 });
 
-async function showApp() {
+// ---------- Vincular bebé (crear o unirse con código) ----------
+const rolSeleccionado = () => document.querySelector('input[name="linkRol"]:checked')?.value || 'madre';
+
+function mostrarLinkError(msg) {
+  $('linkError').textContent = msg;
+  $('linkError').classList.remove('hidden');
+}
+
+$('formCrearBebe').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('linkError').classList.add('hidden');
+  const { data, error } = await db.rpc('crear_bebe', {
+    p_nombre: $('nuevoNombre').value.trim(),
+    p_rol: rolSeleccionado(),
+  });
+  if (error) { mostrarLinkError(error.message); return; }
+  iniciarApp(data, rolSeleccionado());
+  toast(`Código para vincular: ${data.codigo} (también está en ⚙️)`);
+});
+
+$('formUnirse').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('linkError').classList.add('hidden');
+  const codigo = $('codigoInput').value.trim();
+  if (!codigo) { mostrarLinkError('Escribe el código del bebé'); return; }
+  const { data, error } = await db.rpc('unirse_bebe', { p_codigo: codigo, p_rol: rolSeleccionado() });
+  if (error) { mostrarLinkError(error.message); return; }
+  iniciarApp(data, rolSeleccionado());
+});
+
+$('linkLogout').addEventListener('click', () => db.auth.signOut());
+
+// ---------- Entrada a la app ----------
+async function entrar(session) {
+  usuario = session.user;
   $('authScreen').classList.add('hidden');
+  const { data: miembro, error } = await db.from('miembros').select('*').eq('user_id', usuario.id).maybeSingle();
+  if (error) { toast(`Error: ${error.message}`, true); return; }
+  if (!miembro) {
+    // Aún no está vinculado a ningún bebé
+    $('app').classList.add('hidden');
+    $('linkScreen').classList.remove('hidden');
+    return;
+  }
+  const { data: b, error: e2 } = await db.from('bebes').select('*').eq('id', miembro.bebe_id).maybeSingle();
+  if (e2 || !b) { toast('No se pudo cargar el bebé', true); return; }
+  iniciarApp(b, miembro.rol);
+}
+
+function iniciarApp(b, rol) {
+  bebe = b;
+  miRol = rol;
+  $('linkScreen').classList.add('hidden');
   $('app').classList.remove('hidden');
-  if (appStarted) return;
   appStarted = true;
+  aplicarBebe();
   setNowDefaults();
   renderLecheResumen();
-  await Promise.all([loadConfig(), loadAll()]);
-  renderTab(currentTab);
+  loadAll().then(() => renderTab(currentTab));
 }
 
 function showAuth() {
   appStarted = false;
+  bebe = null; miRol = null; usuario = null;
   $('app').classList.add('hidden');
+  $('linkScreen').classList.add('hidden');
   $('authScreen').classList.remove('hidden');
 }
 
@@ -838,8 +914,11 @@ if (!configurado) {
   $('authError').textContent = '⚠️ Falta config.js con SUPABASE_URL y SUPABASE_ANON_KEY (ver config.example.js)';
   $('authError').classList.remove('hidden');
 } else {
+  let entrando = false;
   db.auth.onAuthStateChange((_evento, session) => {
-    if (session) showApp();
-    else showAuth();
+    if (!session) { showAuth(); return; }
+    if (appStarted || entrando) return;
+    entrando = true;
+    entrar(session).finally(() => { entrando = false; });
   });
 }

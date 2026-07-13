@@ -30,6 +30,30 @@
     </div>
   </div>
 
+  <!-- ==================== VINCULAR BEBÉ ==================== -->
+  <div id="linkScreen" class="auth-screen hidden">
+    <div class="auth-card">
+      <div class="auth-logo">👶</div>
+      <h1>Vincula a tu bebé</h1>
+      <p class="link-sub">¿Quién eres?</p>
+      <div class="rol-row">
+        <label class="check-pill"><input type="radio" name="linkRol" value="madre" checked> 👩 Madre</label>
+        <label class="check-pill"><input type="radio" name="linkRol" value="padre"> 👨 Padre</label>
+      </div>
+      <form id="formCrearBebe">
+        <input type="text" id="nuevoNombre" maxlength="40" placeholder="Nombre del bebé">
+        <button type="submit" class="btn-primary">Crear bebé nuevo</button>
+      </form>
+      <div class="divider">— o —</div>
+      <form id="formUnirse">
+        <input type="text" id="codigoInput" maxlength="6" placeholder="Código del bebé (ej: A1B2C3)" autocapitalize="characters">
+        <button type="submit" class="btn-primary">Unirme con el código</button>
+      </form>
+      <p id="linkError" class="auth-error hidden"></p>
+      <button id="linkLogout" class="link-btn">Cerrar sesión</button>
+    </div>
+  </div>
+
   <!-- ==================== APP ==================== -->
   <div id="app" class="hidden">
 
@@ -39,7 +63,10 @@
           <img id="babyPhoto" alt="Foto del bebé" class="hidden">
           <span id="avatarFallback">👶</span>
         </div>
-        <h1 id="babyName">Mi bebé</h1>
+        <div class="baby-txt">
+          <h1 id="babyName">Mi bebé</h1>
+          <span id="rolBadge" class="rol-badge hidden"></span>
+        </div>
       </div>
       <div class="header-actions">
         <button id="themeBtn" class="icon-btn" title="Cambiar tema">☀️</button>
@@ -230,6 +257,20 @@
       <div class="modal-head">
         <h2>Configuración</h2>
         <button id="settingsClose" class="icon-btn">✕</button>
+      </div>
+
+      <div class="field-label">Código del bebé · compártelo para vincular al otro padre/madre
+        <div class="codigo-box">
+          <span id="cfgCodigo" class="codigo-txt">——————</span>
+          <button type="button" id="copiarCodigo" class="btn-secondary">Copiar</button>
+        </div>
+      </div>
+
+      <div class="field-label">Mi rol
+        <div class="rol-row">
+          <label class="check-pill"><input type="radio" name="cfgRol" value="madre"> 👩 Madre</label>
+          <label class="check-pill"><input type="radio" name="cfgRol" value="padre"> 👨 Padre</label>
+        </div>
       </div>
 
       <label class="field-label">Nombre del bebé

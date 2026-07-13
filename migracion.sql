@@ -1,10 +1,13 @@
 -- ============================================================
--- Rutinas del Bebé — Esquema completo (instalación desde cero)
--- Ejecutar en: Supabase Dashboard → SQL Editor → New query → Run
--- Si tu base ya tiene datos del esquema anterior, usa migracion.sql
+-- MIGRACIÓN: del esquema anterior (tabla config, datos compartidos)
+-- al nuevo esquema con bebés, padres vinculados y whitelist.
+-- Ejecutar UNA SOLA VEZ en: SQL Editor → New query → Run.
+-- Conserva todos los registros existentes: se asignan al bebé creado
+-- desde la tabla config, y los usuarios actuales quedan vinculados
+-- como 'madre' (cada uno puede corregir su rol en ⚙️ Configuración).
 -- ============================================================
 
--- ---------- Bebés: cada bebé tiene un código único para vincular a sus padres ----------
+-- 1. Nuevas tablas
 create table bebes (
   id uuid primary key default gen_random_uuid(),
   nombre text not null default 'Mi bebé',
@@ -14,7 +17,6 @@ create table bebes (
   created_at timestamptz default now()
 );
 
--- ---------- Miembros: qué usuario (madre/padre) pertenece a qué bebé ----------
 create table miembros (
   user_id uuid primary key references auth.users(id) on delete cascade,
   bebe_id uuid not null references bebes(id) on delete cascade,
@@ -22,60 +24,59 @@ create table miembros (
   created_at timestamptz default now()
 );
 
--- ---------- Whitelist: solo estos correos pueden registrarse ----------
 create table whitelist (email text primary key);
--- Agrega aquí los correos autorizados:
--- insert into whitelist (email) values ('mama@ejemplo.com'), ('papa@ejemplo.com');
+-- Agrega aquí los correos autorizados a registrarse en el futuro:
+-- insert into whitelist (email) values ('correo@ejemplo.com');
 
--- ---------- Tablas de datos (con bebe_id) ----------
-create table tomas (
-  id bigint generated always as identity primary key,
-  bebe_id uuid not null references bebes(id) on delete cascade,
-  fecha_hora timestamptz not null,
-  cantidad_ml integer not null,
-  created_at timestamptz default now()
-);
+-- 2. Columna bebe_id en las tablas de datos
+alter table tomas add column bebe_id uuid references bebes(id) on delete cascade;
+alter table vitaminas add column bebe_id uuid references bebes(id) on delete cascade;
+alter table panales add column bebe_id uuid references bebes(id) on delete cascade;
+alter table sueno add column bebe_id uuid references bebes(id) on delete cascade;
 
-create table vitaminas (
-  id bigint generated always as identity primary key,
-  bebe_id uuid not null references bebes(id) on delete cascade,
-  fecha_hora timestamptz not null,
-  gotas integer not null default 5,
-  created_at timestamptz default now()
-);
+-- 3. Migrar: crear el bebé desde config, asignarle todos los datos
+--    y vincular a todos los usuarios existentes
+do $$
+declare v_bebe uuid;
+begin
+  insert into bebes (nombre, foto_base64, paleta, codigo)
+  select coalesce(nombre_bebe, 'Mi bebé'), foto_base64, coalesce(paleta, 'celeste'),
+         upper(substr(md5(random()::text), 1, 6))
+  from config where id = 1
+  returning id into v_bebe;
 
-create table panales (
-  id bigint generated always as identity primary key,
-  bebe_id uuid not null references bebes(id) on delete cascade,
-  fecha_hora timestamptz not null,
-  heces boolean not null default false,
-  orina boolean not null default false,
-  created_at timestamptz default now()
-);
+  if v_bebe is null then
+    insert into bebes (codigo) values (upper(substr(md5(random()::text), 1, 6)))
+    returning id into v_bebe;
+  end if;
 
-create table sueno (
-  id bigint generated always as identity primary key,
-  bebe_id uuid not null references bebes(id) on delete cascade,
-  inicio timestamptz not null,
-  fin timestamptz not null,
-  created_at timestamptz default now()
-);
+  update tomas set bebe_id = v_bebe where bebe_id is null;
+  update vitaminas set bebe_id = v_bebe where bebe_id is null;
+  update panales set bebe_id = v_bebe where bebe_id is null;
+  update sueno set bebe_id = v_bebe where bebe_id is null;
 
--- ============================================================
--- Funciones (security definer: se ejecutan con permisos del dueño)
--- ============================================================
+  insert into miembros (user_id, bebe_id, rol)
+  select id, v_bebe, 'madre' from auth.users
+  on conflict (user_id) do nothing;
+end $$;
 
--- Bebés a los que pertenece el usuario actual (evita recursión en las políticas)
+alter table tomas alter column bebe_id set not null;
+alter table vitaminas alter column bebe_id set not null;
+alter table panales alter column bebe_id set not null;
+alter table sueno alter column bebe_id set not null;
+
+-- 4. La tabla config ya no se usa
+drop table config;
+
+-- 5. Funciones (security definer)
 create or replace function mis_bebes() returns setof uuid
 language sql security definer stable set search_path = public as
 $$ select bebe_id from miembros where user_id = auth.uid() $$;
 
--- ¿Está el correo autorizado a registrarse? (para mostrar error amable en la app)
 create or replace function email_autorizado(correo text) returns boolean
 language sql security definer stable set search_path = public as
 $$ select exists (select 1 from whitelist where lower(email) = lower(correo)) $$;
 
--- Crear un bebé nuevo y vincularme como madre/padre. Devuelve el bebé (con su código).
 create or replace function crear_bebe(p_nombre text, p_rol text) returns json
 language plpgsql security definer set search_path = public as $$
 declare v_bebe bebes;
@@ -92,7 +93,6 @@ begin
   return row_to_json(v_bebe);
 end $$;
 
--- Unirme a un bebé existente usando su código único. Devuelve el bebé.
 create or replace function unirse_bebe(p_codigo text, p_rol text) returns json
 language plpgsql security definer set search_path = public as $$
 declare v_bebe bebes;
@@ -111,8 +111,7 @@ begin
   return row_to_json(v_bebe);
 end $$;
 
--- Trigger: bloquea el registro de correos que no estén en la whitelist
--- (aplica también al "Add user" del Dashboard: agrega el correo a whitelist primero)
+-- 6. Whitelist: bloquea registros no autorizados (también "Add user" del Dashboard)
 create or replace function validar_whitelist() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
@@ -125,16 +124,15 @@ end $$;
 create trigger trg_whitelist before insert on auth.users
   for each row execute function validar_whitelist();
 
--- ============================================================
--- RLS: solo los padres vinculados a un bebé ven y escriben sus datos
--- ============================================================
+-- 7. RLS nuevo: reemplaza las políticas antiguas
+drop policy "auth all" on tomas;
+drop policy "auth all" on vitaminas;
+drop policy "auth all" on panales;
+drop policy "auth all" on sueno;
+
 alter table bebes enable row level security;
 alter table miembros enable row level security;
 alter table whitelist enable row level security; -- sin políticas: nadie la lee directo
-alter table tomas enable row level security;
-alter table vitaminas enable row level security;
-alter table panales enable row level security;
-alter table sueno enable row level security;
 
 create policy "padres ven su bebe" on bebes for select to authenticated
   using (id in (select mis_bebes()));
