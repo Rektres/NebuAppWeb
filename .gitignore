@@ -1,0 +1,2 @@
+# Credenciales locales de Supabase (en Pages las genera GitHub Actions desde los Secrets)
+config.js

@@ -2,12 +2,16 @@
    Rutinas del Bebé — lógica de la app (Vanilla JS + Supabase)
    ============================================================ */
 
-// ⚠️ CONFIGURA AQUÍ TU PROYECTO DE SUPABASE:
-// Dashboard → Project Settings → API → Project URL y anon/public key
-const SUPABASE_URL = 'https://TU-PROYECTO.supabase.co';
-const SUPABASE_ANON_KEY = 'TU_ANON_KEY';
+// Credenciales de Supabase: vienen de config.js (window.ENV).
+// Local: copia config.example.js como config.js. GitHub Pages: se genera
+// en el workflow de Actions desde los Secrets SUPABASE_URL / SUPABASE_ANON_KEY.
+const ENV = window.ENV || {};
+const configurado = ENV.SUPABASE_URL && !ENV.SUPABASE_URL.includes('TU-PROYECTO');
 
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const db = supabase.createClient(
+  configurado ? ENV.SUPABASE_URL : 'https://sin-configurar.supabase.co',
+  ENV.SUPABASE_ANON_KEY || 'sin-configurar'
+);
 
 // ---------- Helpers ----------
 const $ = (id) => document.getElementById(id);
@@ -550,9 +554,9 @@ function showAuth() {
 // ---------- Inicio ----------
 applyTheme(localStorage.getItem('tema') || 'dark');
 
-if (SUPABASE_URL.includes('TU-PROYECTO')) {
+if (!configurado) {
   showAuth();
-  $('authError').textContent = '⚠️ Configura SUPABASE_URL y SUPABASE_ANON_KEY en app.js';
+  $('authError').textContent = '⚠️ Falta config.js con SUPABASE_URL y SUPABASE_ANON_KEY (ver config.example.js)';
   $('authError').classList.remove('hidden');
 } else {
   db.auth.onAuthStateChange((_evento, session) => {

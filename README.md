@@ -9,12 +9,14 @@ App web móvil para registrar las rutinas de un bebé: tomas de leche, vitaminas
 2. Ve a **SQL Editor → New query**, pega el contenido de [`supabase.sql`](supabase.sql) y ejecuta **Run**. Esto crea las tablas `tomas`, `vitaminas`, `panales`, `sueno` y `config` con RLS (solo usuarios autenticados pueden leer/escribir).
 
 ### 2. Conectar la app
-1. En Supabase: **Project Settings → API** → copia la **Project URL** y la **anon public key**.
-2. Pégalas al inicio de [`app.js`](app.js):
-   ```js
-   const SUPABASE_URL = 'https://tu-proyecto.supabase.co';
-   const SUPABASE_ANON_KEY = 'tu-anon-key';
-   ```
+Las credenciales viven en `config.js`, que **no se sube al repo** (está en `.gitignore`).
+
+- **Local**: copia [`config.example.js`](config.example.js) como `config.js` y pega tu **Project URL** y **anon public key** (Supabase → **Project Settings → API**).
+- **GitHub Pages**: el workflow [`deploy.yml`](.github/workflows/deploy.yml) genera `config.js` al desplegar usando los Secrets del repo. Configúralos en **Settings → Secrets and variables → Actions → New repository secret**:
+  - `SUPABASE_URL` → `https://tu-proyecto.supabase.co`
+  - `SUPABASE_ANON_KEY` → tu anon/publishable key
+
+> Nota: la anon key igualmente es visible en el navegador de quien use la app (es una clave pública por diseño); la protección real de los datos es el RLS + login.
 
 ### 3. Usuarios (login)
 La app requiere iniciar sesión. Opciones:
@@ -22,9 +24,9 @@ La app requiere iniciar sesión. Opciones:
 - **Crear usuarios a mano** (recomendado para uso familiar): **Authentication → Users → Add user** con email y contraseña.
 
 ### 4. Publicar en GitHub Pages
-1. Sube el repo a GitHub.
-2. **Settings → Pages → Source: Deploy from a branch → main / (root)**.
-3. La app queda en `https://tu-usuario.github.io/NebuAppWeb/`.
+1. Sube el repo a GitHub y configura los dos Secrets del paso 2.
+2. **Settings → Pages → Source: GitHub Actions** (necesario para que el workflow despliegue).
+3. Cada push a `main` despliega automáticamente. La app queda en `https://tu-usuario.github.io/NebuAppWeb/`.
 
 ## Uso
 - **📊 Stats**: gráficos de barras de los últimos 7 días (leche, vitaminas, pañales, sueño).
