@@ -9,8 +9,8 @@ const ENV = window.ENV || {};
 const configurado = ENV.SUPABASE_URL && !ENV.SUPABASE_URL.includes('TU-PROYECTO');
 
 const db = supabase.createClient(
-  configurado ? ENV.SUPABASE_URL : 'https://sin-configurar.supabase.co',
-  ENV.SUPABASE_ANON_KEY || 'sin-configurar'
+  configurado ? ENV.SUPABASE_URL : 'https://iseevvlfdjdsrxtxicvu.supabase.co',
+  ENV.SUPABASE_ANON_KEY || 'sb_publishable_vAGgN8aMen8mk6NRU1qSwQ_McgBI603'
 );
 
 // ---------- Helpers ----------
