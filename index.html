@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark" data-palette="celeste">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0d0d">
+  <title>Rutinas del Bebé</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍼</text></svg>">
+</head>
+<body>
+
+  <!-- ==================== PANTALLA DE LOGIN ==================== -->
+  <div id="authScreen" class="auth-screen hidden">
+    <div class="auth-card">
+      <div class="auth-logo">🍼</div>
+      <h1 id="authTitle">Iniciar sesión</h1>
+      <form id="authForm">
+        <input type="email" id="authEmail" placeholder="Correo electrónico" required autocomplete="email">
+        <input type="password" id="authPass" placeholder="Contraseña" required minlength="6" autocomplete="current-password">
+        <button type="submit" id="authSubmit" class="btn-primary">Entrar</button>
+      </form>
+      <p id="authError" class="auth-error hidden"></p>
+      <button id="authToggle" class="link-btn">¿No tienes cuenta? Regístrate</button>
+    </div>
+  </div>
+
+  <!-- ==================== APP ==================== -->
+  <div id="app" class="hidden">
+
+    <header class="app-header">
+      <div class="baby-id">
+        <div class="avatar" id="avatarWrap">
+          <img id="babyPhoto" alt="Foto del bebé" class="hidden">
+          <span id="avatarFallback">👶</span>
+        </div>
+        <h1 id="babyName">Mi bebé</h1>
+      </div>
+      <div class="header-actions">
+        <button id="themeBtn" class="icon-btn" title="Cambiar tema">☀️</button>
+        <button id="settingsBtn" class="icon-btn" title="Configuración">⚙️</button>
+      </div>
+    </header>
+
+    <main>
+
+      <!-- ========== PESTAÑA 1: ESTADÍSTICAS ========== -->
+      <section id="tab-stats" class="tab active">
+        <div class="card chart-card">
+          <h2>🍼 Leche · últimos 7 días (ml)</h2>
+          <div class="chart-wrap"><canvas id="chartLeche"></canvas></div>
+        </div>
+        <div class="card chart-card">
+          <h2>💊 Vitaminas · últimos 7 días (gotas)</h2>
+          <div class="chart-wrap"><canvas id="chartVitaminas"></canvas></div>
+        </div>
+        <div class="card chart-card">
+          <h2>🧷 Pañales · últimos 7 días</h2>
+          <div class="chart-wrap"><canvas id="chartPanales"></canvas></div>
+        </div>
+        <div class="card chart-card">
+          <h2>😴 Sueño · últimos 7 días (horas)</h2>
+          <div class="chart-wrap"><canvas id="chartSueno"></canvas></div>
+        </div>
+      </section>
+
+      <!-- ========== PESTAÑA 2: TOMAS DE LECHE ========== -->
+      <section id="tab-leche" class="tab">
+        <div class="card goal-card">
+          <div class="goal-row">
+            <div>
+              <span class="stat-label">Hoy</span>
+              <span class="stat-value"><span id="lecheHoy">0</span> ml</span>
+            </div>
+            <div class="goal-input-wrap">
+              <label for="objetivoInput" class="stat-label">Objetivo diario (ml)</label>
+              <input type="number" id="objetivoInput" min="1" step="10" value="800">
+            </div>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="lecheProgress"></div></div>
+          <p class="goal-status" id="lecheStatus"></p>
+        </div>
+
+        <form id="formLeche" class="card form-card">
+          <h2>Registrar toma</h2>
+          <div class="form-grid">
+            <label>Cantidad (ml)
+              <input type="number" id="lecheCantidad" min="1" step="5" required placeholder="120">
+            </label>
+            <label>Fecha
+              <input type="date" id="lecheFecha" required>
+            </label>
+            <label>Hora
+              <input type="time" id="lecheHora" required>
+            </label>
+          </div>
+          <button type="submit" class="btn-primary">＋ Agregar toma</button>
+        </form>
+
+        <div class="card table-card">
+          <h2>Historial</h2>
+          <div id="tablaLeche" class="table-wrap"></div>
+        </div>
+      </section>
+
+      <!-- ========== PESTAÑA 3: VITAMINAS ========== -->
+      <section id="tab-vitaminas" class="tab">
+        <form id="formVitaminas" class="card form-card">
+          <h2>Registrar vitaminas</h2>
+          <div class="form-grid">
+            <label>Gotas
+              <input type="number" id="vitGotas" min="1" value="5" required>
+            </label>
+            <label>Fecha
+              <input type="date" id="vitFecha" required>
+            </label>
+            <label>Hora
+              <input type="time" id="vitHora" required>
+            </label>
+          </div>
+          <button type="submit" class="btn-primary">＋ Agregar</button>
+        </form>
+
+        <div class="card table-card">
+          <h2>Historial</h2>
+          <div id="tablaVitaminas" class="table-wrap"></div>
+        </div>
+      </section>
+
+      <!-- ========== PESTAÑA 4: PAÑALES ========== -->
+      <section id="tab-panales" class="tab">
+        <div class="dash-grid">
+          <div class="card dash-card">
+            <span class="stat-label">Último cambio hace</span>
+            <span class="stat-value" id="ultimoCambio">—</span>
+          </div>
+          <div class="card dash-card">
+            <span class="stat-label">Última feca 💩</span>
+            <span class="stat-value stat-value-sm" id="ultimaFeca">—</span>
+          </div>
+        </div>
+
+        <form id="formPanales" class="card form-card">
+          <h2>Registrar cambio</h2>
+          <div class="form-grid">
+            <label>Fecha
+              <input type="date" id="panFecha" required>
+            </label>
+            <label>Hora
+              <input type="time" id="panHora" required>
+            </label>
+          </div>
+          <div class="check-row">
+            <label class="check-pill"><input type="checkbox" id="panHeces"> 💩 Heces</label>
+            <label class="check-pill"><input type="checkbox" id="panOrina"> 💧 Orina</label>
+          </div>
+          <button type="submit" class="btn-primary">＋ Agregar cambio</button>
+        </form>
+
+        <div class="card table-card">
+          <h2>Historial</h2>
+          <div id="tablaPanales" class="table-wrap"></div>
+        </div>
+      </section>
+
+      <!-- ========== PESTAÑA 5: SUEÑO ========== -->
+      <section id="tab-sueno" class="tab">
+        <form id="formSueno" class="card form-card">
+          <h2>Registrar sueño</h2>
+          <div class="form-grid">
+            <label>Fecha (se durmió)
+              <input type="date" id="suenoFecha" required>
+            </label>
+            <label>Se durmió
+              <input type="time" id="suenoInicio" required>
+            </label>
+            <label>Despertó
+              <input type="time" id="suenoFin" required>
+            </label>
+          </div>
+          <p class="form-hint">Si la hora de despertar es menor, se asume que cruzó la medianoche.</p>
+          <button type="submit" class="btn-primary">＋ Agregar</button>
+        </form>
+
+        <div class="card table-card">
+          <h2>Historial</h2>
+          <div id="tablaSueno" class="table-wrap"></div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ========== BARRA DE PESTAÑAS ========== -->
+    <nav class="tabbar">
+      <button class="tab-btn active" data-tab="stats"><span>📊</span>Stats</button>
+      <button class="tab-btn" data-tab="leche"><span>🍼</span>Leche</button>
+      <button class="tab-btn" data-tab="vitaminas"><span>💊</span>Vitaminas</button>
+      <button class="tab-btn" data-tab="panales"><span>🧷</span>Pañales</button>
+      <button class="tab-btn" data-tab="sueno"><span>😴</span>Sueño</button>
+    </nav>
+  </div>
+
+  <!-- ==================== MODAL DE CONFIGURACIÓN ==================== -->
+  <div id="settingsModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Configuración</h2>
+        <button id="settingsClose" class="icon-btn">✕</button>
+      </div>
+
+      <label class="field-label">Nombre del bebé
+        <input type="text" id="cfgNombre" maxlength="40" placeholder="Mi bebé">
+      </label>
+
+      <div class="field-label">Foto del bebé
+        <div class="photo-row">
+          <div class="avatar avatar-lg" id="cfgAvatarWrap">
+            <img id="cfgFotoPreview" alt="" class="hidden">
+            <span id="cfgAvatarFallback">👶</span>
+          </div>
+          <input type="file" id="cfgFoto" accept="image/*" class="hidden">
+          <button type="button" id="cfgFotoBtn" class="btn-secondary">Elegir foto…</button>
+        </div>
+      </div>
+
+      <div class="field-label">Color de la app
+        <div class="swatch-row" id="swatchRow">
+          <button class="swatch" data-palette="celeste" style="--sw:#3987e5" title="Celeste"></button>
+          <button class="swatch" data-palette="rosa" style="--sw:#d55181" title="Rosa"></button>
+          <button class="swatch" data-palette="verde" style="--sw:#199e70" title="Verde"></button>
+          <button class="swatch" data-palette="lila" style="--sw:#9085e9" title="Lila"></button>
+          <button class="swatch" data-palette="ambar" style="--sw:#c98500" title="Ámbar"></button>
+        </div>
+      </div>
+
+      <button id="cfgGuardar" class="btn-primary">Guardar</button>
+      <button id="logoutBtn" class="btn-danger">Cerrar sesión</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="app.js"></script>
+</body>
+</html>
