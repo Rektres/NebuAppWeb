@@ -114,10 +114,12 @@ async function eliminar(tabla, id) {
   renderTab(currentTab);
 }
 
-// Delegación de clicks para los botones 🗑 de todas las tablas
+// Delegación de clicks para los botones ✏️/🗑 de todas las tablas
 document.addEventListener('click', (e) => {
-  const btn = e.target.closest('.del-btn');
-  if (btn) eliminar(btn.dataset.tabla, btn.dataset.id);
+  const del = e.target.closest('.del-btn');
+  if (del) { eliminar(del.dataset.tabla, del.dataset.id); return; }
+  const ed = e.target.closest('.edit-btn');
+  if (ed) abrirEdicion(ed.dataset.tabla, ed.dataset.id);
 });
 
 // ---------- Render de tablas ----------
@@ -133,15 +135,15 @@ function tablaHTML(headers, grupos, filaFn, subtotalFn) {
   return html + '</tbody></table>';
 }
 
-const delBtn = (tabla, id) =>
-  `<td class="td-action"><button class="del-btn" data-tabla="${tabla}" data-id="${id}" title="Eliminar">🗑</button></td>`;
+const accionesTd = (tabla, id) =>
+  `<td class="td-action"><button class="edit-btn" data-tabla="${tabla}" data-id="${id}" title="Editar">✏️</button><button class="del-btn" data-tabla="${tabla}" data-id="${id}" title="Eliminar">🗑</button></td>`;
 
 function renderLeche() {
   const rows = cache.tomas || [];
   $('tablaLeche').innerHTML = tablaHTML(
     ['Hora', 'Cantidad'],
     groupByDay(rows, 'fecha_hora'),
-    (r) => `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.cantidad_ml} ml</td>${delBtn('tomas', r.id)}</tr>`,
+    (r) => `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.cantidad_ml} ml</td>${accionesTd('tomas', r.id)}</tr>`,
     (rs) => `Total: ${rs.reduce((s, r) => s + r.cantidad_ml, 0)} ml`
   );
   renderLecheResumen();
@@ -178,7 +180,7 @@ function renderVitaminas() {
   $('tablaVitaminas').innerHTML = tablaHTML(
     ['Hora', 'Gotas'],
     groupByDay(cache.vitaminas || [], 'fecha_hora'),
-    (r) => `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.gotas} gotas</td>${delBtn('vitaminas', r.id)}</tr>`
+    (r) => `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.gotas} gotas</td>${accionesTd('vitaminas', r.id)}</tr>`
   );
 }
 
@@ -188,7 +190,7 @@ function renderPanales() {
     ['Hora', 'Heces', 'Orina'],
     groupByDay(rows, 'fecha_hora'),
     (r) =>
-      `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.heces ? '💩 Sí' : '—'}</td><td>${r.orina ? '💧 Sí' : '—'}</td>${delBtn('panales', r.id)}</tr>`
+      `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.heces ? '💩 Sí' : '—'}</td><td>${r.orina ? '💧 Sí' : '—'}</td>${accionesTd('panales', r.id)}</tr>`
   );
   renderPanalesDash();
 }
@@ -214,6 +216,7 @@ setInterval(() => {
   if (!appStarted) return;
   if (cache.panales) renderPanalesDash();
   if (cache.tomas) renderLecheResumen();
+  if (cache.sueno) renderSuenoDash();
 }, 60000);
 
 function duracionMin(r) {
@@ -224,6 +227,7 @@ function duracionMin(r) {
 // para que cada día sume solo las horas dormidas dentro de ese día
 function tramosPorDia(r) {
   const tramos = [];
+  if (!r.fin) return tramos; // siesta en curso: aún sin duración
   let ini = new Date(r.inicio);
   const fin = new Date(r.fin);
   while (ini < fin) {
@@ -252,10 +256,50 @@ function renderSueno() {
     ['Inicio', 'Fin', 'Duración'],
     groupByDay(tramos, 'inicio'),
     (t) =>
-      `<tr><td>${t.esInicio ? '' : '↪ '}${fmtTime(t.inicio)}</td><td>${t.esFin ? fmtTime(t.fin) : '00:00 🌙'}</td><td>${fmtDur(t.mins)}</td>${delBtn('sueno', t.id)}</tr>`,
+      `<tr><td>${t.esInicio ? '' : '↪ '}${fmtTime(t.inicio)}</td><td>${t.esFin ? fmtTime(t.fin) : '00:00 🌙'}</td><td>${fmtDur(t.mins)}</td>${accionesTd('sueno', t.id)}</tr>`,
     (ts) => `Durmió: ${fmtDur(ts.reduce((s, t) => s + t.mins, 0))}`
   );
+  renderSuenoDash();
 }
+
+const siestaAbierta = () => (cache.sueno || []).find((r) => !r.fin) || null;
+
+function renderSuenoDash() {
+  const abierta = siestaAbierta();
+  $('btnDormir').classList.toggle('hidden', !!abierta);
+  $('siestaAbierta').classList.toggle('hidden', !abierta);
+
+  const ult = (cache.sueno || [])
+    .filter((r) => r.fin)
+    .sort((a, b) => new Date(b.fin) - new Date(a.fin))[0];
+
+  if (abierta) {
+    $('siestaDesde').textContent = fmtTime(new Date(abierta.inicio));
+    $('siestaLleva').textContent = fmtDur(Math.max(0, (Date.now() - new Date(abierta.inicio)) / 60000));
+    $('despiertoHace').textContent = '😴 Durmiendo';
+  } else {
+    $('despiertoHace').textContent = ult ? fmtDur(Math.max(0, (Date.now() - new Date(ult.fin)) / 60000)) : '—';
+  }
+  $('ultimoSueno').textContent = ult
+    ? `${fmtDur(duracionMin(ult))} · ${fmtTime(new Date(ult.inicio))}→${fmtTime(new Date(ult.fin))}`
+    : 'Sin registros';
+}
+
+$('btnDormir').addEventListener('click', async () => {
+  const ok = await insertar('sueno', { inicio: new Date().toISOString(), fin: null });
+  if (ok) renderSueno();
+});
+
+$('btnDespertar').addEventListener('click', async () => {
+  const abierta = siestaAbierta();
+  if (!abierta) return;
+  const { error } = await db.from('sueno').update({ fin: new Date().toISOString() }).eq('id', abierta.id);
+  if (error) { toast(`Error: ${error.message}`, true); return; }
+  await loadData('sueno');
+  statsDirty = true;
+  toast('Siesta registrada ✓');
+  renderSueno();
+});
 
 // ---------- Gráficos (Chart.js) ----------
 const charts = {};
@@ -532,7 +576,7 @@ function renderChartsDiario() {
     type: 'line',
     data: {
       datasets: [{
-        data: puntos(cache.sueno, 'inicio', (r) => Math.round((duracionMin(r) / 60) * 10) / 10),
+        data: puntos((cache.sueno || []).filter((r) => r.fin), 'inicio', (r) => Math.round((duracionMin(r) / 60) * 10) / 10),
         borderColor: s.violeta, backgroundColor: s.violeta, ...LINEA,
       }],
     },
@@ -608,6 +652,90 @@ $('formSueno').addEventListener('submit', async (e) => {
   if (ok) { setNowDefaults(); renderSueno(); }
 });
 
+// ---------- Edición de registros ----------
+let editRegistro = null; // { tabla, id }
+
+const EDIT_TITULOS = { tomas: 'Editar toma', vitaminas: 'Editar vitaminas', panales: 'Editar cambio de pañal', sueno: 'Editar sueño' };
+
+function abrirEdicion(tabla, id) {
+  const r = (cache[tabla] || []).find((x) => String(x.id) === String(id));
+  if (!r) return;
+  editRegistro = { tabla, id: r.id };
+  $('editTitulo').textContent = EDIT_TITULOS[tabla] || 'Editar registro';
+  const f = (d) => dayKey(new Date(d));
+  const h = (d) => fmtTime(new Date(d));
+  let html;
+  if (tabla === 'sueno') {
+    html = `
+      <label>Fecha (se durmió)<input type="date" id="edFecha" value="${f(r.inicio)}"></label>
+      <div class="fila-2">
+        <label>Se durmió<input type="time" id="edInicio" value="${h(r.inicio)}"></label>
+        <label>Despertó<input type="time" id="edFin" value="${r.fin ? h(new Date(r.fin)) : ''}"></label>
+      </div>
+      <p class="form-hint">Si la hora de despertar es menor, se asume que cruzó la medianoche.${r.fin ? '' : ' Deja "Despertó" vacío si sigue durmiendo.'}</p>`;
+  } else {
+    html = `
+      <div class="fila-2">
+        <label>Fecha<input type="date" id="edFecha" value="${f(r.fecha_hora)}"></label>
+        <label>Hora<input type="time" id="edHora" value="${h(r.fecha_hora)}"></label>
+      </div>`;
+    if (tabla === 'tomas')
+      html += `<label>Cantidad (ml)<input type="number" id="edCantidad" step="any" inputmode="decimal" value="${r.cantidad_ml}"></label>`;
+    if (tabla === 'vitaminas')
+      html += `<label>Gotas<input type="number" id="edGotas" step="any" inputmode="decimal" value="${r.gotas}"></label>`;
+    if (tabla === 'panales')
+      html += `
+      <div class="check-row">
+        <label class="check-pill"><input type="checkbox" id="edHeces" ${r.heces ? 'checked' : ''}> 💩 Heces</label>
+        <label class="check-pill"><input type="checkbox" id="edOrina" ${r.orina ? 'checked' : ''}> 💧 Orina</label>
+      </div>`;
+  }
+  $('editCampos').innerHTML = html;
+  $('editModal').classList.remove('hidden');
+}
+
+$('editClose').addEventListener('click', () => $('editModal').classList.add('hidden'));
+$('editModal').addEventListener('click', (e) => { if (e.target === $('editModal')) $('editModal').classList.add('hidden'); });
+
+$('editGuardar').addEventListener('click', async () => {
+  if (!editRegistro) return;
+  const { tabla, id } = editRegistro;
+  const cambios = {};
+  if (tabla === 'sueno') {
+    const inicio = new Date(`${$('edFecha').value}T${$('edInicio').value}`);
+    let fin = null;
+    if ($('edFin').value) {
+      fin = new Date(`${$('edFecha').value}T${$('edFin').value}`);
+      if (fin <= inicio) fin = new Date(fin.getTime() + 86400000); // cruzó la medianoche
+    }
+    cambios.inicio = inicio.toISOString();
+    cambios.fin = fin ? fin.toISOString() : null;
+  } else {
+    cambios.fecha_hora = toISO($('edFecha').value, $('edHora').value);
+    if (tabla === 'tomas') {
+      const v = Number($('edCantidad').value);
+      if (!(v > 0)) { toast('La cantidad debe ser mayor a 0', true); return; }
+      cambios.cantidad_ml = Math.round(v);
+    }
+    if (tabla === 'vitaminas') {
+      const v = Number($('edGotas').value);
+      if (!(v > 0)) { toast('Las gotas deben ser mayores a 0', true); return; }
+      cambios.gotas = Math.round(v);
+    }
+    if (tabla === 'panales') {
+      cambios.heces = $('edHeces').checked;
+      cambios.orina = $('edOrina').checked;
+    }
+  }
+  const { error } = await db.from(tabla).update(cambios).eq('id', id);
+  if (error) { toast(`Error al guardar: ${error.message}`, true); return; }
+  $('editModal').classList.add('hidden');
+  await loadData(tabla);
+  statsDirty = true;
+  toast('Registro actualizado ✓');
+  renderTab(currentTab);
+});
+
 // ---------- Tema (dark/light) ----------
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
@@ -623,6 +751,19 @@ $('themeBtn').addEventListener('click', () => {
 });
 
 // ---------- Configuración (bebé: nombre, foto, paleta, código; mi rol) ----------
+function calcularEdad(fechaNac) {
+  const nac = new Date(fechaNac + 'T12:00');
+  const hoy = new Date();
+  let anios = hoy.getFullYear() - nac.getFullYear();
+  let meses = hoy.getMonth() - nac.getMonth();
+  let dias = hoy.getDate() - nac.getDate();
+  if (dias < 0) { meses--; dias += new Date(hoy.getFullYear(), hoy.getMonth(), 0).getDate(); }
+  if (meses < 0) { anios--; meses += 12; }
+  if (anios >= 1) return `${anios}a ${meses}m`;
+  if (meses >= 1) return `${meses}m ${dias}d`;
+  return `${dias}d`;
+}
+
 function aplicarBebe() {
   $('babyName').textContent = bebe?.nombre || 'Mi bebé';
   document.documentElement.dataset.palette = bebe?.paleta || 'celeste';
@@ -632,11 +773,24 @@ function aplicarBebe() {
   const badge = $('rolBadge');
   badge.textContent = miRol === 'padre' ? '👨 Padre' : '👩 Madre';
   badge.classList.toggle('hidden', !miRol);
+
+  const stats = [];
+  if (bebe?.fecha_nacimiento) {
+    const [y, m, d] = bebe.fecha_nacimiento.split('-');
+    stats.push(`🎂 ${d}-${m}-${y} (${calcularEdad(bebe.fecha_nacimiento)})`);
+  }
+  if (bebe?.peso_kg) stats.push(`⚖️ ${bebe.peso_kg} kg`);
+  if (bebe?.talla_cm) stats.push(`📏 ${bebe.talla_cm} cm`);
+  $('babyStats').textContent = stats.join(' · ');
+  $('babyStats').classList.toggle('hidden', !stats.length);
 }
 
 function abrirModal() {
   fotoPendiente = bebe?.foto_base64;
   $('cfgNombre').value = bebe?.nombre || '';
+  $('cfgNacimiento').value = bebe?.fecha_nacimiento || '';
+  $('cfgPeso').value = bebe?.peso_kg ?? '';
+  $('cfgTalla').value = bebe?.talla_cm ?? '';
   $('cfgCodigo').textContent = bebe?.codigo || '——————';
   const rolInput = document.querySelector(`input[name="cfgRol"][value="${miRol}"]`);
   if (rolInput) rolInput.checked = true;
@@ -708,6 +862,9 @@ $('cfgGuardar').addEventListener('click', async () => {
     nombre: $('cfgNombre').value.trim() || 'Mi bebé',
     foto_base64: fotoPendiente || null,
     paleta: document.querySelector('.swatch.selected')?.dataset.palette || 'celeste',
+    fecha_nacimiento: $('cfgNacimiento').value || null,
+    peso_kg: Number($('cfgPeso').value) > 0 ? Number($('cfgPeso').value) : null,
+    talla_cm: Number($('cfgTalla').value) > 0 ? Number($('cfgTalla').value) : null,
   };
   const rolSel = document.querySelector('input[name="cfgRol"]:checked')?.value || miRol;
   const [rBebe, rRol] = await Promise.all([

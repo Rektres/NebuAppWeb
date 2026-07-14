@@ -67,6 +67,7 @@
         <div class="baby-txt">
           <h1 id="babyName">Mi bebé</h1>
           <span id="rolBadge" class="rol-badge hidden"></span>
+          <span id="babyStats" class="baby-stats hidden"></span>
         </div>
       </div>
       <div class="header-actions">
@@ -228,6 +229,25 @@
 
       <!-- ========== PESTAÑA 5: SUEÑO ========== -->
       <section id="tab-sueno" class="tab">
+        <div class="dash-grid">
+          <div class="card dash-card">
+            <span class="stat-label">Despierto hace</span>
+            <span class="stat-value" id="despiertoHace">—</span>
+          </div>
+          <div class="card dash-card">
+            <span class="stat-label">Último sueño 😴</span>
+            <span class="stat-value stat-value-sm" id="ultimoSueno">—</span>
+          </div>
+        </div>
+
+        <div class="card" id="siestaCard">
+          <button type="button" id="btnDormir" class="btn-primary">😴 Se durmió ahora</button>
+          <div id="siestaAbierta" class="hidden">
+            <p class="siesta-info">😴 Durmiendo desde <strong id="siestaDesde">—</strong> · lleva <strong id="siestaLleva">—</strong></p>
+            <button type="button" id="btnDespertar" class="btn-primary">🌅 Despertó</button>
+          </div>
+        </div>
+
         <form id="formSueno" class="card form-card">
           <h2>Registrar sueño</h2>
           <div class="form-grid">
@@ -289,6 +309,19 @@
         <input type="text" id="cfgNombre" maxlength="40" placeholder="Mi bebé">
       </label>
 
+      <label class="field-label">Fecha de nacimiento
+        <input type="date" id="cfgNacimiento">
+      </label>
+
+      <div class="peso-talla-row">
+        <label class="field-label">Peso actual (kg)
+          <input type="number" id="cfgPeso" step="any" inputmode="decimal" placeholder="6.2">
+        </label>
+        <label class="field-label">Talla actual (cm)
+          <input type="number" id="cfgTalla" step="any" inputmode="decimal" placeholder="62">
+        </label>
+      </div>
+
       <div class="field-label">Foto del bebé
         <div class="photo-row">
           <div class="avatar avatar-lg" id="cfgAvatarWrap">
@@ -321,6 +354,18 @@
 
       <button id="cfgGuardar" class="btn-primary">Guardar</button>
       <button id="logoutBtn" class="btn-danger">Cerrar sesión</button>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL DE EDICIÓN ==================== -->
+  <div id="editModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="editTitulo">Editar registro</h2>
+        <button id="editClose" class="icon-btn">✕</button>
+      </div>
+      <div id="editCampos" class="edit-campos"></div>
+      <button id="editGuardar" class="btn-primary">Guardar cambios</button>
     </div>
   </div>
 

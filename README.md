@@ -10,6 +10,8 @@ App web móvil para registrar las rutinas de un bebé: tomas de leche, vitaminas
 
 > **Si tu base ya existía con el esquema anterior** (tabla `config`, datos sin bebé): ejecuta [`migracion.sql`](migracion.sql) UNA sola vez en lugar de `supabase.sql`. Conserva todos los registros, los asigna a un bebé nuevo y vincula a los usuarios existentes (quedan como "madre" por defecto — cada uno corrige su rol en ⚙️).
 
+> **Actualización 2** (siestas en vivo + fecha de nacimiento/peso/talla): si tu base ya corría el esquema de bebés, ejecuta también [`actualizacion-2.sql`](actualizacion-2.sql) una sola vez.
+
 ### 2. Conectar la app
 Las credenciales viven en `config.js`, que **no se sube al repo** (está en `.gitignore`).
 

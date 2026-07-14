@@ -11,6 +11,9 @@ create table bebes (
   foto_base64 text,
   paleta text default 'celeste',
   codigo text unique not null,
+  fecha_nacimiento date,
+  peso_kg numeric,
+  talla_cm numeric,
   created_at timestamptz default now()
 );
 
@@ -57,7 +60,7 @@ create table sueno (
   id bigint generated always as identity primary key,
   bebe_id uuid not null references bebes(id) on delete cascade,
   inicio timestamptz not null,
-  fin timestamptz not null,
+  fin timestamptz, -- null = siesta en curso (se cierra con "Despertó")
   created_at timestamptz default now()
 );
 
