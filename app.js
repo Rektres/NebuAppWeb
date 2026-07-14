@@ -160,6 +160,18 @@ function renderLecheResumen() {
     total >= objetivo
       ? `🎉 ¡Meta cumplida! (+${total - objetivo} ml sobre el objetivo)`
       : `Faltan ${objetivo - total} ml para el objetivo 🎯`;
+
+  const rows = cache.tomas || [];
+  if (!rows.length) {
+    $('ultimaTomaHace').textContent = '—';
+    $('ultimaToma').textContent = 'Sin registros';
+  } else {
+    const ult = new Date(rows[0].fecha_hora);
+    $('ultimaTomaHace').textContent = fmtDur(Math.max(0, (Date.now() - ult) / 60000));
+    $('ultimaToma').textContent =
+      ult.toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' }) +
+      ', ' + fmtTime(ult) + ` · ${rows[0].cantidad_ml} ml`;
+  }
 }
 
 function renderVitaminas() {
@@ -198,7 +210,11 @@ function renderPanalesDash() {
 }
 
 // Refresca el "hace X" cada minuto
-setInterval(() => { if (appStarted && cache.panales) renderPanalesDash(); }, 60000);
+setInterval(() => {
+  if (!appStarted) return;
+  if (cache.panales) renderPanalesDash();
+  if (cache.tomas) renderLecheResumen();
+}, 60000);
 
 function duracionMin(r) {
   return (new Date(r.fin) - new Date(r.inicio)) / 60000;
