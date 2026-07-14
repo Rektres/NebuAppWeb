@@ -410,6 +410,17 @@ td.td-action { text-align: right; width: 36px; }
 }
 .auth-error { color: var(--danger); font-size: 0.85rem; margin-top: 12px; }
 
+.remember-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 2px 0;
+}
+.remember-row input { width: 17px; height: 17px; accent-color: var(--accent); }
+
 .link-sub { font-size: 0.85rem; color: var(--muted); margin-bottom: 10px; }
 .rol-row { display: flex; gap: 10px; }
 .auth-card .rol-row { margin-bottom: 14px; }

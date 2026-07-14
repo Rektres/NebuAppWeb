@@ -220,13 +220,40 @@ function duracionMin(r) {
   return (new Date(r.fin) - new Date(r.inicio)) / 60000;
 }
 
+// Divide una sesión de sueño en tramos por día, cortando en cada medianoche,
+// para que cada día sume solo las horas dormidas dentro de ese día
+function tramosPorDia(r) {
+  const tramos = [];
+  let ini = new Date(r.inicio);
+  const fin = new Date(r.fin);
+  while (ini < fin) {
+    const corte = new Date(ini);
+    corte.setHours(24, 0, 0, 0);
+    const finTramo = corte < fin ? corte : fin;
+    tramos.push({
+      key: dayKey(ini),
+      inicio: ini,
+      fin: finTramo,
+      mins: (finTramo - ini) / 60000,
+      id: r.id,
+      esInicio: +ini === +new Date(r.inicio),
+      esFin: +finTramo === +fin,
+    });
+    ini = finTramo;
+  }
+  return tramos;
+}
+
 function renderSueno() {
+  const tramos = (cache.sueno || [])
+    .flatMap(tramosPorDia)
+    .sort((a, b) => b.inicio - a.inicio);
   $('tablaSueno').innerHTML = tablaHTML(
     ['Inicio', 'Fin', 'Duración'],
-    groupByDay(cache.sueno || [], 'inicio'),
-    (r) =>
-      `<tr><td>${fmtTime(new Date(r.inicio))}</td><td>${fmtTime(new Date(r.fin))}</td><td>${fmtDur(duracionMin(r))}</td>${delBtn('sueno', r.id)}</tr>`,
-    (rs) => `Durmió: ${fmtDur(rs.reduce((s, r) => s + duracionMin(r), 0))}`
+    groupByDay(tramos, 'inicio'),
+    (t) =>
+      `<tr><td>${t.esInicio ? '' : '↪ '}${fmtTime(t.inicio)}</td><td>${t.esFin ? fmtTime(t.fin) : '00:00 🌙'}</td><td>${fmtDur(t.mins)}</td>${delBtn('sueno', t.id)}</tr>`,
+    (ts) => `Durmió: ${fmtDur(ts.reduce((s, t) => s + t.mins, 0))}`
   );
 }
 
@@ -379,7 +406,8 @@ function renderChartsSemana() {
     options: optsPan,
   });
 
-  const sueno = sumarPorDia(cache.sueno, 'inicio', duracionMin);
+  const sueno = {};
+  (cache.sueno || []).forEach((r) => tramosPorDia(r).forEach((t) => { sueno[t.key] = (sueno[t.key] || 0) + t.mins; }));
   charts.sueno = new Chart($('chartSueno'), {
     type: 'bar',
     data: {
@@ -703,6 +731,26 @@ $('logoutBtn').addEventListener('click', async () => {
 // ---------- Autenticación ----------
 let modoRegistro = false;
 
+// Recordar credenciales (opt-in; contraseña en texto plano en este dispositivo)
+function precargarCredenciales() {
+  if (localStorage.getItem('recordar') !== '1') return;
+  $('authRemember').checked = true;
+  $('authEmail').value = localStorage.getItem('cred_email') || '';
+  $('authPass').value = localStorage.getItem('cred_pass') || '';
+}
+
+function guardarCredenciales(email, password) {
+  if ($('authRemember').checked) {
+    localStorage.setItem('recordar', '1');
+    localStorage.setItem('cred_email', email);
+    localStorage.setItem('cred_pass', password);
+  } else {
+    localStorage.removeItem('recordar');
+    localStorage.removeItem('cred_email');
+    localStorage.removeItem('cred_pass');
+  }
+}
+
 $('passToggle').addEventListener('click', () => {
   const input = $('authPass');
   const visible = input.type === 'text';
@@ -739,6 +787,7 @@ $('authForm').addEventListener('submit', async (e) => {
     } else {
       const { error } = await db.auth.signInWithPassword({ email, password });
       if (error) throw error;
+      guardarCredenciales(email, password);
     }
   } catch (err) {
     let msg = err.message;
@@ -924,6 +973,7 @@ applyTheme(localStorage.getItem('tema') || 'dark');
 bgResize();
 aplicarFondo();
 actualizarSegUI();
+precargarCredenciales();
 
 if (!configurado) {
   showAuth();
