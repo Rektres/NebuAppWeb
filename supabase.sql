@@ -14,6 +14,9 @@ create table bebes (
   fecha_nacimiento date,
   peso_kg numeric,
   talla_cm numeric,
+  lata_gramos numeric default 800,     -- tamaño de la lata de fórmula
+  lata_abierta_en timestamptz,          -- cuándo se abrió la lata actual
+  latas_usadas integer default 0,       -- contador de latas abiertas
   created_at timestamptz default now()
 );
 
@@ -64,14 +67,22 @@ create table sueno (
   created_at timestamptz default now()
 );
 
+-- Pastillas: lista maestra de medicamentos del bebé
 create table pastillas (
   id bigint generated always as identity primary key,
   bebe_id uuid not null references bebes(id) on delete cascade,
-  fecha_hora timestamptz not null, -- para agrupar por día
   nombre text not null,
   horario text, -- 'am' | 'pm'
-  tomada boolean not null default false,
   created_at timestamptz default now()
+);
+
+-- Registro diario: una fila = esa pastilla fue tomada ese día
+create table pastillas_log (
+  id bigint generated always as identity primary key,
+  bebe_id uuid not null references bebes(id) on delete cascade,
+  pastilla_id bigint not null references pastillas(id) on delete cascade,
+  fecha date not null,
+  unique (pastilla_id, fecha)
 );
 
 -- ============================================================
@@ -149,6 +160,7 @@ alter table vitaminas enable row level security;
 alter table panales enable row level security;
 alter table sueno enable row level security;
 alter table pastillas enable row level security;
+alter table pastillas_log enable row level security;
 
 create policy "padres ven su bebe" on bebes for select to authenticated
   using (id in (select mis_bebes()));
@@ -169,4 +181,6 @@ create policy "solo padres" on panales for all to authenticated
 create policy "solo padres" on sueno for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
 create policy "solo padres" on pastillas for all to authenticated
+  using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
+create policy "solo padres" on pastillas_log for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));

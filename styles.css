@@ -187,6 +187,11 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 
 .pill-check { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; }
 
+.pill-list { display: flex; flex-direction: column; gap: 10px; }
+.pill-list .check-pill { flex: none; }
+.past-lista { margin-top: 12px; }
+.past-lista table { font-size: 0.9rem; }
+
 /* iOS/Safari: los inputs date/time centran su valor y no respetan el ancho — normalizar */
 input::-webkit-date-and-time-value { text-align: left; }
 input[type="date"], input[type="time"] { display: block; line-height: 44px; }

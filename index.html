@@ -147,6 +147,7 @@
             </div>
           </div>
           <p class="goal-status" id="lataStatus"></p>
+          <button type="button" id="abrirLataBtn" class="btn-secondary">🥫 Abrir lata nueva</button>
         </div>
 
         <div class="dash-grid">
@@ -202,8 +203,13 @@
 
       <!-- ========== PESTAÑA: PASTILLAS ========== -->
       <section id="tab-pastillas" class="tab">
+        <div class="card">
+          <h2>Hoy — marca lo que tomó</h2>
+          <div id="pastHoy" class="pill-list"></div>
+        </div>
+
         <form id="formPastillas" class="card form-card">
-          <h2>Registrar pastilla</h2>
+          <h2>Mis pastillas</h2>
           <div class="form-grid">
             <label>Nombre
               <input type="text" id="pastNombre" maxlength="60" placeholder="Nombre de la pastilla" required>
@@ -215,10 +221,8 @@
               </select>
             </label>
           </div>
-          <div class="check-row">
-            <label class="check-pill"><input type="checkbox" id="pastTomada"> ✅ Ya tomada</label>
-          </div>
-          <button type="submit" class="btn-primary">＋ Agregar (ahora)</button>
+          <button type="submit" class="btn-primary">＋ Agregar a mi lista</button>
+          <div id="pastLista" class="table-wrap past-lista"></div>
         </form>
 
         <div class="card table-card">

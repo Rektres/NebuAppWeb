@@ -69,7 +69,7 @@ function setNowDefaults() {
 }
 
 // ---------- Estado ----------
-const cache = { tomas: null, vitaminas: null, panales: null, sueno: null, pastillas: null };
+const cache = { tomas: null, vitaminas: null, panales: null, sueno: null, pastillas: null, pastillas_log: null };
 let bebe = null;    // fila de la tabla bebes (nombre, foto, paleta, codigo)
 let miRol = null;   // 'madre' | 'padre'
 let usuario = null; // session.user
@@ -87,12 +87,13 @@ async function fetchTable(tabla, campoOrden) {
   return data;
 }
 
+const ORDEN = { sueno: 'inicio', pastillas: 'id', pastillas_log: 'fecha' };
 async function loadData(tabla) {
-  cache[tabla] = await fetchTable(tabla, tabla === 'sueno' ? 'inicio' : 'fecha_hora');
+  cache[tabla] = await fetchTable(tabla, ORDEN[tabla] || 'fecha_hora');
 }
 
 async function loadAll() {
-  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno', 'pastillas'].map(loadData));
+  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno', 'pastillas', 'pastillas_log'].map(loadData));
   statsDirty = true;
 }
 
@@ -164,12 +165,17 @@ function renderLecheResumen() {
       ? `🎉 ¡Meta cumplida! (+${total - objetivo} ml sobre el objetivo)`
       : `Faltan ${objetivo - total} ml para el objetivo 🎯`;
 
-  // Fórmula: 30 ml ≈ 30 g (1:1). ponytail: latas contadas por módulo del total, sin "abrir lata" explícito
+  // Fórmula: 30 ml ≈ 30 g (1:1). Lata: resta lo consumido desde que se abrió la lata actual
   const totalMl = (cache.tomas || []).reduce((s, r) => s + r.cantidad_ml, 0);
-  const lata = Number(localStorage.getItem('lata_gramos')) || 800;
+  const lata = Number(bebe?.lata_gramos) || 800;
+  const abierta = bebe?.lata_abierta_en ? new Date(bebe.lata_abierta_en).getTime() : 0;
+  const usadaLata = (cache.tomas || [])
+    .filter((r) => new Date(r.fecha_hora).getTime() >= abierta)
+    .reduce((s, r) => s + r.cantidad_ml, 0);
   $('lataInput').value = lata;
   $('lecheGramosHoy').textContent = total;
-  $('lataStatus').textContent = `Quedan ~${lata - (totalMl % lata)} g en la lata · ${totalMl} g usados en total`;
+  $('lataStatus').textContent =
+    `Quedan ~${Math.max(0, lata - usadaLata)} g en la lata actual · Latas usadas: ${bebe?.latas_usadas || 0} (${totalMl} g en total)`;
 
   const rows = cache.tomas || [];
   if (!rows.length) {
@@ -192,26 +198,58 @@ function renderVitaminas() {
   );
 }
 
+const hm = (p) => `${escapeHtml(p.nombre)} · ${(p.horario || '').toUpperCase()}`;
+const ordenarPastillas = (lista) =>
+  lista.slice().sort((a, b) => (a.horario || '').localeCompare(b.horario || '') || (a.nombre || '').localeCompare(b.nombre || ''));
+
 function renderPastillas() {
-  $('tablaPastillas').innerHTML = tablaHTML(
-    ['Pastilla', 'Horario', 'Tomada'],
-    groupByDay(cache.pastillas || [], 'fecha_hora'),
-    (r) =>
-      `<tr><td>${escapeHtml(r.nombre || '—')}</td><td>${(r.horario || '').toUpperCase()}</td><td><input type="checkbox" class="pill-check" data-id="${r.id}" ${r.tomada ? 'checked' : ''}></td>${accionesTd('pastillas', r.id)}</tr>`
-  );
+  const lista = ordenarPastillas(cache.pastillas || []);
+  const hoy = dayKey(new Date());
+  const tomadasHoy = new Set((cache.pastillas_log || []).filter((l) => l.fecha === hoy).map((l) => String(l.pastilla_id)));
+
+  // Checklist de hoy
+  $('pastHoy').innerHTML = lista.length
+    ? lista.map((p) =>
+        `<label class="check-pill"><input type="checkbox" class="pill-check" data-id="${p.id}" ${tomadasHoy.has(String(p.id)) ? 'checked' : ''}> ${hm(p)}</label>`
+      ).join('')
+    : '<p class="empty-msg">Agrega pastillas a tu lista abajo</p>';
+
+  // Lista maestra (editar / eliminar)
+  $('pastLista').innerHTML = lista.length
+    ? `<table><tbody>${lista.map((p) => `<tr><td>${escapeHtml(p.nombre)}</td><td>${(p.horario || '').toUpperCase()}</td>${accionesTd('pastillas', p.id)}</tr>`).join('')}</tbody></table>`
+    : '<p class="empty-msg">Aún no agregas pastillas</p>';
+
+  // Historial por día
+  const mapa = new Map((cache.pastillas || []).map((p) => [String(p.id), p]));
+  const dias = [...new Set((cache.pastillas_log || []).map((l) => l.fecha))].sort().reverse();
+  $('tablaPastillas').innerHTML = dias.length
+    ? `<table><tbody>${dias.map((d) => {
+        const items = ordenarPastillas(
+          (cache.pastillas_log || []).filter((l) => l.fecha === d).map((l) => mapa.get(String(l.pastilla_id))).filter(Boolean)
+        );
+        return `<tr class="day-row"><td colspan="2">${fmtDayLabel(d)}</td></tr>` +
+          items.map((p) => `<tr><td>${escapeHtml(p.nombre)}</td><td>${(p.horario || '').toUpperCase()} ✅</td></tr>`).join('');
+      }).join('')}</tbody></table>`
+    : '<p class="empty-msg">Sin registros todavía</p>';
 }
 
-// Marcar/desmarcar "tomada" directo desde la tabla
+// Marcar/desmarcar una pastilla como tomada HOY (crea/borra la fila del día)
 document.addEventListener('change', (e) => {
   const chk = e.target.closest('.pill-check');
-  if (chk) togglePastilla(chk.dataset.id, chk.checked);
+  if (chk) togglePastillaHoy(chk.dataset.id, chk.checked);
 });
 
-async function togglePastilla(id, tomada) {
-  const { error } = await db.from('pastillas').update({ tomada }).eq('id', id);
-  if (error) { toast(`Error: ${error.message}`, true); await loadData('pastillas'); renderPastillas(); return; }
-  const r = (cache.pastillas || []).find((x) => String(x.id) === String(id));
-  if (r) r.tomada = tomada;
+async function togglePastillaHoy(pastillaId, tomada) {
+  const hoy = dayKey(new Date());
+  const { error } = tomada
+    ? await db.from('pastillas_log').upsert(
+        { bebe_id: bebe.id, pastilla_id: Number(pastillaId), fecha: hoy },
+        { onConflict: 'pastilla_id,fecha' }
+      )
+    : await db.from('pastillas_log').delete().eq('pastilla_id', pastillaId).eq('fecha', hoy);
+  if (error) { toast(`Error: ${error.message}`, true); }
+  await loadData('pastillas_log');
+  renderPastillas();
 }
 
 function renderPanales() {
@@ -624,12 +662,20 @@ function renderTab(tab) {
   else if (tab === 'sueno') renderSueno();
 }
 
+const TABS = ['stats', 'leche', 'vitaminas', 'pastillas', 'panales', 'sueno'];
+
+function activarTab(tab) {
+  if (!TABS.includes(tab)) tab = 'stats';
+  currentTab = tab;
+  localStorage.setItem('tab', tab);
+  document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === 'tab-' + tab));
+}
+
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     if (!btn.dataset.tab) return; // botón "Más": abre el menú, no cambia de pestaña
-    currentTab = btn.dataset.tab;
-    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b === btn));
-    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === 'tab-' + currentTab));
+    activarTab(btn.dataset.tab);
     $('masMenu').classList.add('hidden');
     renderTab(currentTab);
   });
@@ -664,23 +710,31 @@ $('objetivoInput').addEventListener('change', () => {
   renderLecheResumen();
 });
 
-$('lataInput').addEventListener('change', () => {
+// Guarda cambios en la ficha del bebé y refresca el objeto local
+async function actualizarBebe(cambios) {
+  const { error } = await db.from('bebes').update(cambios).eq('id', bebe.id);
+  if (error) { toast(`Error: ${error.message}`, true); return false; }
+  bebe = { ...bebe, ...cambios };
+  return true;
+}
+
+$('lataInput').addEventListener('change', async () => {
   const v = Number($('lataInput').value);
-  localStorage.setItem('lata_gramos', v > 0 ? v : 800);
+  await actualizarBebe({ lata_gramos: v > 0 ? v : 800 });
   renderLecheResumen();
+});
+
+$('abrirLataBtn').addEventListener('click', async () => {
+  const ok = await actualizarBebe({ lata_abierta_en: new Date().toISOString(), latas_usadas: (bebe?.latas_usadas || 0) + 1 });
+  if (ok) { toast('Lata nueva abierta ✓'); renderLecheResumen(); }
 });
 
 $('formPastillas').addEventListener('submit', async (e) => {
   e.preventDefault();
   const nombre = $('pastNombre').value.trim();
   if (!nombre) { toast('Escribe el nombre de la pastilla', true); return; }
-  const ok = await insertar('pastillas', {
-    fecha_hora: new Date().toISOString(),
-    nombre,
-    horario: $('pastHorario').value,
-    tomada: $('pastTomada').checked,
-  });
-  if (ok) { $('pastNombre').value = ''; $('pastTomada').checked = false; renderPastillas(); }
+  const ok = await insertar('pastillas', { nombre, horario: $('pastHorario').value });
+  if (ok) { $('pastNombre').value = ''; renderPastillas(); }
 });
 
 $('formVitaminas').addEventListener('submit', async (e) => {
@@ -736,6 +790,13 @@ function abrirEdicion(tabla, id) {
         <label>Despertó<input type="time" id="edFin" value="${r.fin ? h(new Date(r.fin)) : ''}"></label>
       </div>
       <p class="form-hint">Si la hora de despertar es menor, se asume que cruzó la medianoche.${r.fin ? '' : ' Deja "Despertó" vacío si sigue durmiendo.'}</p>`;
+  } else if (tabla === 'pastillas') {
+    html = `
+      <label>Nombre<input type="text" id="edPastNombre" maxlength="60" value="${escapeHtml(r.nombre || '')}"></label>
+      <label>Horario<select id="edPastHorario">
+        <option value="am"${r.horario === 'am' ? ' selected' : ''}>AM</option>
+        <option value="pm"${r.horario === 'pm' ? ' selected' : ''}>PM</option>
+      </select></label>`;
   } else {
     html = `
       <div class="fila-2">
@@ -746,14 +807,6 @@ function abrirEdicion(tabla, id) {
       html += `<label>Cantidad (ml)<input type="number" id="edCantidad" step="any" inputmode="decimal" value="${r.cantidad_ml}"></label>`;
     if (tabla === 'vitaminas')
       html += `<label>Gotas<input type="number" id="edGotas" step="any" inputmode="decimal" value="${r.gotas}"></label>`;
-    if (tabla === 'pastillas')
-      html += `
-      <label>Nombre<input type="text" id="edPastNombre" maxlength="60" value="${escapeHtml(r.nombre || '')}"></label>
-      <label>Horario<select id="edPastHorario">
-        <option value="am"${r.horario === 'am' ? ' selected' : ''}>AM</option>
-        <option value="pm"${r.horario === 'pm' ? ' selected' : ''}>PM</option>
-      </select></label>
-      <label class="check-pill"><input type="checkbox" id="edPastTomada" ${r.tomada ? 'checked' : ''}> ✅ Tomada</label>`;
     if (tabla === 'panales')
       html += `
       <div class="check-row">
@@ -781,6 +834,11 @@ $('editGuardar').addEventListener('click', async () => {
     }
     cambios.inicio = inicio.toISOString();
     cambios.fin = fin ? fin.toISOString() : null;
+  } else if (tabla === 'pastillas') {
+    const nombre = $('edPastNombre').value.trim();
+    if (!nombre) { toast('Escribe el nombre de la pastilla', true); return; }
+    cambios.nombre = nombre;
+    cambios.horario = $('edPastHorario').value;
   } else {
     cambios.fecha_hora = toISO($('edFecha').value, $('edHora').value);
     if (tabla === 'tomas') {
@@ -792,13 +850,6 @@ $('editGuardar').addEventListener('click', async () => {
       const v = Number($('edGotas').value);
       if (!(v > 0)) { toast('Las gotas deben ser mayores a 0', true); return; }
       cambios.gotas = Math.round(v);
-    }
-    if (tabla === 'pastillas') {
-      const nombre = $('edPastNombre').value.trim();
-      if (!nombre) { toast('Escribe el nombre de la pastilla', true); return; }
-      cambios.nombre = nombre;
-      cambios.horario = $('edPastHorario').value;
-      cambios.tomada = $('edPastTomada').checked;
     }
     if (tabla === 'panales') {
       cambios.heces = $('edHeces').checked;
@@ -1092,6 +1143,7 @@ function iniciarApp(b, rol) {
   appStarted = true;
   aplicarBebe();
   setNowDefaults();
+  activarTab(localStorage.getItem('tab') || 'stats'); // recuerda la pestaña tras recargar
   renderLecheResumen();
   loadAll().then(() => renderTab(currentTab));
 }
