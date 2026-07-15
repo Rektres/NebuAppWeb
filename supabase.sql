@@ -64,6 +64,16 @@ create table sueno (
   created_at timestamptz default now()
 );
 
+create table pastillas (
+  id bigint generated always as identity primary key,
+  bebe_id uuid not null references bebes(id) on delete cascade,
+  fecha_hora timestamptz not null, -- para agrupar por día
+  nombre text not null,
+  horario text, -- 'am' | 'pm'
+  tomada boolean not null default false,
+  created_at timestamptz default now()
+);
+
 -- ============================================================
 -- Funciones (security definer: se ejecutan con permisos del dueño)
 -- ============================================================
@@ -138,6 +148,7 @@ alter table tomas enable row level security;
 alter table vitaminas enable row level security;
 alter table panales enable row level security;
 alter table sueno enable row level security;
+alter table pastillas enable row level security;
 
 create policy "padres ven su bebe" on bebes for select to authenticated
   using (id in (select mis_bebes()));
@@ -156,4 +167,6 @@ create policy "solo padres" on vitaminas for all to authenticated
 create policy "solo padres" on panales for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
 create policy "solo padres" on sueno for all to authenticated
+  using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
+create policy "solo padres" on pastillas for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));

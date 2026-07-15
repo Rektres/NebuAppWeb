@@ -72,6 +72,7 @@
       </div>
       <div class="header-actions">
         <button id="themeBtn" class="icon-btn" title="Cambiar tema">☀️</button>
+        <button id="reloadBtn" class="icon-btn" title="Recargar">🔄</button>
         <button id="settingsBtn" class="icon-btn" title="Configuración">⚙️</button>
       </div>
     </header>
@@ -134,6 +135,20 @@
           <p class="goal-status" id="lecheStatus"></p>
         </div>
 
+        <div class="card goal-card" id="lataCard">
+          <div class="goal-row">
+            <div>
+              <span class="stat-label">Fórmula hoy (30 ml ≈ 30 g)</span>
+              <span class="stat-value"><span id="lecheGramosHoy">0</span> g</span>
+            </div>
+            <div class="goal-input-wrap">
+              <label for="lataInput" class="stat-label">Tamaño lata (g)</label>
+              <input type="number" id="lataInput" step="any" inputmode="decimal" value="800">
+            </div>
+          </div>
+          <p class="goal-status" id="lataStatus"></p>
+        </div>
+
         <div class="dash-grid">
           <div class="card dash-card">
             <span class="stat-label">Última toma hace</span>
@@ -151,14 +166,8 @@
             <label>Cantidad (ml)
               <input type="number" id="lecheCantidad" step="any" inputmode="decimal" required placeholder="120">
             </label>
-            <label>Fecha
-              <input type="date" id="lecheFecha" required>
-            </label>
-            <label>Hora
-              <input type="time" id="lecheHora" required>
-            </label>
           </div>
-          <button type="submit" class="btn-primary">＋ Agregar toma</button>
+          <button type="submit" class="btn-primary">＋ Agregar toma (ahora)</button>
         </form>
 
         <div class="card table-card">
@@ -191,6 +200,33 @@
         </div>
       </section>
 
+      <!-- ========== PESTAÑA: PASTILLAS ========== -->
+      <section id="tab-pastillas" class="tab">
+        <form id="formPastillas" class="card form-card">
+          <h2>Registrar pastilla</h2>
+          <div class="form-grid">
+            <label>Nombre
+              <input type="text" id="pastNombre" maxlength="60" placeholder="Nombre de la pastilla" required>
+            </label>
+            <label>Horario
+              <select id="pastHorario">
+                <option value="am">AM</option>
+                <option value="pm">PM</option>
+              </select>
+            </label>
+          </div>
+          <div class="check-row">
+            <label class="check-pill"><input type="checkbox" id="pastTomada"> ✅ Ya tomada</label>
+          </div>
+          <button type="submit" class="btn-primary">＋ Agregar (ahora)</button>
+        </form>
+
+        <div class="card table-card">
+          <h2>Historial</h2>
+          <div id="tablaPastillas" class="table-wrap"></div>
+        </div>
+      </section>
+
       <!-- ========== PESTAÑA 4: PAÑALES ========== -->
       <section id="tab-panales" class="tab">
         <div class="dash-grid">
@@ -206,19 +242,11 @@
 
         <form id="formPanales" class="card form-card">
           <h2>Registrar cambio</h2>
-          <div class="form-grid">
-            <label>Fecha
-              <input type="date" id="panFecha" required>
-            </label>
-            <label>Hora
-              <input type="time" id="panHora" required>
-            </label>
-          </div>
           <div class="check-row">
             <label class="check-pill"><input type="checkbox" id="panHeces"> 💩 Heces</label>
             <label class="check-pill"><input type="checkbox" id="panOrina"> 💧 Orina</label>
           </div>
-          <button type="submit" class="btn-primary">＋ Agregar cambio</button>
+          <button type="submit" class="btn-primary">＋ Agregar cambio (ahora)</button>
         </form>
 
         <div class="card table-card">
@@ -279,7 +307,11 @@
       <button class="tab-btn" data-tab="leche"><span>🍼</span>Leche</button>
       <button class="tab-btn" data-tab="vitaminas"><span>💊</span>Vitaminas</button>
       <button class="tab-btn" data-tab="panales"><span>🧷</span>Pañales</button>
-      <button class="tab-btn" data-tab="sueno"><span>😴</span>Sueño</button>
+      <button class="tab-btn" id="masBtn" type="button"><span>⋯</span>Más</button>
+      <div id="masMenu" class="tab-menu hidden">
+        <button class="tab-btn tab-menu-item" data-tab="pastillas"><span>💊</span>Pastillas</button>
+        <button class="tab-btn tab-menu-item" data-tab="sueno"><span>😴</span>Sueño</button>
+      </div>
     </nav>
   </div>
 
