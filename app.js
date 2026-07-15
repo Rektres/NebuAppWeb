@@ -69,7 +69,7 @@ function setNowDefaults() {
 }
 
 // ---------- Estado ----------
-const cache = { tomas: null, vitaminas: null, panales: null, sueno: null, pastillas: null, pastillas_log: null };
+const cache = { tomas: null, vitaminas: null, panales: null, sueno: null, pastillas: null, pastillas_log: null, miembros: null };
 let bebe = null;    // fila de la tabla bebes (nombre, foto, paleta, codigo)
 let miRol = null;   // 'madre' | 'padre'
 let usuario = null; // session.user
@@ -87,13 +87,13 @@ async function fetchTable(tabla, campoOrden) {
   return data;
 }
 
-const ORDEN = { sueno: 'inicio', pastillas: 'id', pastillas_log: 'fecha' };
+const ORDEN = { sueno: 'inicio', pastillas: 'id', pastillas_log: 'fecha', miembros: 'created_at' };
 async function loadData(tabla) {
   cache[tabla] = await fetchTable(tabla, ORDEN[tabla] || 'fecha_hora');
 }
 
 async function loadAll() {
-  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno', 'pastillas', 'pastillas_log'].map(loadData));
+  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno', 'pastillas', 'pastillas_log', 'miembros'].map(loadData));
   statsDirty = true;
 }
 
@@ -666,11 +666,12 @@ function renderTab(tab) {
   else if (tab === 'leche') renderLeche();
   else if (tab === 'vitaminas') renderVitaminas();
   else if (tab === 'pastillas') renderPastillas();
+  else if (tab === 'info') renderInfo();
   else if (tab === 'panales') renderPanales();
   else if (tab === 'sueno') renderSueno();
 }
 
-const TABS = ['stats', 'leche', 'vitaminas', 'pastillas', 'panales', 'sueno'];
+const TABS = ['stats', 'leche', 'vitaminas', 'pastillas', 'panales', 'sueno', 'info'];
 
 function activarTab(tab) {
   if (!TABS.includes(tab)) tab = 'stats';
@@ -1022,6 +1023,116 @@ $('cfgGuardar').addEventListener('click', async () => {
 $('logoutBtn').addEventListener('click', async () => {
   await db.auth.signOut();
   $('settingsModal').classList.add('hidden');
+});
+
+// ---------- Info del bebé + padres ----------
+let infoFotoPendiente;
+
+function infoResumenTexto() {
+  const partes = [];
+  if (bebe?.fecha_nacimiento) {
+    const [y, m, d] = bebe.fecha_nacimiento.split('-');
+    partes.push(`🎂 ${d}-${m}-${y} (${calcularEdad(bebe.fecha_nacimiento)})`);
+  }
+  if (bebe?.peso_kg) partes.push(`⚖️ ${bebe.peso_kg} kg`);
+  if (bebe?.talla_cm) partes.push(`📏 ${bebe.talla_cm} cm`);
+  if (bebe?.grupo_sanguineo) partes.push(`🩸 ${bebe.grupo_sanguineo}`);
+  if (bebe?.apodo) partes.push(`🏷️ ${bebe.apodo}`);
+  return partes.join(' · ');
+}
+
+function renderInfo() {
+  infoFotoPendiente = bebe?.foto_base64;
+  const img = $('infoFotoPreview'), fb = $('infoAvatarFallback');
+  if (infoFotoPendiente) { img.src = infoFotoPendiente; img.classList.remove('hidden'); fb.classList.add('hidden'); }
+  else { img.classList.add('hidden'); fb.classList.remove('hidden'); }
+  $('infoNombre').value = bebe?.nombre || '';
+  $('infoNombreCompleto').value = bebe?.nombre_completo || '';
+  $('infoApodo').value = bebe?.apodo || '';
+  $('infoGrupo').value = bebe?.grupo_sanguineo || '';
+  $('infoNacimiento').value = bebe?.fecha_nacimiento || '';
+  $('infoPeso').value = bebe?.peso_kg ?? '';
+  $('infoTalla').value = bebe?.talla_cm ?? '';
+  $('infoAlergias').value = bebe?.alergias || '';
+  $('infoRutinas').value = bebe?.rutinas || '';
+  $('infoResumen').textContent = infoResumenTexto();
+}
+
+$('infoFotoBtn').addEventListener('click', () => $('infoFoto').click());
+$('infoFoto').addEventListener('change', () => {
+  const file = $('infoFoto').files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const im = new Image();
+    im.onload = () => {
+      const escala = Math.min(1, 256 / Math.max(im.width, im.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(im.width * escala);
+      canvas.height = Math.round(im.height * escala);
+      canvas.getContext('2d').drawImage(im, 0, 0, canvas.width, canvas.height);
+      infoFotoPendiente = canvas.toDataURL('image/jpeg', 0.82);
+      const img = $('infoFotoPreview'), fb = $('infoAvatarFallback');
+      img.src = infoFotoPendiente; img.classList.remove('hidden'); fb.classList.add('hidden');
+    };
+    im.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+$('formInfo').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const cambios = {
+    nombre: $('infoNombre').value.trim() || 'Mi bebé',
+    nombre_completo: $('infoNombreCompleto').value.trim() || null,
+    apodo: $('infoApodo').value.trim() || null,
+    grupo_sanguineo: $('infoGrupo').value || null,
+    fecha_nacimiento: $('infoNacimiento').value || null,
+    peso_kg: Number($('infoPeso').value) > 0 ? Number($('infoPeso').value) : null,
+    talla_cm: Number($('infoTalla').value) > 0 ? Number($('infoTalla').value) : null,
+    alergias: $('infoAlergias').value.trim() || null,
+    rutinas: $('infoRutinas').value.trim() || null,
+    foto_base64: infoFotoPendiente || null,
+  };
+  const ok = await actualizarBebe(cambios);
+  if (!ok) return;
+  aplicarBebe();       // refresca la barra superior
+  renderInfo();
+  toast('Datos guardados ✓');
+});
+
+// Modal de padre / madre (contacto)
+function abrirParent(rol) {
+  const m = (cache.miembros || []).find((x) => x.rol === rol);
+  $('parentTitulo').textContent = rol === 'padre' ? '👨 Padre' : '👩 Madre';
+  const propio = m && m.user_id === usuario.id;
+  $('parentNombre').value = m?.nombre_completo || '';
+  $('parentTelefono').value = m?.telefono || '';
+  $('parentCorreo').value = m?.correo_contacto || '';
+  ['parentNombre', 'parentTelefono', 'parentCorreo'].forEach((id) => { $(id).disabled = !propio; });
+  $('parentGuardar').classList.toggle('hidden', !propio);
+  const aviso = $('parentAviso');
+  if (!m) { aviso.textContent = 'Este rol aún no está vinculado.'; aviso.classList.remove('hidden'); }
+  else if (!propio) { aviso.textContent = 'Solo puedes editar tu propia información.'; aviso.classList.remove('hidden'); }
+  else { aviso.classList.add('hidden'); }
+  $('parentModal').classList.remove('hidden');
+}
+
+$('verMadreBtn').addEventListener('click', () => abrirParent('madre'));
+$('verPadreBtn').addEventListener('click', () => abrirParent('padre'));
+$('parentClose').addEventListener('click', () => $('parentModal').classList.add('hidden'));
+$('parentModal').addEventListener('click', (e) => { if (e.target === $('parentModal')) $('parentModal').classList.add('hidden'); });
+
+$('parentGuardar').addEventListener('click', async () => {
+  const { error } = await db.from('miembros').update({
+    nombre_completo: $('parentNombre').value.trim() || null,
+    telefono: $('parentTelefono').value.trim() || null,
+    correo_contacto: $('parentCorreo').value.trim() || null,
+  }).eq('user_id', usuario.id);
+  if (error) { toast(`Error: ${error.message}`, true); return; }
+  await loadData('miembros');
+  $('parentModal').classList.add('hidden');
+  toast('Guardado ✓');
 });
 
 // ---------- Autenticación ----------

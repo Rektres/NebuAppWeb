@@ -306,6 +306,71 @@
         </div>
       </section>
 
+      <!-- ========== PESTAÑA: INFO DEL BEBÉ ========== -->
+      <section id="tab-info" class="tab">
+        <div class="card">
+          <div class="photo-row">
+            <div class="avatar avatar-lg" id="infoAvatarWrap">
+              <img id="infoFotoPreview" alt="" class="hidden">
+              <span id="infoAvatarFallback">👶</span>
+            </div>
+            <input type="file" id="infoFoto" accept="image/*" class="hidden">
+            <button type="button" id="infoFotoBtn" class="btn-secondary">Cambiar foto…</button>
+          </div>
+          <p class="baby-stats info-resumen" id="infoResumen"></p>
+        </div>
+
+        <form id="formInfo" class="card form-card">
+          <h2>Datos del bebé</h2>
+          <label class="field-label">Nombre (el que se muestra arriba)
+            <input type="text" id="infoNombre" maxlength="40" placeholder="Mi bebé">
+          </label>
+          <label class="field-label">Nombre completo
+            <input type="text" id="infoNombreCompleto" maxlength="80" placeholder="Nombre y apellidos">
+          </label>
+          <label class="field-label">Apodo
+            <input type="text" id="infoApodo" maxlength="40" placeholder="Apodo">
+          </label>
+          <div class="peso-talla-row">
+            <label class="field-label">Grupo sanguíneo
+              <select id="infoGrupo">
+                <option value="">—</option>
+                <option>O+</option><option>O-</option>
+                <option>A+</option><option>A-</option>
+                <option>B+</option><option>B-</option>
+                <option>AB+</option><option>AB-</option>
+              </select>
+            </label>
+            <label class="field-label">Fecha de nacimiento
+              <input type="date" id="infoNacimiento">
+            </label>
+          </div>
+          <div class="peso-talla-row">
+            <label class="field-label">Peso actual (kg)
+              <input type="number" id="infoPeso" step="any" inputmode="decimal" placeholder="6.2">
+            </label>
+            <label class="field-label">Talla actual (cm)
+              <input type="number" id="infoTalla" step="any" inputmode="decimal" placeholder="62">
+            </label>
+          </div>
+          <label class="field-label">Alergias / alérgenos
+            <textarea id="infoAlergias" rows="2" maxlength="500" placeholder="Ninguna conocida"></textarea>
+          </label>
+          <label class="field-label">Rutinas / mañas
+            <textarea id="infoRutinas" rows="2" maxlength="500" placeholder="Ej: duerme con música, chupete azul…"></textarea>
+          </label>
+          <button type="submit" class="btn-primary">Guardar datos</button>
+        </form>
+
+        <div class="card">
+          <h2>Padres</h2>
+          <div class="rol-row">
+            <button type="button" class="btn-secondary" id="verMadreBtn">👩 Madre</button>
+            <button type="button" class="btn-secondary" id="verPadreBtn">👨 Padre</button>
+          </div>
+        </div>
+      </section>
+
     </main>
 
     <!-- ========== BARRA DE PESTAÑAS ========== -->
@@ -317,6 +382,7 @@
       <button class="tab-btn" id="masBtn" type="button"><span>⋯</span>Más</button>
       <div id="masMenu" class="tab-menu hidden">
         <button class="tab-btn tab-menu-item" data-tab="pastillas"><span>💊</span>Pastillas</button>
+        <button class="tab-btn tab-menu-item" data-tab="info"><span>👶</span>Info</button>
         <button class="tab-btn tab-menu-item" data-tab="sueno"><span>😴</span>Sueño</button>
       </div>
     </nav>
@@ -405,6 +471,27 @@
       </div>
       <div id="editCampos" class="edit-campos"></div>
       <button id="editGuardar" class="btn-primary">Guardar cambios</button>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL INFO DE PADRE/MADRE ==================== -->
+  <div id="parentModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="parentTitulo">Padre / Madre</h2>
+        <button id="parentClose" class="icon-btn">✕</button>
+      </div>
+      <label class="field-label">Nombre completo
+        <input type="text" id="parentNombre" maxlength="80" placeholder="Nombre y apellidos">
+      </label>
+      <label class="field-label">Teléfono
+        <input type="tel" id="parentTelefono" maxlength="30" placeholder="+56 9 ...">
+      </label>
+      <label class="field-label">Correo de contacto
+        <input type="email" id="parentCorreo" maxlength="120" placeholder="correo@ejemplo.com">
+      </label>
+      <p id="parentAviso" class="form-hint hidden"></p>
+      <button id="parentGuardar" class="btn-primary">Guardar</button>
     </div>
   </div>
 

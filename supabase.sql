@@ -14,6 +14,11 @@ create table bebes (
   fecha_nacimiento date,
   peso_kg numeric,
   talla_cm numeric,
+  nombre_completo text,
+  apodo text,
+  grupo_sanguineo text,
+  alergias text,
+  rutinas text,
   lata_gramos numeric default 800,     -- tamaño de la lata de fórmula
   lata_abierta_en timestamptz,          -- cuándo se abrió la lata actual
   latas_usadas integer default 0,       -- contador de latas abiertas
@@ -25,6 +30,9 @@ create table miembros (
   user_id uuid primary key references auth.users(id) on delete cascade,
   bebe_id uuid not null references bebes(id) on delete cascade,
   rol text not null check (rol in ('madre', 'padre')),
+  nombre_completo text,
+  telefono text,
+  correo_contacto text,
   created_at timestamptz default now()
 );
 

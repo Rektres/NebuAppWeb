@@ -166,7 +166,7 @@ label {
 }
 
 input[type="number"], input[type="date"], input[type="time"], input[type="datetime-local"],
-input[type="email"], input[type="password"], input[type="text"], select {
+input[type="email"], input[type="password"], input[type="text"], input[type="tel"], select {
   appearance: none;
   -webkit-appearance: none;
   background: var(--surface-2);
@@ -182,8 +182,26 @@ input[type="email"], input[type="password"], input[type="text"], select {
   box-sizing: border-box;
   color-scheme: dark;
 }
-:root[data-theme="light"] input, :root[data-theme="light"] select { color-scheme: light; }
-input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+textarea {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 1rem;
+  font-family: inherit;
+  color: var(--text);
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  resize: vertical;
+  color-scheme: dark;
+}
+:root[data-theme="light"] input, :root[data-theme="light"] select, :root[data-theme="light"] textarea { color-scheme: light; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.info-resumen { white-space: normal; margin-top: 12px; font-size: 0.8rem; }
 
 .pill-check { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; }
 
