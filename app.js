@@ -16,6 +16,7 @@ const db = supabase.createClient(
 // ---------- Helpers ----------
 const $ = (id) => document.getElementById(id);
 const pad2 = (n) => String(n).padStart(2, '0');
+const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const dayKey = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const fmtTime = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
@@ -63,12 +64,12 @@ function toast(msg, isError = false) {
 function setNowDefaults() {
   const now = new Date();
   const f = dayKey(now), h = fmtTime(now);
-  for (const id of ['lecheFecha', 'vitFecha', 'panFecha', 'suenoFecha']) $(id).value = f;
-  for (const id of ['lecheHora', 'vitHora', 'panHora', 'suenoInicio', 'suenoFin']) $(id).value = h;
+  for (const id of ['vitFecha', 'suenoFecha']) $(id).value = f;
+  for (const id of ['vitHora', 'suenoInicio', 'suenoFin']) $(id).value = h;
 }
 
 // ---------- Estado ----------
-const cache = { tomas: null, vitaminas: null, panales: null, sueno: null };
+const cache = { tomas: null, vitaminas: null, panales: null, sueno: null, pastillas: null };
 let bebe = null;    // fila de la tabla bebes (nombre, foto, paleta, codigo)
 let miRol = null;   // 'madre' | 'padre'
 let usuario = null; // session.user
@@ -91,7 +92,7 @@ async function loadData(tabla) {
 }
 
 async function loadAll() {
-  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno'].map(loadData));
+  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno', 'pastillas'].map(loadData));
   statsDirty = true;
 }
 
@@ -163,6 +164,13 @@ function renderLecheResumen() {
       ? `🎉 ¡Meta cumplida! (+${total - objetivo} ml sobre el objetivo)`
       : `Faltan ${objetivo - total} ml para el objetivo 🎯`;
 
+  // Fórmula: 30 ml ≈ 30 g (1:1). ponytail: latas contadas por módulo del total, sin "abrir lata" explícito
+  const totalMl = (cache.tomas || []).reduce((s, r) => s + r.cantidad_ml, 0);
+  const lata = Number(localStorage.getItem('lata_gramos')) || 800;
+  $('lataInput').value = lata;
+  $('lecheGramosHoy').textContent = total;
+  $('lataStatus').textContent = `Quedan ~${lata - (totalMl % lata)} g en la lata · ${totalMl} g usados en total`;
+
   const rows = cache.tomas || [];
   if (!rows.length) {
     $('ultimaTomaHace').textContent = '—';
@@ -182,6 +190,28 @@ function renderVitaminas() {
     groupByDay(cache.vitaminas || [], 'fecha_hora'),
     (r) => `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.gotas} gotas</td>${accionesTd('vitaminas', r.id)}</tr>`
   );
+}
+
+function renderPastillas() {
+  $('tablaPastillas').innerHTML = tablaHTML(
+    ['Pastilla', 'Horario', 'Tomada'],
+    groupByDay(cache.pastillas || [], 'fecha_hora'),
+    (r) =>
+      `<tr><td>${escapeHtml(r.nombre || '—')}</td><td>${(r.horario || '').toUpperCase()}</td><td><input type="checkbox" class="pill-check" data-id="${r.id}" ${r.tomada ? 'checked' : ''}></td>${accionesTd('pastillas', r.id)}</tr>`
+  );
+}
+
+// Marcar/desmarcar "tomada" directo desde la tabla
+document.addEventListener('change', (e) => {
+  const chk = e.target.closest('.pill-check');
+  if (chk) togglePastilla(chk.dataset.id, chk.checked);
+});
+
+async function togglePastilla(id, tomada) {
+  const { error } = await db.from('pastillas').update({ tomada }).eq('id', id);
+  if (error) { toast(`Error: ${error.message}`, true); await loadData('pastillas'); renderPastillas(); return; }
+  const r = (cache.pastillas || []).find((x) => String(x.id) === String(id));
+  if (r) r.tomada = tomada;
 }
 
 function renderPanales() {
@@ -589,18 +619,32 @@ function renderTab(tab) {
   if (tab === 'stats') { if (statsDirty) renderCharts(); }
   else if (tab === 'leche') renderLeche();
   else if (tab === 'vitaminas') renderVitaminas();
+  else if (tab === 'pastillas') renderPastillas();
   else if (tab === 'panales') renderPanales();
   else if (tab === 'sueno') renderSueno();
 }
 
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
+    if (!btn.dataset.tab) return; // botón "Más": abre el menú, no cambia de pestaña
     currentTab = btn.dataset.tab;
     document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b === btn));
     document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === 'tab-' + currentTab));
+    $('masMenu').classList.add('hidden');
     renderTab(currentTab);
   });
 });
+
+// Menú "Más" (overflow con Pastillas y Sueño)
+$('masBtn').addEventListener('click', (e) => { e.stopPropagation(); $('masMenu').classList.toggle('hidden'); });
+document.addEventListener('click', () => $('masMenu').classList.add('hidden'));
+
+// Recargar la app: botón manual + automático cada 5 minutos
+$('reloadBtn').addEventListener('click', () => location.reload());
+setInterval(() => {
+  if (document.querySelector('.modal:not(.hidden)')) return; // no recargar con un modal abierto
+  location.reload();
+}, 300000);
 
 // ---------- Formularios ----------
 $('formLeche').addEventListener('submit', async (e) => {
@@ -608,16 +652,35 @@ $('formLeche').addEventListener('submit', async (e) => {
   const cantidad = Number($('lecheCantidad').value);
   if (!(cantidad > 0)) { toast('La cantidad debe ser mayor a 0', true); return; }
   const ok = await insertar('tomas', {
-    fecha_hora: toISO($('lecheFecha').value, $('lecheHora').value),
+    fecha_hora: new Date().toISOString(),
     cantidad_ml: Math.round(cantidad),
   });
-  if (ok) { $('lecheCantidad').value = ''; setNowDefaults(); renderLeche(); }
+  if (ok) { $('lecheCantidad').value = ''; renderLeche(); }
 });
 
 $('objetivoInput').addEventListener('change', () => {
   const v = Number($('objetivoInput').value);
   localStorage.setItem('objetivo_leche', v > 0 ? v : 800);
   renderLecheResumen();
+});
+
+$('lataInput').addEventListener('change', () => {
+  const v = Number($('lataInput').value);
+  localStorage.setItem('lata_gramos', v > 0 ? v : 800);
+  renderLecheResumen();
+});
+
+$('formPastillas').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nombre = $('pastNombre').value.trim();
+  if (!nombre) { toast('Escribe el nombre de la pastilla', true); return; }
+  const ok = await insertar('pastillas', {
+    fecha_hora: new Date().toISOString(),
+    nombre,
+    horario: $('pastHorario').value,
+    tomada: $('pastTomada').checked,
+  });
+  if (ok) { $('pastNombre').value = ''; $('pastTomada').checked = false; renderPastillas(); }
 });
 
 $('formVitaminas').addEventListener('submit', async (e) => {
@@ -636,10 +699,10 @@ $('formPanales').addEventListener('submit', async (e) => {
   // Sin checkboxes marcados también es válido: fue un cambio sin heces ni orina
   const heces = $('panHeces').checked, orina = $('panOrina').checked;
   const ok = await insertar('panales', {
-    fecha_hora: toISO($('panFecha').value, $('panHora').value),
+    fecha_hora: new Date().toISOString(),
     heces, orina,
   });
-  if (ok) { $('panHeces').checked = false; $('panOrina').checked = false; setNowDefaults(); renderPanales(); }
+  if (ok) { $('panHeces').checked = false; $('panOrina').checked = false; renderPanales(); }
 });
 
 $('formSueno').addEventListener('submit', async (e) => {
@@ -655,7 +718,7 @@ $('formSueno').addEventListener('submit', async (e) => {
 // ---------- Edición de registros ----------
 let editRegistro = null; // { tabla, id }
 
-const EDIT_TITULOS = { tomas: 'Editar toma', vitaminas: 'Editar vitaminas', panales: 'Editar cambio de pañal', sueno: 'Editar sueño' };
+const EDIT_TITULOS = { tomas: 'Editar toma', vitaminas: 'Editar vitaminas', pastillas: 'Editar pastilla', panales: 'Editar cambio de pañal', sueno: 'Editar sueño' };
 
 function abrirEdicion(tabla, id) {
   const r = (cache[tabla] || []).find((x) => String(x.id) === String(id));
@@ -683,6 +746,14 @@ function abrirEdicion(tabla, id) {
       html += `<label>Cantidad (ml)<input type="number" id="edCantidad" step="any" inputmode="decimal" value="${r.cantidad_ml}"></label>`;
     if (tabla === 'vitaminas')
       html += `<label>Gotas<input type="number" id="edGotas" step="any" inputmode="decimal" value="${r.gotas}"></label>`;
+    if (tabla === 'pastillas')
+      html += `
+      <label>Nombre<input type="text" id="edPastNombre" maxlength="60" value="${escapeHtml(r.nombre || '')}"></label>
+      <label>Horario<select id="edPastHorario">
+        <option value="am"${r.horario === 'am' ? ' selected' : ''}>AM</option>
+        <option value="pm"${r.horario === 'pm' ? ' selected' : ''}>PM</option>
+      </select></label>
+      <label class="check-pill"><input type="checkbox" id="edPastTomada" ${r.tomada ? 'checked' : ''}> ✅ Tomada</label>`;
     if (tabla === 'panales')
       html += `
       <div class="check-row">
@@ -721,6 +792,13 @@ $('editGuardar').addEventListener('click', async () => {
       const v = Number($('edGotas').value);
       if (!(v > 0)) { toast('Las gotas deben ser mayores a 0', true); return; }
       cambios.gotas = Math.round(v);
+    }
+    if (tabla === 'pastillas') {
+      const nombre = $('edPastNombre').value.trim();
+      if (!nombre) { toast('Escribe el nombre de la pastilla', true); return; }
+      cambios.nombre = nombre;
+      cambios.horario = $('edPastHorario').value;
+      cambios.tomada = $('edPastTomada').checked;
     }
     if (tabla === 'panales') {
       cambios.heces = $('edHeces').checked;
