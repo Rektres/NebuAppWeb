@@ -174,8 +174,16 @@ function renderLecheResumen() {
     .reduce((s, r) => s + r.cantidad_ml, 0);
   $('lataInput').value = lata;
   $('lecheGramosHoy').textContent = total;
+  // No pisar el input mientras se está editando
+  if (document.activeElement !== $('lataAbiertaInput')) {
+    const ad = abierta ? new Date(abierta) : new Date();
+    $('lataAbiertaInput').value = `${dayKey(ad)}T${fmtTime(ad)}`;
+  }
+  const abiertaTxt = abierta
+    ? new Date(abierta).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
+    : '—';
   $('lataStatus').textContent =
-    `Quedan ~${Math.max(0, lata - usadaLata)} g en la lata actual · Latas usadas: ${bebe?.latas_usadas || 0} (${totalMl} g en total)`;
+    `Quedan ~${Math.max(0, lata - usadaLata)} g · abierta ${abiertaTxt} · Latas usadas: ${bebe?.latas_usadas || 0} (${totalMl} g en total)`;
 
   const rows = cache.tomas || [];
   if (!rows.length) {
@@ -725,7 +733,9 @@ $('lataInput').addEventListener('change', async () => {
 });
 
 $('abrirLataBtn').addEventListener('click', async () => {
-  const ok = await actualizarBebe({ lata_abierta_en: new Date().toISOString(), latas_usadas: (bebe?.latas_usadas || 0) + 1 });
+  const val = $('lataAbiertaInput').value;
+  const fecha = val ? new Date(val) : new Date();
+  const ok = await actualizarBebe({ lata_abierta_en: fecha.toISOString(), latas_usadas: (bebe?.latas_usadas || 0) + 1 });
   if (ok) { toast('Lata nueva abierta ✓'); renderLecheResumen(); }
 });
 

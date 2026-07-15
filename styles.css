@@ -165,7 +165,7 @@ label {
   min-width: 0;
 }
 
-input[type="number"], input[type="date"], input[type="time"],
+input[type="number"], input[type="date"], input[type="time"], input[type="datetime-local"],
 input[type="email"], input[type="password"], input[type="text"], select {
   appearance: none;
   -webkit-appearance: none;
