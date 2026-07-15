@@ -153,6 +153,11 @@ main {
 }
 
 /* ---------- Formularios ---------- */
+/* Separación uniforme entre bloques del formulario para que la etiqueta de un
+   campo no se confunda con el input del campo de arriba */
+.form-card { display: flex; flex-direction: column; gap: 20px; }
+.form-card h2, .form-card .form-grid, .form-card .form-hint, .form-card .check-row { margin-bottom: 0; }
+
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
 .form-grid label:first-child { grid-column: 1 / -1; }
 
