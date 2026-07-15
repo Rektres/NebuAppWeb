@@ -159,7 +159,7 @@ main {
 label {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
   font-size: 0.8rem;
   color: var(--muted);
   min-width: 0;
@@ -209,6 +209,31 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .pill-list .check-pill { flex: none; }
 .past-lista { margin-top: 12px; }
 .past-lista table { font-size: 0.9rem; }
+
+/* Alimentación (controles): permite envolver los 4 chips */
+.check-wrap { flex-wrap: wrap; }
+.check-wrap .check-pill { flex: 1 1 40%; }
+
+/* Bitácora y controles: tarjetas de entrada */
+.bit-item { border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+.bit-item:last-child { margin-bottom: 0; }
+.bit-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.bit-head span { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+.bit-item p { font-size: 0.9rem; color: var(--text-2); margin-bottom: 4px; }
+.ctrl-detalle { color: var(--text) !important; font-weight: 600; }
+.ctrl-prof { color: var(--muted) !important; font-size: 0.82rem !important; }
+.bit-acciones { text-align: right; margin-top: 4px; }
+
+/* Reordenar pestañas (configuración) */
+.orden-lista { display: flex; flex-direction: column; gap: 6px; }
+.orden-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 12px; font-size: 0.9rem; color: var(--text);
+}
+.orden-btns { display: flex; gap: 6px; }
+.orden-btns .icon-btn { width: 32px; height: 32px; font-size: 0.85rem; }
+.orden-btns .icon-btn:disabled { opacity: 0.35; }
 
 /* iOS/Safari: los inputs date/time centran su valor y no respetan el ancho — normalizar */
 input::-webkit-date-and-time-value { text-align: left; }
@@ -543,7 +568,7 @@ td.td-action { text-align: right; width: 64px; white-space: nowrap; }
 .modal-head { display: flex; justify-content: space-between; align-items: center; }
 .modal-head h2 { font-size: 1.15rem; }
 
-.field-label { display: flex; flex-direction: column; gap: 8px; font-size: 0.8rem; color: var(--muted); }
+.field-label { display: flex; flex-direction: column; gap: 12px; font-size: 0.8rem; color: var(--muted); }
 
 .photo-row { display: flex; align-items: center; gap: 14px; }
 

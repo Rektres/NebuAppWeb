@@ -33,6 +33,7 @@ create table miembros (
   nombre_completo text,
   telefono text,
   correo_contacto text,
+  grupo_sanguineo text,
   created_at timestamptz default now()
 );
 
@@ -91,6 +92,34 @@ create table pastillas_log (
   pastilla_id bigint not null references pastillas(id) on delete cascade,
   fecha date not null,
   unique (pastilla_id, fecha)
+);
+
+-- Bitácora: hitos / anotaciones libres
+create table bitacora (
+  id bigint generated always as identity primary key,
+  bebe_id uuid not null references bebes(id) on delete cascade,
+  titulo text not null,
+  fecha date not null,
+  notas text,
+  created_at timestamptz default now()
+);
+
+-- Controles médicos (control de niño sano)
+create table controles (
+  id bigint generated always as identity primary key,
+  bebe_id uuid not null references bebes(id) on delete cascade,
+  control text,                 -- cuál control (díada … 12 meses)
+  profesional text,
+  fecha date not null,
+  edad text,
+  peso_kg numeric,
+  talla_cm numeric,
+  perimetro_craneal numeric,
+  diagnostico_nutricional text,
+  diagnostico text,
+  indicaciones text,
+  alimentacion text,            -- códigos separados por coma: LME,LMP,FP,FE
+  created_at timestamptz default now()
 );
 
 -- ============================================================
@@ -169,6 +198,8 @@ alter table panales enable row level security;
 alter table sueno enable row level security;
 alter table pastillas enable row level security;
 alter table pastillas_log enable row level security;
+alter table bitacora enable row level security;
+alter table controles enable row level security;
 
 create policy "padres ven su bebe" on bebes for select to authenticated
   using (id in (select mis_bebes()));
@@ -191,4 +222,8 @@ create policy "solo padres" on sueno for all to authenticated
 create policy "solo padres" on pastillas for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
 create policy "solo padres" on pastillas_log for all to authenticated
+  using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
+create policy "solo padres" on bitacora for all to authenticated
+  using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
+create policy "solo padres" on controles for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));

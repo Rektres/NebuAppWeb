@@ -69,7 +69,7 @@ function setNowDefaults() {
 }
 
 // ---------- Estado ----------
-const cache = { tomas: null, vitaminas: null, panales: null, sueno: null, pastillas: null, pastillas_log: null, miembros: null };
+const cache = { tomas: null, vitaminas: null, panales: null, sueno: null, pastillas: null, pastillas_log: null, miembros: null, bitacora: null, controles: null };
 let bebe = null;    // fila de la tabla bebes (nombre, foto, paleta, codigo)
 let miRol = null;   // 'madre' | 'padre'
 let usuario = null; // session.user
@@ -87,13 +87,13 @@ async function fetchTable(tabla, campoOrden) {
   return data;
 }
 
-const ORDEN = { sueno: 'inicio', pastillas: 'id', pastillas_log: 'fecha', miembros: 'created_at' };
+const ORDEN = { sueno: 'inicio', pastillas: 'id', pastillas_log: 'fecha', miembros: 'created_at', bitacora: 'fecha', controles: 'fecha' };
 async function loadData(tabla) {
   cache[tabla] = await fetchTable(tabla, ORDEN[tabla] || 'fecha_hora');
 }
 
 async function loadAll() {
-  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno', 'pastillas', 'pastillas_log', 'miembros'].map(loadData));
+  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno', 'pastillas', 'pastillas_log', 'miembros', 'bitacora', 'controles'].map(loadData));
   statsDirty = true;
 }
 
@@ -121,7 +121,10 @@ document.addEventListener('click', (e) => {
   const del = e.target.closest('.del-btn');
   if (del) { eliminar(del.dataset.tabla, del.dataset.id); return; }
   const ed = e.target.closest('.edit-btn');
-  if (ed) abrirEdicion(ed.dataset.tabla, ed.dataset.id);
+  if (ed) {
+    if (ed.dataset.tabla === 'controles') cargarControl(ed.dataset.id);
+    else abrirEdicion(ed.dataset.tabla, ed.dataset.id);
+  }
 });
 
 // ---------- Render de tablas ----------
@@ -137,8 +140,9 @@ function tablaHTML(headers, grupos, filaFn, subtotalFn) {
   return html + '</tbody></table>';
 }
 
-const accionesTd = (tabla, id) =>
-  `<td class="td-action"><button class="edit-btn" data-tabla="${tabla}" data-id="${id}" title="Editar">✏️</button><button class="del-btn" data-tabla="${tabla}" data-id="${id}" title="Eliminar">🗑</button></td>`;
+const botonesEdit = (tabla, id) =>
+  `<button class="edit-btn" data-tabla="${tabla}" data-id="${id}" title="Editar">✏️</button><button class="del-btn" data-tabla="${tabla}" data-id="${id}" title="Eliminar">🗑</button>`;
+const accionesTd = (tabla, id) => `<td class="td-action">${botonesEdit(tabla, id)}</td>`;
 
 function renderLeche() {
   const rows = cache.tomas || [];
@@ -667,32 +671,93 @@ function renderTab(tab) {
   else if (tab === 'vitaminas') renderVitaminas();
   else if (tab === 'pastillas') renderPastillas();
   else if (tab === 'info') renderInfo();
+  else if (tab === 'bitacora') renderBitacora();
+  else if (tab === 'controles') renderControles();
   else if (tab === 'panales') renderPanales();
   else if (tab === 'sueno') renderSueno();
 }
 
-const TABS = ['stats', 'leche', 'vitaminas', 'pastillas', 'panales', 'sueno', 'info'];
+const TAB_META = {
+  stats:     { icon: '📊', label: 'Stats' },
+  leche:     { icon: '🍼', label: 'Leche' },
+  vitaminas: { icon: '💊', label: 'Vitaminas' },
+  pastillas: { icon: '💊', label: 'Pastillas' },
+  panales:   { icon: '🧷', label: 'Pañales' },
+  sueno:     { icon: '😴', label: 'Sueño' },
+  info:      { icon: '👶', label: 'Info' },
+  bitacora:  { icon: '📓', label: 'Bitácora' },
+  controles: { icon: '🩺', label: 'Controles' },
+};
+const ORDEN_DEFAULT = ['stats', 'leche', 'vitaminas', 'panales', 'pastillas', 'info', 'bitacora', 'controles', 'sueno'];
+const BAR_COUNT = 4; // primeras N pestañas en la barra, el resto en el menú "Más"
+
+// Orden guardado por usuario (localStorage), completado con pestañas nuevas
+function ordenTabs() {
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem('orden_tabs') || '[]'); } catch { saved = []; }
+  const orden = saved.filter((t) => TAB_META[t]);
+  for (const t of ORDEN_DEFAULT) if (!orden.includes(t)) orden.push(t);
+  return orden;
+}
+function guardarOrden(orden) { localStorage.setItem('orden_tabs', JSON.stringify(orden)); }
+
+function renderTabbar() {
+  const orden = ordenTabs();
+  const btn = (t, cls) => `<button class="tab-btn ${cls}" data-tab="${t}"><span>${TAB_META[t].icon}</span>${TAB_META[t].label}</button>`;
+  const bar = orden.slice(0, BAR_COUNT).map((t) => btn(t, '')).join('');
+  const menu = orden.slice(BAR_COUNT).map((t) => btn(t, 'tab-menu-item')).join('');
+  $('tabbar').innerHTML =
+    bar +
+    `<button class="tab-btn" id="masBtn" type="button"><span>⋯</span>Más</button>` +
+    `<div id="masMenu" class="tab-menu hidden">${menu}</div>`;
+  document.querySelectorAll('#tabbar .tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === currentTab));
+}
 
 function activarTab(tab) {
-  if (!TABS.includes(tab)) tab = 'stats';
+  if (!TAB_META[tab]) tab = 'stats';
   currentTab = tab;
   localStorage.setItem('tab', tab);
-  document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('#tabbar .tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === 'tab-' + tab));
 }
 
-document.querySelectorAll('.tab-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    if (!btn.dataset.tab) return; // botón "Más": abre el menú, no cambia de pestaña
-    activarTab(btn.dataset.tab);
-    $('masMenu').classList.add('hidden');
-    renderTab(currentTab);
-  });
+// Delegación de clicks de la barra (se rearma sola al reordenar)
+document.addEventListener('click', (e) => {
+  const tb = e.target.closest('.tab-btn');
+  if (tb) {
+    if (tb.id === 'masBtn') { e.stopPropagation(); $('masMenu').classList.toggle('hidden'); return; }
+    if (tb.dataset.tab) { activarTab(tb.dataset.tab); $('masMenu')?.classList.add('hidden'); renderTab(currentTab); }
+    return;
+  }
+  $('masMenu')?.classList.add('hidden'); // click fuera cierra el menú
 });
 
-// Menú "Más" (overflow con Pastillas y Sueño)
-$('masBtn').addEventListener('click', (e) => { e.stopPropagation(); $('masMenu').classList.toggle('hidden'); });
-document.addEventListener('click', () => $('masMenu').classList.add('hidden'));
+// Reordenar pestañas (en Configuración)
+function renderOrdenUI() {
+  const orden = ordenTabs();
+  $('ordenTabsUI').innerHTML = orden.map((t, i) =>
+    `<div class="orden-row">
+       <span>${TAB_META[t].icon} ${TAB_META[t].label}${i < BAR_COUNT ? ' · barra' : ''}</span>
+       <span class="orden-btns">
+         <button type="button" class="icon-btn orden-up" data-tab="${t}" ${i === 0 ? 'disabled' : ''}>▲</button>
+         <button type="button" class="icon-btn orden-down" data-tab="${t}" ${i === orden.length - 1 ? 'disabled' : ''}>▼</button>
+       </span>
+     </div>`
+  ).join('');
+}
+
+$('ordenTabsUI').addEventListener('click', (e) => {
+  const b = e.target.closest('.orden-up, .orden-down');
+  if (!b) return;
+  const orden = ordenTabs();
+  const i = orden.indexOf(b.dataset.tab);
+  const j = b.classList.contains('orden-up') ? i - 1 : i + 1;
+  if (j < 0 || j >= orden.length) return;
+  [orden[i], orden[j]] = [orden[j], orden[i]];
+  guardarOrden(orden);
+  renderOrdenUI();
+  renderTabbar();
+});
 
 // Recargar la app: botón manual + automático cada 5 minutos
 $('reloadBtn').addEventListener('click', () => location.reload());
@@ -783,7 +848,7 @@ $('formSueno').addEventListener('submit', async (e) => {
 // ---------- Edición de registros ----------
 let editRegistro = null; // { tabla, id }
 
-const EDIT_TITULOS = { tomas: 'Editar toma', vitaminas: 'Editar vitaminas', pastillas: 'Editar pastilla', panales: 'Editar cambio de pañal', sueno: 'Editar sueño' };
+const EDIT_TITULOS = { tomas: 'Editar toma', vitaminas: 'Editar vitaminas', pastillas: 'Editar pastilla', panales: 'Editar cambio de pañal', sueno: 'Editar sueño', bitacora: 'Editar anotación' };
 
 function abrirEdicion(tabla, id) {
   const r = (cache[tabla] || []).find((x) => String(x.id) === String(id));
@@ -808,6 +873,11 @@ function abrirEdicion(tabla, id) {
         <option value="am"${r.horario === 'am' ? ' selected' : ''}>AM</option>
         <option value="pm"${r.horario === 'pm' ? ' selected' : ''}>PM</option>
       </select></label>`;
+  } else if (tabla === 'bitacora') {
+    html = `
+      <label>Título<input type="text" id="edBitTitulo" maxlength="80" value="${escapeHtml(r.titulo || '')}"></label>
+      <label>Fecha<input type="date" id="edBitFecha" value="${r.fecha}"></label>
+      <label>Anotaciones<textarea id="edBitNotas" rows="3" maxlength="1000">${escapeHtml(r.notas || '')}</textarea></label>`;
   } else {
     html = `
       <div class="fila-2">
@@ -850,6 +920,12 @@ $('editGuardar').addEventListener('click', async () => {
     if (!nombre) { toast('Escribe el nombre de la pastilla', true); return; }
     cambios.nombre = nombre;
     cambios.horario = $('edPastHorario').value;
+  } else if (tabla === 'bitacora') {
+    const titulo = $('edBitTitulo').value.trim();
+    if (!titulo) { toast('Escribe un título', true); return; }
+    cambios.titulo = titulo;
+    cambios.fecha = $('edBitFecha').value;
+    cambios.notas = $('edBitNotas').value.trim() || null;
   } else {
     cambios.fecha_hora = toISO($('edFecha').value, $('edHora').value);
     if (tabla === 'tomas') {
@@ -936,6 +1012,7 @@ function abrirModal() {
   if (rolInput) rolInput.checked = true;
   actualizarPreviewFoto();
   marcarSwatch(bebe?.paleta || 'celeste');
+  renderOrdenUI();
   $('settingsModal').classList.remove('hidden');
 }
 
@@ -1037,7 +1114,6 @@ function infoResumenTexto() {
   if (bebe?.peso_kg) partes.push(`⚖️ ${bebe.peso_kg} kg`);
   if (bebe?.talla_cm) partes.push(`📏 ${bebe.talla_cm} cm`);
   if (bebe?.grupo_sanguineo) partes.push(`🩸 ${bebe.grupo_sanguineo}`);
-  if (bebe?.apodo) partes.push(`🏷️ ${bebe.apodo}`);
   return partes.join(' · ');
 }
 
@@ -1048,7 +1124,6 @@ function renderInfo() {
   else { img.classList.add('hidden'); fb.classList.remove('hidden'); }
   $('infoNombre').value = bebe?.nombre || '';
   $('infoNombreCompleto').value = bebe?.nombre_completo || '';
-  $('infoApodo').value = bebe?.apodo || '';
   $('infoGrupo').value = bebe?.grupo_sanguineo || '';
   $('infoNacimiento').value = bebe?.fecha_nacimiento || '';
   $('infoPeso').value = bebe?.peso_kg ?? '';
@@ -1085,7 +1160,6 @@ $('formInfo').addEventListener('submit', async (e) => {
   const cambios = {
     nombre: $('infoNombre').value.trim() || 'Mi bebé',
     nombre_completo: $('infoNombreCompleto').value.trim() || null,
-    apodo: $('infoApodo').value.trim() || null,
     grupo_sanguineo: $('infoGrupo').value || null,
     fecha_nacimiento: $('infoNacimiento').value || null,
     peso_kg: Number($('infoPeso').value) > 0 ? Number($('infoPeso').value) : null,
@@ -1109,7 +1183,8 @@ function abrirParent(rol) {
   $('parentNombre').value = m?.nombre_completo || '';
   $('parentTelefono').value = m?.telefono || '';
   $('parentCorreo').value = m?.correo_contacto || '';
-  ['parentNombre', 'parentTelefono', 'parentCorreo'].forEach((id) => { $(id).disabled = !propio; });
+  $('parentGrupo').value = m?.grupo_sanguineo || '';
+  ['parentNombre', 'parentTelefono', 'parentCorreo', 'parentGrupo'].forEach((id) => { $(id).disabled = !propio; });
   $('parentGuardar').classList.toggle('hidden', !propio);
   const aviso = $('parentAviso');
   if (!m) { aviso.textContent = 'Este rol aún no está vinculado.'; aviso.classList.remove('hidden'); }
@@ -1128,11 +1203,121 @@ $('parentGuardar').addEventListener('click', async () => {
     nombre_completo: $('parentNombre').value.trim() || null,
     telefono: $('parentTelefono').value.trim() || null,
     correo_contacto: $('parentCorreo').value.trim() || null,
+    grupo_sanguineo: $('parentGrupo').value || null,
   }).eq('user_id', usuario.id);
   if (error) { toast(`Error: ${error.message}`, true); return; }
   await loadData('miembros');
   $('parentModal').classList.add('hidden');
   toast('Guardado ✓');
+});
+
+// ---------- Bitácora ----------
+function renderBitacora() {
+  if (!$('bitFecha').value) $('bitFecha').value = dayKey(new Date());
+  const rows = cache.bitacora || []; // ordenadas por fecha desc
+  $('bitLista').innerHTML = rows.length
+    ? rows.map((r) => `
+      <div class="bit-item">
+        <div class="bit-head"><strong>${escapeHtml(r.titulo)}</strong><span>${fmtDayLabel(r.fecha)}</span></div>
+        ${r.notas ? `<p>${escapeHtml(r.notas)}</p>` : ''}
+        <div class="bit-acciones">${botonesEdit('bitacora', r.id)}</div>
+      </div>`).join('')
+    : '<p class="empty-msg">Sin anotaciones todavía</p>';
+}
+
+$('formBitacora').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const titulo = $('bitTitulo').value.trim();
+  if (!titulo) { toast('Escribe un título', true); return; }
+  const ok = await insertar('bitacora', {
+    titulo,
+    fecha: $('bitFecha').value || dayKey(new Date()),
+    notas: $('bitNotas').value.trim() || null,
+  });
+  if (ok) { $('bitTitulo').value = ''; $('bitNotas').value = ''; $('bitFecha').value = dayKey(new Date()); renderBitacora(); }
+});
+
+// ---------- Controles médicos ----------
+const CONTROLES_SCHED = ['Díada (7-10 días)', '1 mes', '2 meses', '3 meses', '4 meses', '5 meses', '6 meses', '8 meses', '12 meses (primer año)'];
+let ctrlEditId = null;
+
+function limpiarControlForm() {
+  ctrlEditId = null;
+  $('ctrlSubmit').textContent = 'Guardar control';
+  ['ctrlProfesional', 'ctrlEdad', 'ctrlPeso', 'ctrlTalla', 'ctrlPerimetro', 'ctrlDxNutri', 'ctrlDx', 'ctrlIndicaciones'].forEach((id) => { $(id).value = ''; });
+  document.querySelectorAll('.ctrl-alim').forEach((c) => { c.checked = false; });
+  $('ctrlControl').selectedIndex = 0;
+  $('ctrlFecha').value = dayKey(new Date());
+}
+
+function renderControles() {
+  if (!$('ctrlControl').options.length) $('ctrlControl').innerHTML = CONTROLES_SCHED.map((c) => `<option>${c}</option>`).join('');
+  if (!$('ctrlFecha').value) $('ctrlFecha').value = dayKey(new Date());
+  const rows = cache.controles || [];
+  $('ctrlLista').innerHTML = rows.length
+    ? rows.map((r) => {
+        const linea = [r.edad && `Edad: ${escapeHtml(r.edad)}`, r.peso_kg && `Peso: ${r.peso_kg} kg`, r.talla_cm && `Talla: ${r.talla_cm} cm`, r.perimetro_craneal && `PC: ${r.perimetro_craneal} cm`, r.alimentacion && `Alim: ${escapeHtml(r.alimentacion)}`].filter(Boolean).join(' · ');
+        return `
+        <div class="bit-item">
+          <div class="bit-head"><strong>${escapeHtml(r.control || 'Control')}</strong><span>${fmtDayLabel(r.fecha)}</span></div>
+          ${linea ? `<p class="ctrl-detalle">${linea}</p>` : ''}
+          ${r.diagnostico_nutricional ? `<p>Dx nutricional: ${escapeHtml(r.diagnostico_nutricional)}</p>` : ''}
+          ${r.diagnostico ? `<p>Dx: ${escapeHtml(r.diagnostico)}</p>` : ''}
+          ${r.indicaciones ? `<p>Indicaciones: ${escapeHtml(r.indicaciones)}</p>` : ''}
+          ${r.profesional ? `<p class="ctrl-prof">👩‍⚕️ ${escapeHtml(r.profesional)}</p>` : ''}
+          <div class="bit-acciones">${botonesEdit('controles', r.id)}</div>
+        </div>`;
+      }).join('')
+    : '<p class="empty-msg">Sin controles todavía</p>';
+}
+
+function cargarControl(id) {
+  const r = (cache.controles || []).find((x) => String(x.id) === String(id));
+  if (!r) return;
+  ctrlEditId = r.id;
+  $('ctrlSubmit').textContent = 'Actualizar control';
+  const opt = [...$('ctrlControl').options].findIndex((o) => o.value === r.control);
+  $('ctrlControl').selectedIndex = opt >= 0 ? opt : 0;
+  $('ctrlProfesional').value = r.profesional || '';
+  $('ctrlFecha').value = r.fecha || dayKey(new Date());
+  $('ctrlEdad').value = r.edad || '';
+  $('ctrlPeso').value = r.peso_kg ?? '';
+  $('ctrlTalla').value = r.talla_cm ?? '';
+  $('ctrlPerimetro').value = r.perimetro_craneal ?? '';
+  $('ctrlDxNutri').value = r.diagnostico_nutricional || '';
+  $('ctrlDx').value = r.diagnostico || '';
+  $('ctrlIndicaciones').value = r.indicaciones || '';
+  const alim = (r.alimentacion || '').split(',');
+  document.querySelectorAll('.ctrl-alim').forEach((c) => { c.checked = alim.includes(c.value); });
+  $('formControles').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+$('formControles').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const valores = {
+    control: $('ctrlControl').value,
+    profesional: $('ctrlProfesional').value.trim() || null,
+    fecha: $('ctrlFecha').value || dayKey(new Date()),
+    edad: $('ctrlEdad').value.trim() || null,
+    peso_kg: Number($('ctrlPeso').value) > 0 ? Number($('ctrlPeso').value) : null,
+    talla_cm: Number($('ctrlTalla').value) > 0 ? Number($('ctrlTalla').value) : null,
+    perimetro_craneal: Number($('ctrlPerimetro').value) > 0 ? Number($('ctrlPerimetro').value) : null,
+    diagnostico_nutricional: $('ctrlDxNutri').value.trim() || null,
+    diagnostico: $('ctrlDx').value.trim() || null,
+    indicaciones: $('ctrlIndicaciones').value.trim() || null,
+    alimentacion: [...document.querySelectorAll('.ctrl-alim:checked')].map((c) => c.value).join(',') || null,
+  };
+  if (ctrlEditId) {
+    const { error } = await db.from('controles').update(valores).eq('id', ctrlEditId);
+    if (error) { toast(`Error: ${error.message}`, true); return; }
+    await loadData('controles');
+    toast('Control actualizado ✓');
+  } else {
+    const ok = await insertar('controles', valores);
+    if (!ok) return;
+  }
+  limpiarControlForm();
+  renderControles();
 });
 
 // ---------- Autenticación ----------
@@ -1381,6 +1566,7 @@ applyTheme(localStorage.getItem('tema') || 'dark');
 bgResize();
 aplicarFondo();
 actualizarSegUI();
+renderTabbar();
 precargarCredenciales();
 
 if (!configurado) {

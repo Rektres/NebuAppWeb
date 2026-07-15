@@ -328,9 +328,6 @@
           <label class="field-label">Nombre completo
             <input type="text" id="infoNombreCompleto" maxlength="80" placeholder="Nombre y apellidos">
           </label>
-          <label class="field-label">Apodo
-            <input type="text" id="infoApodo" maxlength="40" placeholder="Apodo">
-          </label>
           <div class="peso-talla-row">
             <label class="field-label">Grupo sanguíneo
               <select id="infoGrupo">
@@ -371,21 +368,87 @@
         </div>
       </section>
 
+      <!-- ========== PESTAÑA: BITÁCORA ========== -->
+      <section id="tab-bitacora" class="tab">
+        <form id="formBitacora" class="card form-card">
+          <h2>Nueva anotación</h2>
+          <label class="field-label">Título
+            <input type="text" id="bitTitulo" maxlength="80" required placeholder="Ej: Primera sonrisa">
+          </label>
+          <label class="field-label">Fecha
+            <input type="date" id="bitFecha" required>
+          </label>
+          <label class="field-label">Anotaciones
+            <textarea id="bitNotas" rows="3" maxlength="1000" placeholder="Detalles del hito…"></textarea>
+          </label>
+          <button type="submit" class="btn-primary">Guardar</button>
+        </form>
+
+        <div class="card table-card">
+          <h2>Bitácora</h2>
+          <div id="bitLista"></div>
+        </div>
+      </section>
+
+      <!-- ========== PESTAÑA: CONTROLES MÉDICOS ========== -->
+      <section id="tab-controles" class="tab">
+        <form id="formControles" class="card form-card">
+          <h2>Control médico</h2>
+          <label class="field-label">Control
+            <select id="ctrlControl"></select>
+          </label>
+          <label class="field-label">Profesional
+            <input type="text" id="ctrlProfesional" maxlength="80">
+          </label>
+          <div class="peso-talla-row">
+            <label class="field-label">Fecha
+              <input type="date" id="ctrlFecha">
+            </label>
+            <label class="field-label">Edad
+              <input type="text" id="ctrlEdad" maxlength="30" placeholder="Ej: 2 meses">
+            </label>
+          </div>
+          <div class="peso-talla-row">
+            <label class="field-label">Peso (kg)
+              <input type="number" id="ctrlPeso" step="any" inputmode="decimal">
+            </label>
+            <label class="field-label">Talla (cm)
+              <input type="number" id="ctrlTalla" step="any" inputmode="decimal">
+            </label>
+          </div>
+          <label class="field-label">Perímetro craneal (cm)
+            <input type="number" id="ctrlPerimetro" step="any" inputmode="decimal">
+          </label>
+          <label class="field-label">Diagnóstico nutricional
+            <input type="text" id="ctrlDxNutri" maxlength="120">
+          </label>
+          <label class="field-label">Diagnóstico
+            <textarea id="ctrlDx" rows="2" maxlength="500"></textarea>
+          </label>
+          <div class="field-label">Tipo de alimentación
+            <div class="check-row check-wrap">
+              <label class="check-pill"><input type="checkbox" class="ctrl-alim" value="LME"> LME</label>
+              <label class="check-pill"><input type="checkbox" class="ctrl-alim" value="LMP"> LMP</label>
+              <label class="check-pill"><input type="checkbox" class="ctrl-alim" value="FP"> FP</label>
+              <label class="check-pill"><input type="checkbox" class="ctrl-alim" value="FE"> FE</label>
+            </div>
+          </div>
+          <label class="field-label">Indicaciones
+            <textarea id="ctrlIndicaciones" rows="2" maxlength="500"></textarea>
+          </label>
+          <button type="submit" class="btn-primary" id="ctrlSubmit">Guardar control</button>
+        </form>
+
+        <div class="card table-card">
+          <h2>Controles guardados</h2>
+          <div id="ctrlLista"></div>
+        </div>
+      </section>
+
     </main>
 
-    <!-- ========== BARRA DE PESTAÑAS ========== -->
-    <nav class="tabbar">
-      <button class="tab-btn active" data-tab="stats"><span>📊</span>Stats</button>
-      <button class="tab-btn" data-tab="leche"><span>🍼</span>Leche</button>
-      <button class="tab-btn" data-tab="vitaminas"><span>💊</span>Vitaminas</button>
-      <button class="tab-btn" data-tab="panales"><span>🧷</span>Pañales</button>
-      <button class="tab-btn" id="masBtn" type="button"><span>⋯</span>Más</button>
-      <div id="masMenu" class="tab-menu hidden">
-        <button class="tab-btn tab-menu-item" data-tab="pastillas"><span>💊</span>Pastillas</button>
-        <button class="tab-btn tab-menu-item" data-tab="info"><span>👶</span>Info</button>
-        <button class="tab-btn tab-menu-item" data-tab="sueno"><span>😴</span>Sueño</button>
-      </div>
-    </nav>
+    <!-- ========== BARRA DE PESTAÑAS (se arma en JS según el orden guardado) ========== -->
+    <nav class="tabbar" id="tabbar"></nav>
   </div>
 
   <!-- ==================== MODAL DE CONFIGURACIÓN ==================== -->
@@ -457,6 +520,10 @@
         </div>
       </div>
 
+      <div class="field-label">Orden de las pestañas (las primeras 4 van en la barra)
+        <div id="ordenTabsUI" class="orden-lista"></div>
+      </div>
+
       <button id="cfgGuardar" class="btn-primary">Guardar</button>
       <button id="logoutBtn" class="btn-danger">Cerrar sesión</button>
     </div>
@@ -489,6 +556,15 @@
       </label>
       <label class="field-label">Correo de contacto
         <input type="email" id="parentCorreo" maxlength="120" placeholder="correo@ejemplo.com">
+      </label>
+      <label class="field-label">Grupo sanguíneo
+        <select id="parentGrupo">
+          <option value="">—</option>
+          <option>O+</option><option>O-</option>
+          <option>A+</option><option>A-</option>
+          <option>B+</option><option>B-</option>
+          <option>AB+</option><option>AB-</option>
+        </select>
       </label>
       <p id="parentAviso" class="form-hint hidden"></p>
       <button id="parentGuardar" class="btn-primary">Guardar</button>
