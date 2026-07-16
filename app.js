@@ -145,13 +145,28 @@ function tablaHTML(headers, grupos, filaFn, subtotalFn) {
   return html + '</tbody></table>';
 }
 
-// Expandir/compactar un día del historial
+// Historial en tarjetas agrupadas por día (bitácora, controles, juegos)
+function historialColapsable(rows, keyFn, itemHTML) {
+  if (!rows.length) return '<p class="empty-msg">Sin registros todavía</p>';
+  const hoy = dayKey(new Date());
+  const grupos = new Map();
+  for (const r of rows) { const k = keyFn(r); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(r); }
+  let html = '<div class="col-list">';
+  for (const [key, items] of grupos) {
+    const abierto = key === hoy; // el día actual expandido, el resto compactado
+    html += `<div class="col-day day-toggle${abierto ? ' abierto' : ''}" data-day="${key}"><span class="caret">${abierto ? '▾' : '▸'}</span> ${fmtDayLabel(key)}</div>`;
+    html += items.map((r) => `<div class="drow d-${key}${abierto ? '' : ' hidden'}">${itemHTML(r)}</div>`).join('');
+  }
+  return html + '</div>';
+}
+
+// Expandir/compactar un día del historial (tablas o listas de tarjetas)
 document.addEventListener('click', (e) => {
   const dt = e.target.closest('.day-toggle');
   if (!dt) return;
   const abierto = dt.classList.toggle('abierto');
   dt.querySelector('.caret').textContent = abierto ? '▾' : '▸';
-  dt.closest('table').querySelectorAll('.d-' + CSS.escape(dt.dataset.day)).forEach((r) => r.classList.toggle('hidden', !abierto));
+  dt.closest('table, .col-list').querySelectorAll('.d-' + CSS.escape(dt.dataset.day)).forEach((r) => r.classList.toggle('hidden', !abierto));
 });
 
 const botonesEdit = (tabla, id) =>
@@ -245,16 +260,18 @@ function renderPastillas() {
     ? `<table><tbody>${lista.map((p) => `<tr><td>${escapeHtml(p.nombre)}</td><td>${(p.horario || '').toUpperCase()}</td>${accionesTd('pastillas', p.id)}</tr>`).join('')}</tbody></table>`
     : '<p class="empty-msg">Aún no agregas pastillas</p>';
 
-  // Historial por día
+  // Historial por día (colapsable; el día actual queda expandido)
   const mapa = new Map((cache.pastillas || []).map((p) => [String(p.id), p]));
+  const hoyKey = dayKey(new Date());
   const dias = [...new Set((cache.pastillas_log || []).map((l) => l.fecha))].sort().reverse();
   $('tablaPastillas').innerHTML = dias.length
     ? `<table><tbody>${dias.map((d) => {
+        const abierto = d === hoyKey;
         const items = ordenarPastillas(
           (cache.pastillas_log || []).filter((l) => l.fecha === d).map((l) => mapa.get(String(l.pastilla_id))).filter(Boolean)
         );
-        return `<tr class="day-row"><td colspan="2">${fmtDayLabel(d)}</td></tr>` +
-          items.map((p) => `<tr><td>${escapeHtml(p.nombre)}</td><td>${(p.horario || '').toUpperCase()} ✅</td></tr>`).join('');
+        return `<tr class="day-row day-toggle${abierto ? ' abierto' : ''}" data-day="${d}"><td colspan="2"><span class="caret">${abierto ? '▾' : '▸'}</span> ${fmtDayLabel(d)}</td></tr>` +
+          items.map((p) => `<tr class="drow d-${d}${abierto ? '' : ' hidden'}"><td>${escapeHtml(p.nombre)}</td><td>${(p.horario || '').toUpperCase()} ✅</td></tr>`).join('');
       }).join('')}</tbody></table>`
     : '<p class="empty-msg">Sin registros todavía</p>';
 }
@@ -1238,15 +1255,12 @@ $('parentGuardar').addEventListener('click', async () => {
 // ---------- Bitácora ----------
 function renderBitacora() {
   if (!$('bitFecha').value) $('bitFecha').value = dayKey(new Date());
-  const rows = cache.bitacora || []; // ordenadas por fecha desc
-  $('bitLista').innerHTML = rows.length
-    ? rows.map((r) => `
+  $('bitLista').innerHTML = historialColapsable(cache.bitacora || [], (r) => r.fecha, (r) => `
       <div class="bit-item">
-        <div class="bit-head"><strong>${escapeHtml(r.titulo)}</strong><span>${fmtDayLabel(r.fecha)}</span></div>
+        <div class="bit-head"><strong>${escapeHtml(r.titulo)}</strong></div>
         ${r.notas ? `<p>${escapeHtml(r.notas)}</p>` : ''}
         <div class="bit-acciones">${botonesEdit('bitacora', r.id)}</div>
-      </div>`).join('')
-    : '<p class="empty-msg">Sin anotaciones todavía</p>';
+      </div>`);
 }
 
 $('formBitacora').addEventListener('submit', async (e) => {
@@ -1277,13 +1291,11 @@ function limpiarControlForm() {
 function renderControles() {
   if (!$('ctrlControl').options.length) $('ctrlControl').innerHTML = CONTROLES_SCHED.map((c) => `<option>${c}</option>`).join('');
   if (!$('ctrlFecha').value) $('ctrlFecha').value = dayKey(new Date());
-  const rows = cache.controles || [];
-  $('ctrlLista').innerHTML = rows.length
-    ? rows.map((r) => {
-        const linea = [r.edad && `Edad: ${escapeHtml(r.edad)}`, r.peso_kg && `Peso: ${r.peso_kg} kg`, r.talla_cm && `Talla: ${r.talla_cm} cm`, r.perimetro_craneal && `PC: ${r.perimetro_craneal} cm`, r.alimentacion && `Alim: ${escapeHtml(r.alimentacion)}`].filter(Boolean).join(' · ');
-        return `
+  $('ctrlLista').innerHTML = historialColapsable(cache.controles || [], (r) => r.fecha, (r) => {
+    const linea = [r.edad && `Edad: ${escapeHtml(r.edad)}`, r.peso_kg && `Peso: ${r.peso_kg} kg`, r.talla_cm && `Talla: ${r.talla_cm} cm`, r.perimetro_craneal && `PC: ${r.perimetro_craneal} cm`, r.alimentacion && `Alim: ${escapeHtml(r.alimentacion)}`].filter(Boolean).join(' · ');
+    return `
         <div class="bit-item">
-          <div class="bit-head"><strong>${escapeHtml(r.control || 'Control')}</strong><span>${fmtDayLabel(r.fecha)}</span></div>
+          <div class="bit-head"><strong>${escapeHtml(r.control || 'Control')}</strong></div>
           ${linea ? `<p class="ctrl-detalle">${linea}</p>` : ''}
           ${r.diagnostico_nutricional ? `<p>Dx nutricional: ${escapeHtml(r.diagnostico_nutricional)}</p>` : ''}
           ${r.diagnostico ? `<p>Dx: ${escapeHtml(r.diagnostico)}</p>` : ''}
@@ -1291,8 +1303,7 @@ function renderControles() {
           ${r.profesional ? `<p class="ctrl-prof">👩‍⚕️ ${escapeHtml(r.profesional)}</p>` : ''}
           <div class="bit-acciones">${botonesEdit('controles', r.id)}</div>
         </div>`;
-      }).join('')
-    : '<p class="empty-msg">Sin controles todavía</p>';
+  });
 }
 
 function cargarControl(id) {
@@ -1437,17 +1448,14 @@ function limpiarJuegoForm() {
 }
 
 function renderJuegos() {
-  const rows = cache.juegos || [];
-  $('juegoLista').innerHTML = rows.length
-    ? rows.map((r) => `
+  $('juegoLista').innerHTML = historialColapsable(cache.juegos || [], (r) => dayKey(new Date(r.fecha)), (r) => `
       <div class="bit-item">
-        <div class="bit-head"><strong>${escapeHtml(r.nombre || 'Juego')}</strong><span>${new Date(r.fecha).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}</span></div>
+        <div class="bit-head"><strong>${escapeHtml(r.nombre || 'Juego')}</strong><span>${new Date(r.fecha).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', hour12: false })}</span></div>
         ${r.duracion_seg ? `<p class="ctrl-detalle">⏱️ ${fmtCrono(r.duracion_seg)}</p>` : ''}
         ${r.observaciones ? `<p>${escapeHtml(r.observaciones)}</p>` : ''}
         ${(Array.isArray(r.fotos) && r.fotos.length) ? `<div class="album">${r.fotos.map((f) => `<div class="album-item"><img src="${f}" alt=""></div>`).join('')}</div>` : ''}
         <div class="bit-acciones">${botonesEdit('juegos', r.id)}</div>
-      </div>`).join('')
-    : '<p class="empty-msg">Sin juegos todavía</p>';
+      </div>`);
 }
 
 function cargarJuego(id) {

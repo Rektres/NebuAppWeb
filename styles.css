@@ -340,7 +340,20 @@ tr.day-row td {
   border-radius: 8px;
 }
 tr.day-toggle { cursor: pointer; }
-tr.day-toggle .caret { display: inline-block; width: 1em; color: var(--accent); }
+.day-toggle .caret { display: inline-block; width: 1em; color: var(--accent); }
+
+/* Historial en tarjetas agrupado por día (bitácora, controles, juegos) */
+.col-day {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin: 12px 0 8px;
+}
+.col-day:first-child { margin-top: 0; }
 
 tr.subtotal-row td {
   color: var(--text-2);

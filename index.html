@@ -131,6 +131,21 @@
           </div>
         </div>
         
+        <div class="card goal-card">
+          <div class="goal-row">
+            <div>
+              <span class="stat-label">Hoy</span>
+              <span class="stat-value"><span id="lecheHoy">0</span> ml</span>
+            </div>
+            <div class="goal-input-wrap">
+              <label for="objetivoInput" class="stat-label">Objetivo diario (ml)</label>
+              <input type="number" id="objetivoInput" step="any" inputmode="decimal" value="800">
+            </div>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="lecheProgress"></div></div>
+          <p class="goal-status" id="lecheStatus"></p>
+        </div>
+
         <form id="formLeche" class="card form-card">
           <h2>Registrar toma</h2>
           <div class="form-grid">
@@ -150,22 +165,7 @@
           <div id="tablaLeche" class="table-wrap"></div>
         </div>
 
-        <!-- Rendimiento de la leche (bajo el historial) -->
-        <div class="card goal-card">
-          <div class="goal-row">
-            <div>
-              <span class="stat-label">Hoy</span>
-              <span class="stat-value"><span id="lecheHoy">0</span> ml</span>
-            </div>
-            <div class="goal-input-wrap">
-              <label for="objetivoInput" class="stat-label">Objetivo diario (ml)</label>
-              <input type="number" id="objetivoInput" step="any" inputmode="decimal" value="800">
-            </div>
-          </div>
-          <div class="progress-track"><div class="progress-fill" id="lecheProgress"></div></div>
-          <p class="goal-status" id="lecheStatus"></p>
-        </div>
-
+        <!-- Fórmula / lata (bajo el historial) -->
         <div class="card goal-card" id="lataCard">
           <div class="goal-row">
             <div>
