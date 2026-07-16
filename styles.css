@@ -339,6 +339,8 @@ tr.day-row td {
   padding: 8px 10px;
   border-radius: 8px;
 }
+tr.day-toggle { cursor: pointer; }
+tr.day-toggle .caret { display: inline-block; width: 1em; color: var(--accent); }
 
 tr.subtotal-row td {
   color: var(--text-2);

@@ -134,14 +134,25 @@ document.addEventListener('click', (e) => {
 function tablaHTML(headers, grupos, filaFn, subtotalFn) {
   if (!grupos.size) return '<p class="empty-msg">Sin registros todavía</p>';
   const cols = headers.length + 1;
+  const hoy = dayKey(new Date());
   let html = `<table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}<th></th></tr></thead><tbody>`;
   for (const [key, rows] of grupos) {
+    const abierto = key === hoy; // el día actual va expandido; el resto compactado
     const subtotal = subtotalFn ? `<span style="float:right">${subtotalFn(rows)}</span>` : '';
-    html += `<tr class="day-row"><td colspan="${cols}">${fmtDayLabel(key)}${subtotal}</td></tr>`;
-    html += rows.map(filaFn).join('');
+    html += `<tr class="day-row day-toggle${abierto ? ' abierto' : ''}" data-day="${key}"><td colspan="${cols}"><span class="caret">${abierto ? '▾' : '▸'}</span> ${fmtDayLabel(key)}${subtotal}</td></tr>`;
+    html += rows.map(filaFn).map((tr) => tr.replace('<tr>', `<tr class="drow d-${key}${abierto ? '' : ' hidden'}">`)).join('');
   }
   return html + '</tbody></table>';
 }
+
+// Expandir/compactar un día del historial
+document.addEventListener('click', (e) => {
+  const dt = e.target.closest('.day-toggle');
+  if (!dt) return;
+  const abierto = dt.classList.toggle('abierto');
+  dt.querySelector('.caret').textContent = abierto ? '▾' : '▸';
+  dt.closest('table').querySelectorAll('.d-' + CSS.escape(dt.dataset.day)).forEach((r) => r.classList.toggle('hidden', !abierto));
+});
 
 const botonesEdit = (tabla, id) =>
   `<button class="edit-btn" data-tabla="${tabla}" data-id="${id}" title="Editar">✏️</button><button class="del-btn" data-tabla="${tabla}" data-id="${id}" title="Eliminar">🗑</button>`;
@@ -765,12 +776,12 @@ $('ordenTabsUI').addEventListener('click', (e) => {
   renderTabbar();
 });
 
-// Recargar la app: botón manual + automático cada 5 minutos
+// Recargar la app: botón manual + automático cada 10 minutos
 $('reloadBtn').addEventListener('click', () => location.reload());
 setInterval(() => {
   if (document.querySelector('.modal:not(.hidden)')) return; // no recargar con un modal abierto
   location.reload();
-}, 300000);
+}, 600000);
 
 // ---------- Formularios ----------
 async function guardarToma(fechaISO) {
@@ -1334,7 +1345,6 @@ $('formControles').addEventListener('submit', async (e) => {
 });
 
 // ---------- Juegos ----------
-const JUEGOS_TIPOS = ['Estimulación sensorial', 'Juego motor', 'Juego social', 'Música / canto', 'Lectura / cuentos', 'Aire libre', 'Imitación', 'Bloques / apilar', 'Agua / baño', 'Otro'];
 let juegoEditId = null;
 let juegoFotos = [];
 let juegoRAF = null, juegoT0 = 0, juegoSeg = 0;
@@ -1366,13 +1376,33 @@ function redimensionarFoto(file) {
 const pintarCrono = () => { $('juegoCrono').textContent = fmtCrono(juegoSeg); };
 function detenerCrono() { clearInterval(juegoRAF); juegoRAF = null; $('juegoStart').textContent = '▶️ Iniciar'; }
 
+// Persiste el cronómetro para que sobreviva a la recarga automática
+function guardarCronoLS() {
+  if (juegoRAF) localStorage.setItem('juego_crono', JSON.stringify({ running: true, t0: juegoT0 }));
+  else if (juegoSeg > 0) localStorage.setItem('juego_crono', JSON.stringify({ running: false, seg: juegoSeg }));
+  else localStorage.removeItem('juego_crono');
+}
+function restaurarCrono() {
+  let s; try { s = JSON.parse(localStorage.getItem('juego_crono') || 'null'); } catch { s = null; }
+  if (!s) return;
+  if (s.running) {
+    juegoT0 = s.t0;
+    juegoRAF = setInterval(() => { juegoSeg = Math.floor((Date.now() - juegoT0) / 1000); pintarCrono(); }, 1000);
+    $('juegoStart').textContent = '⏸️ Pausar';
+  } else {
+    juegoSeg = s.seg || 0;
+  }
+  pintarCrono();
+}
+
 $('juegoStart').addEventListener('click', () => {
-  if (juegoRAF) { detenerCrono(); return; }
+  if (juegoRAF) { detenerCrono(); guardarCronoLS(); return; }
   juegoT0 = Date.now() - juegoSeg * 1000; // reanuda desde lo acumulado
   juegoRAF = setInterval(() => { juegoSeg = Math.floor((Date.now() - juegoT0) / 1000); pintarCrono(); }, 1000);
   $('juegoStart').textContent = '⏸️ Pausar';
+  guardarCronoLS();
 });
-$('juegoReset').addEventListener('click', () => { detenerCrono(); juegoSeg = 0; pintarCrono(); });
+$('juegoReset').addEventListener('click', () => { detenerCrono(); juegoSeg = 0; pintarCrono(); guardarCronoLS(); });
 
 function pintarFotosPrev() {
   $('juegoFotosPrev').innerHTML = juegoFotos.map((f, i) =>
@@ -1399,21 +1429,20 @@ function limpiarJuegoForm() {
   $('juegoSubmit').textContent = 'Guardar juego';
   $('juegoNombre').value = '';
   $('juegoObs').value = '';
-  $('juegoTipo').selectedIndex = 0;
   juegoFotos = [];
   pintarFotosPrev();
   detenerCrono();
   juegoSeg = 0; pintarCrono();
+  guardarCronoLS();
 }
 
 function renderJuegos() {
-  if (!$('juegoTipo').options.length) $('juegoTipo').innerHTML = JUEGOS_TIPOS.map((t) => `<option>${t}</option>`).join('');
   const rows = cache.juegos || [];
   $('juegoLista').innerHTML = rows.length
     ? rows.map((r) => `
       <div class="bit-item">
-        <div class="bit-head"><strong>${escapeHtml(r.nombre || r.tipo || 'Juego')}</strong><span>${new Date(r.fecha).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}</span></div>
-        <p class="ctrl-detalle">${escapeHtml(r.tipo || '')}${r.duracion_seg ? ` · ⏱️ ${fmtCrono(r.duracion_seg)}` : ''}</p>
+        <div class="bit-head"><strong>${escapeHtml(r.nombre || 'Juego')}</strong><span>${new Date(r.fecha).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}</span></div>
+        ${r.duracion_seg ? `<p class="ctrl-detalle">⏱️ ${fmtCrono(r.duracion_seg)}</p>` : ''}
         ${r.observaciones ? `<p>${escapeHtml(r.observaciones)}</p>` : ''}
         ${(Array.isArray(r.fotos) && r.fotos.length) ? `<div class="album">${r.fotos.map((f) => `<div class="album-item"><img src="${f}" alt=""></div>`).join('')}</div>` : ''}
         <div class="bit-acciones">${botonesEdit('juegos', r.id)}</div>
@@ -1426,23 +1455,23 @@ function cargarJuego(id) {
   if (!r) return;
   juegoEditId = r.id;
   $('juegoSubmit').textContent = 'Actualizar juego';
-  const i = [...$('juegoTipo').options].findIndex((o) => o.value === r.tipo);
-  $('juegoTipo').selectedIndex = i >= 0 ? i : 0;
   $('juegoNombre').value = r.nombre || '';
   $('juegoObs').value = r.observaciones || '';
   juegoFotos = Array.isArray(r.fotos) ? r.fotos.slice() : [];
   pintarFotosPrev();
   detenerCrono();
   juegoSeg = r.duracion_seg || 0; pintarCrono();
+  guardarCronoLS();
   $('formJuegos').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 $('formJuegos').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const nombre = $('juegoNombre').value.trim();
+  if (!nombre) { toast('Escribe el nombre del juego', true); return; }
   detenerCrono();
   const valores = {
-    tipo: $('juegoTipo').value,
-    nombre: $('juegoNombre').value.trim() || null,
+    nombre,
     duracion_seg: juegoSeg || null,
     observaciones: $('juegoObs').value.trim() || null,
     fotos: juegoFotos,
@@ -1708,6 +1737,7 @@ bgResize();
 aplicarFondo();
 actualizarSegUI();
 renderTabbar();
+restaurarCrono();
 precargarCredenciales();
 
 if (!configurado) {

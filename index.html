@@ -131,6 +131,26 @@
           </div>
         </div>
         
+        <form id="formLeche" class="card form-card">
+          <h2>Registrar toma</h2>
+          <div class="form-grid">
+            <label>Cantidad (ml)
+              <input type="number" id="lecheCantidad" step="any" inputmode="decimal" required placeholder="120">
+            </label>
+          </div>
+          <label class="field-label">Fecha y hora
+            <input type="datetime-local" id="lecheFechaHora">
+          </label>
+          <button type="submit" class="btn-primary">＋ Agregar toma</button>
+          <button type="button" class="btn-secondary" id="lecheAhora">🕒 Registrar ahora</button>
+        </form>
+
+        <div class="card table-card">
+          <h2>Historial</h2>
+          <div id="tablaLeche" class="table-wrap"></div>
+        </div>
+
+        <!-- Rendimiento de la leche (bajo el historial) -->
         <div class="card goal-card">
           <div class="goal-row">
             <div>
@@ -161,26 +181,6 @@
           <label class="stat-label" for="lataAbiertaInput">Lata abierta el (fecha y hora)</label>
           <input type="datetime-local" id="lataAbiertaInput">
           <button type="button" id="abrirLataBtn" class="btn-secondary">🥫 Abrir lata nueva</button>
-        </div>
-
-
-        <form id="formLeche" class="card form-card">
-          <h2>Registrar toma</h2>
-          <div class="form-grid">
-            <label>Cantidad (ml)
-              <input type="number" id="lecheCantidad" step="any" inputmode="decimal" required placeholder="120">
-            </label>
-          </div>
-          <label class="field-label">Fecha y hora
-            <input type="datetime-local" id="lecheFechaHora">
-          </label>
-          <button type="submit" class="btn-primary">＋ Agregar toma</button>
-          <button type="button" class="btn-secondary" id="lecheAhora">🕒 Registrar ahora</button>
-        </form>
-
-        <div class="card table-card">
-          <h2>Historial</h2>
-          <div id="tablaLeche" class="table-wrap"></div>
         </div>
       </section>
 
@@ -457,10 +457,7 @@
       <section id="tab-juegos" class="tab">
         <form id="formJuegos" class="card form-card">
           <h2>Registrar juego</h2>
-          <label class="field-label">Tipo de juego
-            <select id="juegoTipo"></select>
-          </label>
-          <label class="field-label">Nombre / descripción
+          <label class="field-label">Nombre del juego
             <input type="text" id="juegoNombre" maxlength="80" placeholder="Ej: Torre de bloques">
           </label>
 
