@@ -122,6 +122,19 @@ create table controles (
   created_at timestamptz default now()
 );
 
+-- Juegos: registro de sesiones de juego con temporizador y álbum de fotos
+create table juegos (
+  id bigint generated always as identity primary key,
+  bebe_id uuid not null references bebes(id) on delete cascade,
+  tipo text,
+  nombre text,
+  fecha timestamptz not null,
+  duracion_seg integer,
+  observaciones text,
+  fotos jsonb default '[]'::jsonb,  -- arreglo de imágenes base64
+  created_at timestamptz default now()
+);
+
 -- ============================================================
 -- Funciones (security definer: se ejecutan con permisos del dueño)
 -- ============================================================
@@ -200,6 +213,7 @@ alter table pastillas enable row level security;
 alter table pastillas_log enable row level security;
 alter table bitacora enable row level security;
 alter table controles enable row level security;
+alter table juegos enable row level security;
 
 create policy "padres ven su bebe" on bebes for select to authenticated
   using (id in (select mis_bebes()));
@@ -226,4 +240,6 @@ create policy "solo padres" on pastillas_log for all to authenticated
 create policy "solo padres" on bitacora for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
 create policy "solo padres" on controles for all to authenticated
+  using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
+create policy "solo padres" on juegos for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));

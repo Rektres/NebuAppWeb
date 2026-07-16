@@ -149,7 +149,7 @@
         <div class="card goal-card" id="lataCard">
           <div class="goal-row">
             <div>
-              <span class="stat-label">Fórmula hoy (30 ml ≈ 30 g)</span>
+              <span class="stat-label">Fórmula hoy (30 ml ≈ 4,3 g)</span>
               <span class="stat-value"><span id="lecheGramosHoy">0</span> g</span>
             </div>
             <div class="goal-input-wrap">
@@ -171,7 +171,11 @@
               <input type="number" id="lecheCantidad" step="any" inputmode="decimal" required placeholder="120">
             </label>
           </div>
-          <button type="submit" class="btn-primary">＋ Agregar toma (ahora)</button>
+          <label class="field-label">Fecha y hora
+            <input type="datetime-local" id="lecheFechaHora">
+          </label>
+          <button type="submit" class="btn-primary">＋ Agregar toma</button>
+          <button type="button" class="btn-secondary" id="lecheAhora">🕒 Registrar ahora</button>
         </form>
 
         <div class="card table-card">
@@ -253,7 +257,11 @@
             <label class="check-pill"><input type="checkbox" id="panHeces"> 💩 Heces</label>
             <label class="check-pill"><input type="checkbox" id="panOrina"> 💧 Orina</label>
           </div>
-          <button type="submit" class="btn-primary">＋ Agregar cambio (ahora)</button>
+          <label class="field-label">Fecha y hora
+            <input type="datetime-local" id="panFechaHora">
+          </label>
+          <button type="submit" class="btn-primary">＋ Agregar cambio</button>
+          <button type="button" class="btn-secondary" id="panAhora">🕒 Registrar ahora</button>
         </form>
 
         <div class="card table-card">
@@ -442,6 +450,44 @@
         <div class="card table-card">
           <h2>Controles guardados</h2>
           <div id="ctrlLista"></div>
+        </div>
+      </section>
+
+      <!-- ========== PESTAÑA: JUEGOS ========== -->
+      <section id="tab-juegos" class="tab">
+        <form id="formJuegos" class="card form-card">
+          <h2>Registrar juego</h2>
+          <label class="field-label">Tipo de juego
+            <select id="juegoTipo"></select>
+          </label>
+          <label class="field-label">Nombre / descripción
+            <input type="text" id="juegoNombre" maxlength="80" placeholder="Ej: Torre de bloques">
+          </label>
+
+          <div class="field-label">Temporizador
+            <div class="crono-row">
+              <span class="crono" id="juegoCrono">00:00</span>
+              <button type="button" class="btn-secondary" id="juegoStart">▶️ Iniciar</button>
+              <button type="button" class="btn-secondary crono-reset" id="juegoReset">↺</button>
+            </div>
+          </div>
+
+          <label class="field-label">Observaciones
+            <textarea id="juegoObs" rows="2" maxlength="500"></textarea>
+          </label>
+
+          <div class="field-label">Fotos (álbum)
+            <input type="file" id="juegoFoto" accept="image/*" multiple class="hidden">
+            <button type="button" class="btn-secondary" id="juegoFotoBtn">Agregar fotos…</button>
+            <div id="juegoFotosPrev" class="album"></div>
+          </div>
+
+          <button type="submit" class="btn-primary" id="juegoSubmit">Guardar juego</button>
+        </form>
+
+        <div class="card table-card">
+          <h2>Historial de juegos</h2>
+          <div id="juegoLista"></div>
         </div>
       </section>
 

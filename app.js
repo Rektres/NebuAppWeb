@@ -17,6 +17,8 @@ const db = supabase.createClient(
 const $ = (id) => document.getElementById(id);
 const pad2 = (n) => String(n).padStart(2, '0');
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const G_POR_ML = 4.3 / 30; // gramos de fórmula por cada ml (4,3 g cada 30 ml)
+const dtLocal = (d) => `${dayKey(d)}T${fmtTime(d)}`; // valor para inputs datetime-local
 
 const dayKey = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const fmtTime = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
@@ -69,7 +71,7 @@ function setNowDefaults() {
 }
 
 // ---------- Estado ----------
-const cache = { tomas: null, vitaminas: null, panales: null, sueno: null, pastillas: null, pastillas_log: null, miembros: null, bitacora: null, controles: null };
+const cache = { tomas: null, vitaminas: null, panales: null, sueno: null, pastillas: null, pastillas_log: null, miembros: null, bitacora: null, controles: null, juegos: null };
 let bebe = null;    // fila de la tabla bebes (nombre, foto, paleta, codigo)
 let miRol = null;   // 'madre' | 'padre'
 let usuario = null; // session.user
@@ -87,13 +89,13 @@ async function fetchTable(tabla, campoOrden) {
   return data;
 }
 
-const ORDEN = { sueno: 'inicio', pastillas: 'id', pastillas_log: 'fecha', miembros: 'created_at', bitacora: 'fecha', controles: 'fecha' };
+const ORDEN = { sueno: 'inicio', pastillas: 'id', pastillas_log: 'fecha', miembros: 'created_at', bitacora: 'fecha', controles: 'fecha', juegos: 'fecha' };
 async function loadData(tabla) {
   cache[tabla] = await fetchTable(tabla, ORDEN[tabla] || 'fecha_hora');
 }
 
 async function loadAll() {
-  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno', 'pastillas', 'pastillas_log', 'miembros', 'bitacora', 'controles'].map(loadData));
+  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno', 'pastillas', 'pastillas_log', 'miembros', 'bitacora', 'controles', 'juegos'].map(loadData));
   statsDirty = true;
 }
 
@@ -123,6 +125,7 @@ document.addEventListener('click', (e) => {
   const ed = e.target.closest('.edit-btn');
   if (ed) {
     if (ed.dataset.tabla === 'controles') cargarControl(ed.dataset.id);
+    else if (ed.dataset.tabla === 'juegos') cargarJuego(ed.dataset.id);
     else abrirEdicion(ed.dataset.tabla, ed.dataset.id);
   }
 });
@@ -145,6 +148,7 @@ const botonesEdit = (tabla, id) =>
 const accionesTd = (tabla, id) => `<td class="td-action">${botonesEdit(tabla, id)}</td>`;
 
 function renderLeche() {
+  if (!$('lecheFechaHora').value) $('lecheFechaHora').value = dtLocal(new Date());
   const rows = cache.tomas || [];
   $('tablaLeche').innerHTML = tablaHTML(
     ['Hora', 'Cantidad'],
@@ -169,25 +173,24 @@ function renderLecheResumen() {
       ? `🎉 ¡Meta cumplida! (+${total - objetivo} ml sobre el objetivo)`
       : `Faltan ${objetivo - total} ml para el objetivo 🎯`;
 
-  // Fórmula: 30 ml ≈ 30 g (1:1). Lata: resta lo consumido desde que se abrió la lata actual
-  const totalMl = (cache.tomas || []).reduce((s, r) => s + r.cantidad_ml, 0);
+  // Fórmula: 4,3 g por cada 30 ml. Lata: resta los gramos consumidos desde que se abrió
   const lata = Number(bebe?.lata_gramos) || 800;
   const abierta = bebe?.lata_abierta_en ? new Date(bebe.lata_abierta_en).getTime() : 0;
-  const usadaLata = (cache.tomas || [])
+  const usadaLataMl = (cache.tomas || [])
     .filter((r) => new Date(r.fecha_hora).getTime() >= abierta)
     .reduce((s, r) => s + r.cantidad_ml, 0);
+  const usadaLataGr = Math.round(usadaLataMl * G_POR_ML);
   $('lataInput').value = lata;
-  $('lecheGramosHoy').textContent = total;
+  $('lecheGramosHoy').textContent = Math.round(total * G_POR_ML);
   // No pisar el input mientras se está editando
   if (document.activeElement !== $('lataAbiertaInput')) {
-    const ad = abierta ? new Date(abierta) : new Date();
-    $('lataAbiertaInput').value = `${dayKey(ad)}T${fmtTime(ad)}`;
+    $('lataAbiertaInput').value = dtLocal(abierta ? new Date(abierta) : new Date());
   }
   const abiertaTxt = abierta
     ? new Date(abierta).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
     : '—';
   $('lataStatus').textContent =
-    `Quedan ~${Math.max(0, lata - usadaLata)} g · abierta ${abiertaTxt} · Latas usadas: ${bebe?.latas_usadas || 0} (${totalMl} g en total)`;
+    `Quedan ~${Math.max(0, lata - usadaLataGr)} g · usados ${usadaLataGr} g desde la última lata (abierta ${abiertaTxt}) · Latas usadas: ${bebe?.latas_usadas || 0}`;
 
   const rows = cache.tomas || [];
   if (!rows.length) {
@@ -265,6 +268,7 @@ async function togglePastillaHoy(pastillaId, tomada) {
 }
 
 function renderPanales() {
+  if (!$('panFechaHora').value) $('panFechaHora').value = dtLocal(new Date());
   const rows = cache.panales || [];
   $('tablaPanales').innerHTML = tablaHTML(
     ['Hora', 'Heces', 'Orina'],
@@ -673,6 +677,7 @@ function renderTab(tab) {
   else if (tab === 'info') renderInfo();
   else if (tab === 'bitacora') renderBitacora();
   else if (tab === 'controles') renderControles();
+  else if (tab === 'juegos') renderJuegos();
   else if (tab === 'panales') renderPanales();
   else if (tab === 'sueno') renderSueno();
 }
@@ -687,8 +692,9 @@ const TAB_META = {
   info:      { icon: '👶', label: 'Info' },
   bitacora:  { icon: '📓', label: 'Bitácora' },
   controles: { icon: '🩺', label: 'Controles' },
+  juegos:    { icon: '🧸', label: 'Juegos' },
 };
-const ORDEN_DEFAULT = ['stats', 'leche', 'vitaminas', 'panales', 'pastillas', 'info', 'bitacora', 'controles', 'sueno'];
+const ORDEN_DEFAULT = ['stats', 'leche', 'vitaminas', 'panales', 'pastillas', 'info', 'bitacora', 'controles', 'juegos', 'sueno'];
 const BAR_COUNT = 4; // primeras N pestañas en la barra, el resto en el menú "Más"
 
 // Orden guardado por usuario (localStorage), completado con pestañas nuevas
@@ -767,16 +773,18 @@ setInterval(() => {
 }, 300000);
 
 // ---------- Formularios ----------
-$('formLeche').addEventListener('submit', async (e) => {
-  e.preventDefault();
+async function guardarToma(fechaISO) {
   const cantidad = Number($('lecheCantidad').value);
   if (!(cantidad > 0)) { toast('La cantidad debe ser mayor a 0', true); return; }
-  const ok = await insertar('tomas', {
-    fecha_hora: new Date().toISOString(),
-    cantidad_ml: Math.round(cantidad),
-  });
-  if (ok) { $('lecheCantidad').value = ''; renderLeche(); }
+  const ok = await insertar('tomas', { fecha_hora: fechaISO, cantidad_ml: Math.round(cantidad) });
+  if (ok) { $('lecheCantidad').value = ''; $('lecheFechaHora').value = dtLocal(new Date()); renderLeche(); }
+}
+$('formLeche').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const v = $('lecheFechaHora').value;
+  guardarToma(v ? new Date(v).toISOString() : new Date().toISOString());
 });
+$('lecheAhora').addEventListener('click', () => guardarToma(new Date().toISOString()));
 
 $('objetivoInput').addEventListener('change', () => {
   const v = Number($('objetivoInput').value);
@@ -824,16 +832,21 @@ $('formVitaminas').addEventListener('submit', async (e) => {
   if (ok) { setNowDefaults(); $('vitGotas').value = 5; renderVitaminas(); }
 });
 
-$('formPanales').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  // Sin checkboxes marcados también es válido: fue un cambio sin heces ni orina
-  const heces = $('panHeces').checked, orina = $('panOrina').checked;
+// Sin checkboxes marcados también es válido: fue un cambio sin heces ni orina
+async function guardarPanal(fechaISO) {
   const ok = await insertar('panales', {
-    fecha_hora: new Date().toISOString(),
-    heces, orina,
+    fecha_hora: fechaISO,
+    heces: $('panHeces').checked,
+    orina: $('panOrina').checked,
   });
-  if (ok) { $('panHeces').checked = false; $('panOrina').checked = false; renderPanales(); }
+  if (ok) { $('panHeces').checked = false; $('panOrina').checked = false; $('panFechaHora').value = dtLocal(new Date()); renderPanales(); }
+}
+$('formPanales').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const v = $('panFechaHora').value;
+  guardarPanal(v ? new Date(v).toISOString() : new Date().toISOString());
 });
+$('panAhora').addEventListener('click', () => guardarPanal(new Date().toISOString()));
 
 $('formSueno').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -1318,6 +1331,134 @@ $('formControles').addEventListener('submit', async (e) => {
   }
   limpiarControlForm();
   renderControles();
+});
+
+// ---------- Juegos ----------
+const JUEGOS_TIPOS = ['Estimulación sensorial', 'Juego motor', 'Juego social', 'Música / canto', 'Lectura / cuentos', 'Aire libre', 'Imitación', 'Bloques / apilar', 'Agua / baño', 'Otro'];
+let juegoEditId = null;
+let juegoFotos = [];
+let juegoRAF = null, juegoT0 = 0, juegoSeg = 0;
+
+const fmtCrono = (seg) => `${pad2(Math.floor(seg / 60))}:${pad2(seg % 60)}`;
+
+// Redimensiona una foto a 256px y devuelve base64 JPEG (promesa)
+function redimensionarFoto(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const im = new Image();
+      im.onload = () => {
+        const escala = Math.min(1, 256 / Math.max(im.width, im.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(im.width * escala);
+        c.height = Math.round(im.height * escala);
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/jpeg', 0.82));
+      };
+      im.onerror = reject;
+      im.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+const pintarCrono = () => { $('juegoCrono').textContent = fmtCrono(juegoSeg); };
+function detenerCrono() { clearInterval(juegoRAF); juegoRAF = null; $('juegoStart').textContent = '▶️ Iniciar'; }
+
+$('juegoStart').addEventListener('click', () => {
+  if (juegoRAF) { detenerCrono(); return; }
+  juegoT0 = Date.now() - juegoSeg * 1000; // reanuda desde lo acumulado
+  juegoRAF = setInterval(() => { juegoSeg = Math.floor((Date.now() - juegoT0) / 1000); pintarCrono(); }, 1000);
+  $('juegoStart').textContent = '⏸️ Pausar';
+});
+$('juegoReset').addEventListener('click', () => { detenerCrono(); juegoSeg = 0; pintarCrono(); });
+
+function pintarFotosPrev() {
+  $('juegoFotosPrev').innerHTML = juegoFotos.map((f, i) =>
+    `<div class="album-item"><img src="${f}" alt=""><button type="button" class="album-del" data-i="${i}">✕</button></div>`
+  ).join('');
+}
+$('juegoFotoBtn').addEventListener('click', () => $('juegoFoto').click());
+$('juegoFoto').addEventListener('change', async () => {
+  for (const file of $('juegoFoto').files) {
+    try { juegoFotos.push(await redimensionarFoto(file)); } catch { toast('No se pudo procesar una foto', true); }
+  }
+  $('juegoFoto').value = '';
+  pintarFotosPrev();
+});
+$('juegoFotosPrev').addEventListener('click', (e) => {
+  const b = e.target.closest('.album-del');
+  if (!b) return;
+  juegoFotos.splice(Number(b.dataset.i), 1);
+  pintarFotosPrev();
+});
+
+function limpiarJuegoForm() {
+  juegoEditId = null;
+  $('juegoSubmit').textContent = 'Guardar juego';
+  $('juegoNombre').value = '';
+  $('juegoObs').value = '';
+  $('juegoTipo').selectedIndex = 0;
+  juegoFotos = [];
+  pintarFotosPrev();
+  detenerCrono();
+  juegoSeg = 0; pintarCrono();
+}
+
+function renderJuegos() {
+  if (!$('juegoTipo').options.length) $('juegoTipo').innerHTML = JUEGOS_TIPOS.map((t) => `<option>${t}</option>`).join('');
+  const rows = cache.juegos || [];
+  $('juegoLista').innerHTML = rows.length
+    ? rows.map((r) => `
+      <div class="bit-item">
+        <div class="bit-head"><strong>${escapeHtml(r.nombre || r.tipo || 'Juego')}</strong><span>${new Date(r.fecha).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}</span></div>
+        <p class="ctrl-detalle">${escapeHtml(r.tipo || '')}${r.duracion_seg ? ` · ⏱️ ${fmtCrono(r.duracion_seg)}` : ''}</p>
+        ${r.observaciones ? `<p>${escapeHtml(r.observaciones)}</p>` : ''}
+        ${(Array.isArray(r.fotos) && r.fotos.length) ? `<div class="album">${r.fotos.map((f) => `<div class="album-item"><img src="${f}" alt=""></div>`).join('')}</div>` : ''}
+        <div class="bit-acciones">${botonesEdit('juegos', r.id)}</div>
+      </div>`).join('')
+    : '<p class="empty-msg">Sin juegos todavía</p>';
+}
+
+function cargarJuego(id) {
+  const r = (cache.juegos || []).find((x) => String(x.id) === String(id));
+  if (!r) return;
+  juegoEditId = r.id;
+  $('juegoSubmit').textContent = 'Actualizar juego';
+  const i = [...$('juegoTipo').options].findIndex((o) => o.value === r.tipo);
+  $('juegoTipo').selectedIndex = i >= 0 ? i : 0;
+  $('juegoNombre').value = r.nombre || '';
+  $('juegoObs').value = r.observaciones || '';
+  juegoFotos = Array.isArray(r.fotos) ? r.fotos.slice() : [];
+  pintarFotosPrev();
+  detenerCrono();
+  juegoSeg = r.duracion_seg || 0; pintarCrono();
+  $('formJuegos').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+$('formJuegos').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  detenerCrono();
+  const valores = {
+    tipo: $('juegoTipo').value,
+    nombre: $('juegoNombre').value.trim() || null,
+    duracion_seg: juegoSeg || null,
+    observaciones: $('juegoObs').value.trim() || null,
+    fotos: juegoFotos,
+  };
+  if (juegoEditId) {
+    const { error } = await db.from('juegos').update(valores).eq('id', juegoEditId);
+    if (error) { toast(`Error: ${error.message}`, true); return; }
+    await loadData('juegos');
+    toast('Juego actualizado ✓');
+  } else {
+    valores.fecha = new Date().toISOString();
+    const ok = await insertar('juegos', valores);
+    if (!ok) return;
+  }
+  limpiarJuegoForm();
+  renderJuegos();
 });
 
 // ---------- Autenticación ----------
