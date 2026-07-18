@@ -211,7 +211,15 @@
       <!-- ========== PESTAÑA: PASTILLAS ========== -->
       <section id="tab-pastillas" class="tab">
         <div class="card">
-          <h2>Hoy — marca lo que tomó</h2>
+          <h2 id="pastHoyTitulo">Hoy — marca lo que tomó</h2>
+          <div class="past-fh">
+            <label>Fecha
+              <input type="date" id="pastFecha">
+            </label>
+            <label>Hora
+              <input type="time" id="pastHora">
+            </label>
+          </div>
           <div id="pastHoy" class="pill-list"></div>
         </div>
 

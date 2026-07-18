@@ -91,6 +91,7 @@ create table pastillas_log (
   bebe_id uuid not null references bebes(id) on delete cascade,
   pastilla_id bigint not null references pastillas(id) on delete cascade,
   fecha date not null,
+  hora time, -- hora en que se tomó (opcional)
   unique (pastilla_id, fecha)
 );
 

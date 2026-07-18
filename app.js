@@ -246,12 +246,16 @@ const ordenarPastillas = (lista) =>
 function renderPastillas() {
   const lista = ordenarPastillas(cache.pastillas || []);
   const hoy = dayKey(new Date());
-  const tomadasHoy = new Set((cache.pastillas_log || []).filter((l) => l.fecha === hoy).map((l) => String(l.pastilla_id)));
+  if (!$('pastFecha').value) $('pastFecha').value = hoy;
+  if (!$('pastHora').value) $('pastHora').value = fmtTime(new Date());
+  const fechaSel = $('pastFecha').value;
+  $('pastHoyTitulo').textContent = (fechaSel === hoy ? 'Hoy' : fmtDayLabel(fechaSel)) + ' — marca lo que tomó';
+  const tomadasSel = new Set((cache.pastillas_log || []).filter((l) => l.fecha === fechaSel).map((l) => String(l.pastilla_id)));
 
-  // Checklist de hoy
+  // Checklist de la fecha seleccionada
   $('pastHoy').innerHTML = lista.length
     ? lista.map((p) =>
-        `<label class="check-pill"><input type="checkbox" class="pill-check" data-id="${p.id}" ${tomadasHoy.has(String(p.id)) ? 'checked' : ''}> ${hm(p)}</label>`
+        `<label class="check-pill"><input type="checkbox" class="pill-check" data-id="${p.id}" ${tomadasSel.has(String(p.id)) ? 'checked' : ''}> ${hm(p)}</label>`
       ).join('')
     : '<p class="empty-msg">Agrega pastillas a tu lista abajo</p>';
 
@@ -267,29 +271,34 @@ function renderPastillas() {
   $('tablaPastillas').innerHTML = dias.length
     ? `<table><tbody>${dias.map((d) => {
         const abierto = d === hoyKey;
-        const items = ordenarPastillas(
-          (cache.pastillas_log || []).filter((l) => l.fecha === d).map((l) => mapa.get(String(l.pastilla_id))).filter(Boolean)
-        );
+        const items = (cache.pastillas_log || [])
+          .filter((l) => l.fecha === d)
+          .map((l) => ({ l, p: mapa.get(String(l.pastilla_id)) }))
+          .filter((x) => x.p)
+          .sort((a, b) => (a.p.horario || '').localeCompare(b.p.horario || '') || (a.p.nombre || '').localeCompare(b.p.nombre || ''));
         return `<tr class="day-row day-toggle${abierto ? ' abierto' : ''}" data-day="${d}"><td colspan="2"><span class="caret">${abierto ? '▾' : '▸'}</span> ${fmtDayLabel(d)}</td></tr>` +
-          items.map((p) => `<tr class="drow d-${d}${abierto ? '' : ' hidden'}"><td>${escapeHtml(p.nombre)}</td><td>${(p.horario || '').toUpperCase()} ✅</td></tr>`).join('');
+          items.map(({ l, p }) => `<tr class="drow d-${d}${abierto ? '' : ' hidden'}"><td>${escapeHtml(p.nombre)}</td><td>${(p.horario || '').toUpperCase()} ✅${l.hora ? ' · ' + l.hora.slice(0, 5) : ''}</td></tr>`).join('');
       }).join('')}</tbody></table>`
     : '<p class="empty-msg">Sin registros todavía</p>';
 }
 
-// Marcar/desmarcar una pastilla como tomada HOY (crea/borra la fila del día)
+// Marcar/desmarcar una pastilla como tomada en la fecha/hora seleccionada
 document.addEventListener('change', (e) => {
   const chk = e.target.closest('.pill-check');
   if (chk) togglePastillaHoy(chk.dataset.id, chk.checked);
 });
 
+$('pastFecha').addEventListener('change', renderPastillas);
+
 async function togglePastillaHoy(pastillaId, tomada) {
-  const hoy = dayKey(new Date());
+  const fecha = $('pastFecha').value || dayKey(new Date());
+  const hora = $('pastHora').value || null;
   const { error } = tomada
     ? await db.from('pastillas_log').upsert(
-        { bebe_id: bebe.id, pastilla_id: Number(pastillaId), fecha: hoy },
+        { bebe_id: bebe.id, pastilla_id: Number(pastillaId), fecha, hora },
         { onConflict: 'pastilla_id,fecha' }
       )
-    : await db.from('pastillas_log').delete().eq('pastilla_id', pastillaId).eq('fecha', hoy);
+    : await db.from('pastillas_log').delete().eq('pastilla_id', pastillaId).eq('fecha', fecha);
   if (error) { toast(`Error: ${error.message}`, true); }
   await loadData('pastillas_log');
   renderPastillas();

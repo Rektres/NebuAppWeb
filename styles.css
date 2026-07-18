@@ -210,6 +210,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 
 .pill-check { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; }
 
+.past-fh { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+
 .pill-list { display: flex; flex-direction: column; gap: 10px; }
 .pill-list .check-pill { flex: none; }
 .past-lista { margin-top: 12px; }
