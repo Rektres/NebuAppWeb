@@ -152,6 +152,20 @@ main {
   margin-bottom: 12px;
 }
 
+/* Card colapsable (ej: "Mis pastillas") */
+details.card summary {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  list-style: none;
+}
+details.card summary::-webkit-details-marker { display: none; }
+details.card summary::before { content: '▸ '; color: var(--accent); }
+details.card[open] summary::before { content: '▾ '; }
+details.card[open] summary { margin-bottom: 12px; }
+details.card > form { margin-top: 4px; }
+
 /* ---------- Formularios ---------- */
 /* Separación uniforme entre bloques del formulario para que la etiqueta de un
    campo no se confunda con el input del campo de arriba */

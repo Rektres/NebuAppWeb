@@ -223,27 +223,29 @@
           <div id="pastHoy" class="pill-list"></div>
         </div>
 
-        <form id="formPastillas" class="card form-card">
-          <h2>Mis pastillas</h2>
-          <div class="form-grid">
-            <label>Nombre
-              <input type="text" id="pastNombre" maxlength="60" placeholder="Nombre de la pastilla" required>
-            </label>
-            <label>Horario
-              <select id="pastHorario">
-                <option value="am">AM</option>
-                <option value="pm">PM</option>
-              </select>
-            </label>
-          </div>
-          <button type="submit" class="btn-primary">＋ Agregar a mi lista</button>
-          <div id="pastLista" class="table-wrap past-lista"></div>
-        </form>
-
         <div class="card table-card">
           <h2>Historial</h2>
           <div id="tablaPastillas" class="table-wrap"></div>
         </div>
+
+        <details class="card">
+          <summary>Mis pastillas</summary>
+          <form id="formPastillas" class="form-card">
+            <div class="form-grid">
+              <label>Nombre
+                <input type="text" id="pastNombre" maxlength="60" placeholder="Nombre de la pastilla" required>
+              </label>
+              <label>Horario
+                <select id="pastHorario">
+                  <option value="am">AM</option>
+                  <option value="pm">PM</option>
+                </select>
+              </label>
+            </div>
+            <button type="submit" class="btn-primary">＋ Agregar a mi lista</button>
+            <div id="pastLista" class="table-wrap past-lista"></div>
+          </form>
+        </details>
       </section>
 
       <!-- ========== PESTAÑA 4: PAÑALES ========== -->

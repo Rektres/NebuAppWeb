@@ -276,8 +276,8 @@ function renderPastillas() {
           .map((l) => ({ l, p: mapa.get(String(l.pastilla_id)) }))
           .filter((x) => x.p)
           .sort((a, b) => (a.p.horario || '').localeCompare(b.p.horario || '') || (a.p.nombre || '').localeCompare(b.p.nombre || ''));
-        return `<tr class="day-row day-toggle${abierto ? ' abierto' : ''}" data-day="${d}"><td colspan="2"><span class="caret">${abierto ? '▾' : '▸'}</span> ${fmtDayLabel(d)}</td></tr>` +
-          items.map(({ l, p }) => `<tr class="drow d-${d}${abierto ? '' : ' hidden'}"><td>${escapeHtml(p.nombre)}</td><td>${(p.horario || '').toUpperCase()} ✅${l.hora ? ' · ' + l.hora.slice(0, 5) : ''}</td></tr>`).join('');
+        return `<tr class="day-row day-toggle${abierto ? ' abierto' : ''}" data-day="${d}"><td colspan="3"><span class="caret">${abierto ? '▾' : '▸'}</span> ${fmtDayLabel(d)}</td></tr>` +
+          items.map(({ l, p }) => `<tr class="drow d-${d}${abierto ? '' : ' hidden'}"><td>${escapeHtml(p.nombre)}</td><td>${(p.horario || '').toUpperCase()} ✅${l.hora ? ' · ' + l.hora.slice(0, 5) : ''}</td>${accionesTd('pastillas_log', l.id)}</tr>`).join('');
       }).join('')}</tbody></table>`
     : '<p class="empty-msg">Sin registros todavía</p>';
 }
@@ -898,7 +898,7 @@ $('formSueno').addEventListener('submit', async (e) => {
 // ---------- Edición de registros ----------
 let editRegistro = null; // { tabla, id }
 
-const EDIT_TITULOS = { tomas: 'Editar toma', vitaminas: 'Editar vitaminas', pastillas: 'Editar pastilla', panales: 'Editar cambio de pañal', sueno: 'Editar sueño', bitacora: 'Editar anotación' };
+const EDIT_TITULOS = { tomas: 'Editar toma', vitaminas: 'Editar vitaminas', pastillas: 'Editar pastilla', pastillas_log: 'Editar registro de pastilla', panales: 'Editar cambio de pañal', sueno: 'Editar sueño', bitacora: 'Editar anotación' };
 
 function abrirEdicion(tabla, id) {
   const r = (cache[tabla] || []).find((x) => String(x.id) === String(id));
@@ -928,6 +928,12 @@ function abrirEdicion(tabla, id) {
       <label>Título<input type="text" id="edBitTitulo" maxlength="80" value="${escapeHtml(r.titulo || '')}"></label>
       <label>Fecha<input type="date" id="edBitFecha" value="${r.fecha}"></label>
       <label>Anotaciones<textarea id="edBitNotas" rows="3" maxlength="1000">${escapeHtml(r.notas || '')}</textarea></label>`;
+  } else if (tabla === 'pastillas_log') {
+    html = `
+      <div class="fila-2">
+        <label>Fecha<input type="date" id="edPastLogFecha" value="${r.fecha}"></label>
+        <label>Hora<input type="time" id="edPastLogHora" value="${r.hora ? r.hora.slice(0, 5) : ''}"></label>
+      </div>`;
   } else {
     html = `
       <div class="fila-2">
@@ -976,6 +982,9 @@ $('editGuardar').addEventListener('click', async () => {
     cambios.titulo = titulo;
     cambios.fecha = $('edBitFecha').value;
     cambios.notas = $('edBitNotas').value.trim() || null;
+  } else if (tabla === 'pastillas_log') {
+    cambios.fecha = $('edPastLogFecha').value;
+    cambios.hora = $('edPastLogHora').value || null;
   } else {
     cambios.fecha_hora = toISO($('edFecha').value, $('edHora').value);
     if (tabla === 'tomas') {
