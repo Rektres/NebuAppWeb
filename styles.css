@@ -261,6 +261,18 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
   font-size: 0.7rem; cursor: pointer; line-height: 1;
 }
 
+/* Lista del súper: checklist con cantidad, agregar rápido, items de una compra */
+.super-row { display: flex; align-items: center; gap: 8px; }
+.super-row .check-pill { flex: 1; }
+.super-qty { width: 56px; flex: none; height: 40px; text-align: center; padding: 0 4px; }
+.super-cat { margin: 10px 0 2px; }
+.super-cat:first-child { margin-top: 0; }
+.super-quick { display: flex; gap: 8px; margin-top: 10px; }
+.super-quick input { flex: 1; }
+.super-quick button { width: auto; flex: none; }
+.super-items { list-style: none; display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.super-items li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.9rem; color: var(--text-2); }
+
 /* Reordenar pestañas (configuración) */
 .orden-lista { display: flex; flex-direction: column; gap: 6px; }
 .orden-row {

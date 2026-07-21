@@ -71,7 +71,7 @@ function setNowDefaults() {
 }
 
 // ---------- Estado ----------
-const cache = { tomas: null, vitaminas: null, panales: null, sueno: null, pastillas: null, pastillas_log: null, miembros: null, bitacora: null, controles: null, juegos: null };
+const cache = { tomas: null, vitaminas: null, panales: null, sueno: null, pastillas: null, pastillas_log: null, miembros: null, bitacora: null, controles: null, juegos: null, super: null, compras: null, compra_items: null };
 let bebe = null;    // fila de la tabla bebes (nombre, foto, paleta, codigo)
 let miRol = null;   // 'madre' | 'padre'
 let usuario = null; // session.user
@@ -89,13 +89,13 @@ async function fetchTable(tabla, campoOrden) {
   return data;
 }
 
-const ORDEN = { sueno: 'inicio', pastillas: 'id', pastillas_log: 'fecha', miembros: 'created_at', bitacora: 'fecha', controles: 'fecha', juegos: 'fecha' };
+const ORDEN = { sueno: 'inicio', pastillas: 'id', pastillas_log: 'fecha', miembros: 'created_at', bitacora: 'fecha', controles: 'fecha', juegos: 'fecha', super: 'id', compra_items: 'id' };
 async function loadData(tabla) {
   cache[tabla] = await fetchTable(tabla, ORDEN[tabla] || 'fecha_hora');
 }
 
 async function loadAll() {
-  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno', 'pastillas', 'pastillas_log', 'miembros', 'bitacora', 'controles', 'juegos'].map(loadData));
+  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno', 'pastillas', 'pastillas_log', 'miembros', 'bitacora', 'controles', 'juegos', 'super', 'compras', 'compra_items'].map(loadData));
   statsDirty = true;
 }
 
@@ -715,6 +715,7 @@ function renderTab(tab) {
   else if (tab === 'bitacora') renderBitacora();
   else if (tab === 'controles') renderControles();
   else if (tab === 'juegos') renderJuegos();
+  else if (tab === 'super') renderSuper();
   else if (tab === 'panales') renderPanales();
   else if (tab === 'sueno') renderSueno();
 }
@@ -730,8 +731,9 @@ const TAB_META = {
   bitacora:  { icon: '📓', label: 'Bitácora' },
   controles: { icon: '🩺', label: 'Controles' },
   juegos:    { icon: '🧸', label: 'Juegos' },
+  super:     { icon: '🛒', label: 'Súper' },
 };
-const ORDEN_DEFAULT = ['stats', 'leche', 'vitaminas', 'panales', 'pastillas', 'info', 'bitacora', 'controles', 'juegos', 'sueno'];
+const ORDEN_DEFAULT = ['stats', 'leche', 'vitaminas', 'panales', 'pastillas', 'info', 'bitacora', 'controles', 'juegos', 'super', 'sueno'];
 const BAR_COUNT = 4; // primeras N pestañas en la barra, el resto en el menú "Más"
 
 // Orden guardado por usuario (localStorage), completado con pestañas nuevas
@@ -898,7 +900,7 @@ $('formSueno').addEventListener('submit', async (e) => {
 // ---------- Edición de registros ----------
 let editRegistro = null; // { tabla, id }
 
-const EDIT_TITULOS = { tomas: 'Editar toma', vitaminas: 'Editar vitaminas', pastillas: 'Editar pastilla', pastillas_log: 'Editar registro de pastilla', panales: 'Editar cambio de pañal', sueno: 'Editar sueño', bitacora: 'Editar anotación' };
+const EDIT_TITULOS = { tomas: 'Editar toma', vitaminas: 'Editar vitaminas', pastillas: 'Editar pastilla', pastillas_log: 'Editar registro de pastilla', panales: 'Editar cambio de pañal', sueno: 'Editar sueño', bitacora: 'Editar anotación', super: 'Editar producto', compras: 'Editar compra', compra_items: 'Editar cantidad' };
 
 function abrirEdicion(tabla, id) {
   const r = (cache[tabla] || []).find((x) => String(x.id) === String(id));
@@ -934,6 +936,12 @@ function abrirEdicion(tabla, id) {
         <label>Fecha<input type="date" id="edPastLogFecha" value="${r.fecha}"></label>
         <label>Hora<input type="time" id="edPastLogHora" value="${r.hora ? r.hora.slice(0, 5) : ''}"></label>
       </div>`;
+  } else if (tabla === 'super') {
+    html = `
+      <label>Nombre<input type="text" id="edSuperNombre" maxlength="60" value="${escapeHtml(r.nombre || '')}"></label>
+      <label>Categoría (opcional)<input type="text" id="edSuperCategoria" maxlength="40" value="${escapeHtml(r.categoria || '')}"></label>`;
+  } else if (tabla === 'compra_items') {
+    html = `<label>Cantidad<input type="number" id="edItemCantidad" min="1" step="1" value="${r.cantidad || 1}"></label>`;
   } else {
     html = `
       <div class="fila-2">
@@ -950,6 +958,10 @@ function abrirEdicion(tabla, id) {
         <label class="check-pill"><input type="checkbox" id="edHeces" ${r.heces ? 'checked' : ''}> 💩 Heces</label>
         <label class="check-pill"><input type="checkbox" id="edOrina" ${r.orina ? 'checked' : ''}> 💧 Orina</label>
       </div>`;
+    if (tabla === 'compras')
+      html += `
+      <label>Monto total (opcional)<input type="number" id="edMonto" step="any" inputmode="decimal" value="${r.monto_total ?? ''}"></label>
+      <label>Notas<textarea id="edNotas" rows="2" maxlength="500">${escapeHtml(r.notas || '')}</textarea></label>`;
   }
   $('editCampos').innerHTML = html;
   $('editModal').classList.remove('hidden');
@@ -985,12 +997,26 @@ $('editGuardar').addEventListener('click', async () => {
   } else if (tabla === 'pastillas_log') {
     cambios.fecha = $('edPastLogFecha').value;
     cambios.hora = $('edPastLogHora').value || null;
+  } else if (tabla === 'super') {
+    const nombre = $('edSuperNombre').value.trim();
+    if (!nombre) { toast('Escribe el nombre del producto', true); return; }
+    cambios.nombre = nombre;
+    cambios.categoria = $('edSuperCategoria').value.trim() || null;
+  } else if (tabla === 'compra_items') {
+    const v = Number($('edItemCantidad').value);
+    if (!(v > 0)) { toast('La cantidad debe ser mayor a 0', true); return; }
+    cambios.cantidad = Math.round(v);
   } else {
     cambios.fecha_hora = toISO($('edFecha').value, $('edHora').value);
     if (tabla === 'tomas') {
       const v = Number($('edCantidad').value);
       if (!(v > 0)) { toast('La cantidad debe ser mayor a 0', true); return; }
       cambios.cantidad_ml = Math.round(v);
+    }
+    if (tabla === 'compras') {
+      const m = Number($('edMonto').value);
+      cambios.monto_total = m > 0 ? m : null;
+      cambios.notas = $('edNotas').value.trim() || null;
     }
     if (tabla === 'vitaminas') {
       const v = Number($('edGotas').value);
@@ -1514,6 +1540,159 @@ $('formJuegos').addEventListener('submit', async (e) => {
   }
   limpiarJuegoForm();
   renderJuegos();
+});
+
+// ---------- Lista del súper ----------
+// Estado del checklist en curso: Map(productoId string -> cantidad), persistido
+// en localStorage para sobrevivir a la auto-recarga de la app cada 10 min.
+function leerSuperChecklistLS() {
+  try { return new Map(Object.entries(JSON.parse(localStorage.getItem('super_checklist') || '{}'))); }
+  catch { return new Map(); }
+}
+let superChecklist = leerSuperChecklistLS();
+let superFotoPendiente = null;
+
+function guardarSuperChecklistLS() {
+  localStorage.setItem('super_checklist', JSON.stringify(Object.fromEntries(superChecklist)));
+}
+
+function ordenarSuper(lista) {
+  return lista.slice().sort((a, b) => (a.categoria || '').localeCompare(b.categoria || '') || (a.nombre || '').localeCompare(b.nombre || ''));
+}
+
+function renderSuperChecklist() {
+  const lista = ordenarSuper(cache.super || []);
+  if (!lista.length) {
+    $('superListaHoy').innerHTML = '<p class="empty-msg">Agrega productos en "Mis productos" abajo</p>';
+    $('superContador').textContent = '';
+    return;
+  }
+  const hayCategorias = lista.some((p) => p.categoria);
+  let html = '';
+  let catActual;
+  for (const p of lista) {
+    const cat = p.categoria || (hayCategorias ? 'Otros' : null);
+    if (hayCategorias && cat !== catActual) { html += `<div class="stat-label super-cat">${escapeHtml(cat)}</div>`; catActual = cat; }
+    const marcado = superChecklist.has(String(p.id));
+    const qty = superChecklist.get(String(p.id)) || 1;
+    html += `
+      <div class="super-row">
+        <label class="check-pill"><input type="checkbox" class="super-check" data-id="${p.id}" ${marcado ? 'checked' : ''}> ${escapeHtml(p.nombre)}</label>
+        <input type="number" class="super-qty" data-id="${p.id}" min="1" step="1" value="${qty}" ${marcado ? '' : 'disabled'}>
+      </div>`;
+  }
+  $('superListaHoy').innerHTML = html;
+  const n = superChecklist.size;
+  $('superContador').textContent = n ? `${n} producto${n === 1 ? '' : 's'} seleccionado${n === 1 ? '' : 's'}` : '';
+}
+
+document.addEventListener('change', (e) => {
+  const chk = e.target.closest('.super-check');
+  if (chk) {
+    if (chk.checked) superChecklist.set(chk.dataset.id, superChecklist.get(chk.dataset.id) || 1);
+    else superChecklist.delete(chk.dataset.id);
+    guardarSuperChecklistLS();
+    renderSuperChecklist();
+    return;
+  }
+  const qty = e.target.closest('.super-qty');
+  if (qty) {
+    superChecklist.set(qty.dataset.id, Math.max(1, Math.round(Number(qty.value) || 1)));
+    guardarSuperChecklistLS();
+  }
+});
+
+$('formSuperQuick').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nombre = $('superQuickNombre').value.trim();
+  if (!nombre) return;
+  const { data, error } = await db.from('super').insert({ bebe_id: bebe.id, nombre }).select().single();
+  if (error) { toast(`Error: ${error.message}`, true); return; }
+  await loadData('super');
+  superChecklist.set(String(data.id), 1);
+  guardarSuperChecklistLS();
+  $('superQuickNombre').value = '';
+  renderSuper();
+});
+
+function pintarSuperFotoPrev() {
+  const wrap = $('superFotoWrap');
+  wrap.classList.toggle('hidden', !superFotoPendiente);
+  if (superFotoPendiente) $('superFotoPreview').src = superFotoPendiente;
+}
+$('superFotoBtn').addEventListener('click', () => $('superFoto').click());
+$('superFoto').addEventListener('change', async () => {
+  const file = $('superFoto').files[0];
+  if (!file) return;
+  try { superFotoPendiente = await redimensionarFoto(file); } catch { toast('No se pudo procesar la foto', true); return; }
+  pintarSuperFotoPrev();
+});
+$('superFotoQuitar').addEventListener('click', () => {
+  superFotoPendiente = null;
+  $('superFoto').value = '';
+  pintarSuperFotoPrev();
+});
+
+$('superFinalizarBtn').addEventListener('click', async () => {
+  if (!superChecklist.size) { toast('Marca al menos un producto', true); return; }
+  const monto = Number($('superMonto').value);
+  const { data: compra, error: e1 } = await db.from('compras').insert({
+    bebe_id: bebe.id,
+    fecha_hora: new Date().toISOString(),
+    foto_boleta: superFotoPendiente || null,
+    monto_total: monto > 0 ? monto : null,
+  }).select().single();
+  if (e1) { toast(`Error: ${e1.message}`, true); return; }
+  const items = [...superChecklist.entries()].map(([producto_id, cantidad]) => ({
+    bebe_id: bebe.id, compra_id: compra.id, producto_id: Number(producto_id), cantidad,
+  }));
+  const { error: e2 } = await db.from('compra_items').insert(items);
+  if (e2) { toast(`Error: ${e2.message}`, true); return; }
+  await Promise.all([loadData('compras'), loadData('compra_items')]);
+  const n = items.length;
+  superChecklist = new Map();
+  guardarSuperChecklistLS();
+  superFotoPendiente = null;
+  $('superFoto').value = '';
+  $('superMonto').value = '';
+  pintarSuperFotoPrev();
+  toast(`Compra registrada ✓ (${n} producto${n === 1 ? '' : 's'})`);
+  renderSuper();
+});
+
+function renderSuper() {
+  renderSuperChecklist();
+  pintarSuperFotoPrev();
+
+  const mapaProd = new Map((cache.super || []).map((p) => [String(p.id), p]));
+  $('tablaSuper').innerHTML = historialColapsable(cache.compras || [], (r) => dayKey(new Date(r.fecha_hora)), (r) => {
+    const items = (cache.compra_items || []).filter((it) => it.compra_id === r.id);
+    return `
+      <div class="bit-item">
+        <div class="bit-head"><strong>🛒 Compra</strong><span>${fmtTime(new Date(r.fecha_hora))}</span></div>
+        ${items.length ? `<ul class="super-items">${items.map((it) => {
+          const p = mapaProd.get(String(it.producto_id));
+          return `<li><span>${escapeHtml(p?.nombre || '—')}${it.cantidad > 1 ? ` × ${it.cantidad}` : ''}</span>${botonesEdit('compra_items', it.id)}</li>`;
+        }).join('')}</ul>` : ''}
+        ${r.monto_total != null ? `<p class="ctrl-detalle">Total: $${r.monto_total}</p>` : ''}
+        ${r.notas ? `<p>${escapeHtml(r.notas)}</p>` : ''}
+        ${r.foto_boleta ? `<div class="album"><div class="album-item"><img src="${r.foto_boleta}" alt=""></div></div>` : ''}
+        <div class="bit-acciones">${botonesEdit('compras', r.id)}</div>
+      </div>`;
+  });
+
+  const maestro = ordenarSuper(cache.super || []);
+  $('superLista').innerHTML = maestro.length
+    ? `<table><tbody>${maestro.map((p) => `<tr><td>${escapeHtml(p.nombre)}</td><td>${escapeHtml(p.categoria || '')}</td>${accionesTd('super', p.id)}</tr>`).join('')}</tbody></table>`
+    : '<p class="empty-msg">Aún no agregas productos</p>';
+}
+
+$('formSuper').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nombre = $('superNombre').value.trim();
+  if (!nombre) { toast('Escribe el nombre del producto', true); return; }
+  const ok = await insertar('super', { nombre, categoria: $('superCategoria').value.trim() || null });
+  if (ok) { $('superNombre').value = ''; $('superCategoria').value = ''; renderSuper(); }
 });
 
 // ---------- Autenticación ----------

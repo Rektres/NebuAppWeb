@@ -498,6 +498,57 @@
         </div>
       </section>
 
+      <!-- ========== PESTAÑA: LISTA DEL SÚPER ========== -->
+      <section id="tab-super" class="tab">
+        <div class="card">
+          <h2>Lista del súper</h2>
+          <div id="superListaHoy" class="pill-list"></div>
+          <form id="formSuperQuick" class="super-quick">
+            <input type="text" id="superQuickNombre" maxlength="60" placeholder="Agregar producto y marcarlo">
+            <button type="submit" class="btn-secondary">➕</button>
+          </form>
+          <p class="stat-label" id="superContador"></p>
+
+          <label class="field-label">Monto total (opcional)
+            <input type="number" id="superMonto" step="any" inputmode="decimal" placeholder="0">
+          </label>
+
+          <div class="field-label">Foto de la boleta (opcional)
+            <input type="file" id="superFoto" accept="image/*" capture="environment" class="hidden">
+            <div class="photo-row">
+              <button type="button" class="btn-secondary" id="superFotoBtn">📷 Elegir foto…</button>
+              <div class="album-item hidden" id="superFotoWrap">
+                <img id="superFotoPreview" alt="">
+                <button type="button" class="album-del" id="superFotoQuitar">✕</button>
+              </div>
+            </div>
+          </div>
+
+          <button type="button" class="btn-primary" id="superFinalizarBtn">🛒 Compra Finalizada</button>
+        </div>
+
+        <div class="card table-card">
+          <h2>Historial</h2>
+          <div id="tablaSuper"></div>
+        </div>
+
+        <details class="card">
+          <summary>Mis productos</summary>
+          <form id="formSuper" class="form-card">
+            <div class="form-grid">
+              <label>Nombre
+                <input type="text" id="superNombre" maxlength="60" placeholder="Nombre del producto" required>
+              </label>
+              <label>Categoría (opcional)
+                <input type="text" id="superCategoria" maxlength="40" placeholder="Ej: Lácteos">
+              </label>
+            </div>
+            <button type="submit" class="btn-primary">＋ Agregar a mi lista</button>
+            <div id="superLista" class="table-wrap past-lista"></div>
+          </form>
+        </details>
+      </section>
+
     </main>
 
     <!-- ========== BARRA DE PESTAÑAS (se arma en JS según el orden guardado) ========== -->

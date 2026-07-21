@@ -136,6 +136,35 @@ create table juegos (
   created_at timestamptz default now()
 );
 
+-- Lista del súper: lista maestra de productos
+create table super (
+  id bigint generated always as identity primary key,
+  bebe_id uuid not null references bebes(id) on delete cascade,
+  nombre text not null,
+  categoria text,
+  created_at timestamptz default now()
+);
+
+-- Compras: una "Compra Finalizada" = un viaje/boleta, con foto y monto
+create table compras (
+  id bigint generated always as identity primary key,
+  bebe_id uuid not null references bebes(id) on delete cascade,
+  fecha_hora timestamptz not null,
+  foto_boleta text,      -- imagen base64 de la boleta (opcional)
+  monto_total numeric,
+  notas text,
+  created_at timestamptz default now()
+);
+
+-- Productos dentro de una compra
+create table compra_items (
+  id bigint generated always as identity primary key,
+  bebe_id uuid not null references bebes(id) on delete cascade,
+  compra_id bigint not null references compras(id) on delete cascade,
+  producto_id bigint not null references super(id) on delete cascade,
+  cantidad integer not null default 1
+);
+
 -- ============================================================
 -- Funciones (security definer: se ejecutan con permisos del dueño)
 -- ============================================================
@@ -215,6 +244,9 @@ alter table pastillas_log enable row level security;
 alter table bitacora enable row level security;
 alter table controles enable row level security;
 alter table juegos enable row level security;
+alter table super enable row level security;
+alter table compras enable row level security;
+alter table compra_items enable row level security;
 
 create policy "padres ven su bebe" on bebes for select to authenticated
   using (id in (select mis_bebes()));
@@ -243,4 +275,10 @@ create policy "solo padres" on bitacora for all to authenticated
 create policy "solo padres" on controles for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
 create policy "solo padres" on juegos for all to authenticated
+  using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
+create policy "solo padres" on super for all to authenticated
+  using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
+create policy "solo padres" on compras for all to authenticated
+  using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
+create policy "solo padres" on compra_items for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
