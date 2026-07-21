@@ -263,7 +263,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 
 /* Lista del súper: checklist con cantidad, agregar rápido, items de una compra */
 .super-row { display: flex; align-items: center; gap: 8px; }
-.super-row .check-pill { flex: 1; }
+.super-row .check-pill { flex: 1; min-width: 0; }
+.super-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .super-qty { width: 56px; flex: none; height: 40px; text-align: center; padding: 0 4px; }
 .super-cat { margin: 10px 0 2px; }
 .super-cat:first-child { margin-top: 0; }
@@ -310,6 +311,36 @@ input[type="date"], input[type="time"] { display: block; line-height: 44px; }
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .check-pill input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+/* Checkbox propio (algunos navegadores/temas oscuros del sistema dibujan el
+   checkbox nativo como un switch grande y descuadran la fila) */
+.check-pill input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  flex: none;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  position: relative;
+}
+.check-pill input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.check-pill input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--accent-ink);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
 
 /* ---------- Botones ---------- */
 .btn-primary, .btn-secondary, .btn-danger {

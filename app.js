@@ -1577,7 +1577,7 @@ function renderSuperChecklist() {
     const qty = superChecklist.get(String(p.id)) || 1;
     html += `
       <div class="super-row">
-        <label class="check-pill"><input type="checkbox" class="super-check" data-id="${p.id}" ${marcado ? 'checked' : ''}> ${escapeHtml(p.nombre)}</label>
+        <label class="check-pill"><input type="checkbox" class="super-check" data-id="${p.id}" ${marcado ? 'checked' : ''}> <span class="super-nombre">${escapeHtml(p.nombre)}</span></label>
         <input type="number" class="super-qty" data-id="${p.id}" min="1" step="1" value="${qty}" ${marcado ? '' : 'disabled'}>
       </div>`;
   }
