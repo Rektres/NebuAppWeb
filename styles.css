@@ -265,7 +265,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .super-row { display: flex; align-items: center; gap: 8px; }
 .super-row .check-pill { flex: 1; min-width: 0; }
 .super-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.super-qty { width: 56px; flex: none; height: 40px; text-align: center; padding: 0 4px; }
+input.super-qty { width: 56px; flex: none; height: 40px; text-align: center; padding: 0 4px; }
 .super-cat { margin: 10px 0 2px; }
 .super-cat:first-child { margin-top: 0; }
 .super-quick { display: flex; gap: 8px; margin-top: 10px; }
