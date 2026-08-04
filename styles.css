@@ -344,6 +344,18 @@ tr.day-row td {
 tr.day-toggle { cursor: pointer; }
 .day-toggle .caret { display: inline-block; width: 1em; color: var(--accent); }
 
+/* Mes ya completo, colapsado: un solo renglón que se desgloza en días al abrirlo */
+tr.month-row td {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.month-toggle .caret { display: inline-block; width: 1em; color: var(--accent); }
+
 /* Historial en tarjetas agrupado por día (bitácora, controles, juegos) */
 .col-day {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -356,6 +368,18 @@ tr.day-toggle { cursor: pointer; }
   margin: 12px 0 8px;
 }
 .col-day:first-child { margin-top: 0; }
+
+.col-month {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin: 12px 0 8px;
+}
+.col-month:first-child { margin-top: 0; }
 
 tr.subtotal-row td {
   color: var(--text-2);

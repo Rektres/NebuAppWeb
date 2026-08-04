@@ -186,8 +186,40 @@
 
       <!-- ========== PESTAÑA 3: VITAMINAS ========== -->
       <section id="tab-vitaminas" class="tab">
+        <div class="card">
+          <h2 id="vitHoyTitulo">Hoy — marca qué vitaminas tomó</h2>
+          <div class="past-fh">
+            <label>Fecha
+              <input type="date" id="vitTipoFecha">
+            </label>
+            <label>Hora
+              <input type="time" id="vitTipoHora">
+            </label>
+          </div>
+          <div id="vitTipoHoy" class="pill-list"></div>
+        </div>
+
+        <form id="formVitaminaTipo" class="card form-card">
+          <h2>Mis vitaminas</h2>
+          <div class="form-grid">
+            <label>Nombre
+              <input type="text" id="vitTipoNombre" maxlength="60" placeholder="Nombre de la vitamina" required>
+            </label>
+            <label>Gotas por defecto
+              <input type="number" id="vitTipoGotas" step="any" inputmode="decimal" value="5">
+            </label>
+          </div>
+          <button type="submit" class="btn-primary">＋ Agregar a mi lista</button>
+          <div id="vitTipoLista" class="table-wrap past-lista"></div>
+        </form>
+
+        <div class="card table-card">
+          <h2>Historial por nombre</h2>
+          <div id="tablaVitaminaTipos" class="table-wrap"></div>
+        </div>
+
         <form id="formVitaminas" class="card form-card">
-          <h2>Registrar vitaminas</h2>
+          <h2>Registro rápido (dosis suelta, sin nombre)</h2>
           <div class="form-grid">
             <label>Gotas
               <input type="number" id="vitGotas" step="any" inputmode="decimal" value="5" required>
@@ -203,7 +235,7 @@
         </form>
 
         <div class="card table-card">
-          <h2>Historial</h2>
+          <h2>Historial rápido</h2>
           <div id="tablaVitaminas" class="table-wrap"></div>
         </div>
       </section>

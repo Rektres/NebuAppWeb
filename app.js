@@ -49,6 +49,32 @@ function groupByDay(rows, field) {
   return map;
 }
 
+// ---------- Agrupación mensual del historial ----------
+// El mes en curso se muestra por día como siempre; los meses ya completos se
+// colapsan en un solo renglón que se "desgloza" en sus días al abrirlo.
+const mesActualKey = () => dayKey(new Date()).slice(0, 7);
+const mesKeyDe = (dk) => dk.slice(0, 7);
+
+function fmtMesLabel(mk) {
+  const d = new Date(`${mk}-01T12:00`);
+  const txt = d.toLocaleDateString('es', { month: 'long', year: 'numeric' });
+  return txt.charAt(0).toUpperCase() + txt.slice(1);
+}
+
+// Recibe pares [dayKey, payload] YA ordenados (desc) y los agrupa por mes,
+// preservando el orden; marca cada grupo como "actual" (mes en curso) o no.
+function agruparPorMes(diasOrdenados) {
+  const actual = mesActualKey();
+  const meses = [];
+  for (const [dk, payload] of diasOrdenados) {
+    const mk = mesKeyDe(dk);
+    let grupo = meses[meses.length - 1];
+    if (!grupo || grupo.mes !== mk) { grupo = { mes: mk, actual: mk === actual, dias: [] }; meses.push(grupo); }
+    grupo.dias.push([dk, payload]);
+  }
+  return meses;
+}
+
 function toISO(fecha, hora) {
   return new Date(`${fecha}T${hora}`).toISOString();
 }
@@ -71,7 +97,7 @@ function setNowDefaults() {
 }
 
 // ---------- Estado ----------
-const cache = { tomas: null, vitaminas: null, panales: null, sueno: null, pastillas: null, pastillas_log: null, miembros: null, bitacora: null, controles: null, juegos: null };
+const cache = { tomas: null, vitaminas: null, panales: null, sueno: null, pastillas: null, pastillas_log: null, vitaminas_tipos: null, vitaminas_tipos_log: null, miembros: null, bitacora: null, controles: null, juegos: null };
 let bebe = null;    // fila de la tabla bebes (nombre, foto, paleta, codigo)
 let miRol = null;   // 'madre' | 'padre'
 let usuario = null; // session.user
@@ -89,13 +115,13 @@ async function fetchTable(tabla, campoOrden) {
   return data;
 }
 
-const ORDEN = { sueno: 'inicio', pastillas: 'id', pastillas_log: 'fecha', miembros: 'created_at', bitacora: 'fecha', controles: 'fecha', juegos: 'fecha' };
+const ORDEN = { sueno: 'inicio', pastillas: 'id', pastillas_log: 'fecha', vitaminas_tipos: 'id', vitaminas_tipos_log: 'fecha', miembros: 'created_at', bitacora: 'fecha', controles: 'fecha', juegos: 'fecha' };
 async function loadData(tabla) {
   cache[tabla] = await fetchTable(tabla, ORDEN[tabla] || 'fecha_hora');
 }
 
 async function loadAll() {
-  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno', 'pastillas', 'pastillas_log', 'miembros', 'bitacora', 'controles', 'juegos'].map(loadData));
+  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno', 'pastillas', 'pastillas_log', 'vitaminas_tipos', 'vitaminas_tipos_log', 'miembros', 'bitacora', 'controles', 'juegos'].map(loadData));
   statsDirty = true;
 }
 
@@ -131,42 +157,104 @@ document.addEventListener('click', (e) => {
 });
 
 // ---------- Render de tablas ----------
-function tablaHTML(headers, grupos, filaFn, subtotalFn) {
+// Cada día muestra sus filas (día actual expandido, el resto compactado); una vez
+// que un mes queda completo (ya no es el mes en curso), sus días se colapsan bajo
+// un solo renglón de mes que se desgloza en días al abrirlo (subtotalMesFn opcional).
+function tablaHTML(headers, grupos, filaFn, subtotalFn, subtotalMesFn) {
   if (!grupos.size) return '<p class="empty-msg">Sin registros todavía</p>';
   const cols = headers.length + 1;
   const hoy = dayKey(new Date());
+  const meses = agruparPorMes([...grupos.entries()]);
   let html = `<table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}<th></th></tr></thead><tbody>`;
-  for (const [key, rows] of grupos) {
-    const abierto = key === hoy; // el día actual va expandido; el resto compactado
-    const subtotal = subtotalFn ? `<span style="float:right">${subtotalFn(rows)}</span>` : '';
-    html += `<tr class="day-row day-toggle${abierto ? ' abierto' : ''}" data-day="${key}"><td colspan="${cols}"><span class="caret">${abierto ? '▾' : '▸'}</span> ${fmtDayLabel(key)}${subtotal}</td></tr>`;
-    html += rows.map(filaFn).map((tr) => tr.replace('<tr>', `<tr class="drow d-${key}${abierto ? '' : ' hidden'}">`)).join('');
+  for (const grupo of meses) {
+    if (grupo.actual) {
+      for (const [key, rows] of grupo.dias) {
+        const abierto = key === hoy;
+        const subtotal = subtotalFn ? `<span style="float:right">${subtotalFn(rows)}</span>` : '';
+        html += `<tr class="day-row day-toggle${abierto ? ' abierto' : ''}" data-day="${key}"><td colspan="${cols}"><span class="caret">${abierto ? '▾' : '▸'}</span> ${fmtDayLabel(key)}${subtotal}</td></tr>`;
+        html += rows.map(filaFn).map((tr) => tr.replace('<tr>', `<tr class="drow d-${key}${abierto ? '' : ' hidden'}">`)).join('');
+      }
+    } else {
+      const todasFilas = grupo.dias.flatMap(([, rows]) => rows);
+      const subtotalMes = subtotalMesFn ? `<span style="float:right">${subtotalMesFn(todasFilas)}</span>` : '';
+      html += `<tr class="month-row month-toggle" data-month="${grupo.mes}"><td colspan="${cols}"><span class="caret">▸</span> ${fmtMesLabel(grupo.mes)}${subtotalMes}</td></tr>`;
+      for (const [key, rows] of grupo.dias) {
+        const subtotal = subtotalFn ? `<span style="float:right">${subtotalFn(rows)}</span>` : '';
+        html += `<tr class="day-row m-${grupo.mes} hidden"><td colspan="${cols}">${fmtDayLabel(key)}${subtotal}</td></tr>`;
+        html += rows.map(filaFn).map((tr) => tr.replace('<tr>', `<tr class="m-${grupo.mes} hidden">`)).join('');
+      }
+    }
   }
   return html + '</tbody></table>';
 }
 
-// Historial en tarjetas agrupadas por día (bitácora, controles, juegos)
+// Historial en tarjetas agrupadas por día (bitácora, controles, juegos); misma
+// regla de colapso mensual que tablaHTML.
 function historialColapsable(rows, keyFn, itemHTML) {
   if (!rows.length) return '<p class="empty-msg">Sin registros todavía</p>';
   const hoy = dayKey(new Date());
   const grupos = new Map();
   for (const r of rows) { const k = keyFn(r); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(r); }
+  const meses = agruparPorMes([...grupos.entries()]);
   let html = '<div class="col-list">';
-  for (const [key, items] of grupos) {
-    const abierto = key === hoy; // el día actual expandido, el resto compactado
-    html += `<div class="col-day day-toggle${abierto ? ' abierto' : ''}" data-day="${key}"><span class="caret">${abierto ? '▾' : '▸'}</span> ${fmtDayLabel(key)}</div>`;
-    html += items.map((r) => `<div class="drow d-${key}${abierto ? '' : ' hidden'}">${itemHTML(r)}</div>`).join('');
+  for (const grupo of meses) {
+    if (grupo.actual) {
+      for (const [key, items] of grupo.dias) {
+        const abierto = key === hoy;
+        html += `<div class="col-day day-toggle${abierto ? ' abierto' : ''}" data-day="${key}"><span class="caret">${abierto ? '▾' : '▸'}</span> ${fmtDayLabel(key)}</div>`;
+        html += items.map((r) => `<div class="drow d-${key}${abierto ? '' : ' hidden'}">${itemHTML(r)}</div>`).join('');
+      }
+    } else {
+      html += `<div class="col-month month-toggle" data-month="${grupo.mes}"><span class="caret">▸</span> ${fmtMesLabel(grupo.mes)}</div>`;
+      for (const [key, items] of grupo.dias) {
+        html += `<div class="col-day m-${grupo.mes} hidden">${fmtDayLabel(key)}</div>`;
+        html += items.map((r) => `<div class="drow m-${grupo.mes} hidden">${itemHTML(r)}</div>`).join('');
+      }
+    }
   }
   return html + '</div>';
 }
 
-// Expandir/compactar un día del historial (tablas o listas de tarjetas)
+// Historial de un checklist diario (pastillas, vitaminas por nombre): mismo
+// esquema de colapso mensual; itemsDelDiaFn(d) devuelve las filas <tr> del día.
+function historialChecklistHTML(dias, itemsDelDiaFn, colspan) {
+  if (!dias.length) return '<p class="empty-msg">Sin registros todavía</p>';
+  const hoyKey = dayKey(new Date());
+  const meses = agruparPorMes(dias.map((d) => [d, d]));
+  let html = '';
+  for (const grupo of meses) {
+    if (grupo.actual) {
+      for (const [d] of grupo.dias) {
+        const abierto = d === hoyKey;
+        html += `<tr class="day-row day-toggle${abierto ? ' abierto' : ''}" data-day="${d}"><td colspan="${colspan}"><span class="caret">${abierto ? '▾' : '▸'}</span> ${fmtDayLabel(d)}</td></tr>`;
+        html += itemsDelDiaFn(d).map((tr) => tr.replace('<tr>', `<tr class="drow d-${d}${abierto ? '' : ' hidden'}">`)).join('');
+      }
+    } else {
+      html += `<tr class="month-row month-toggle" data-month="${grupo.mes}"><td colspan="${colspan}"><span class="caret">▸</span> ${fmtMesLabel(grupo.mes)}</td></tr>`;
+      for (const [d] of grupo.dias) {
+        html += `<tr class="day-row m-${grupo.mes} hidden"><td colspan="${colspan}">${fmtDayLabel(d)}</td></tr>`;
+        html += itemsDelDiaFn(d).map((tr) => tr.replace('<tr>', `<tr class="m-${grupo.mes} hidden">`)).join('');
+      }
+    }
+  }
+  return `<table><tbody>${html}</tbody></table>`;
+}
+
+// Expandir/compactar un día o un mes del historial (tablas o listas de tarjetas)
 document.addEventListener('click', (e) => {
   const dt = e.target.closest('.day-toggle');
-  if (!dt) return;
-  const abierto = dt.classList.toggle('abierto');
-  dt.querySelector('.caret').textContent = abierto ? '▾' : '▸';
-  dt.closest('table, .col-list').querySelectorAll('.d-' + CSS.escape(dt.dataset.day)).forEach((r) => r.classList.toggle('hidden', !abierto));
+  if (dt) {
+    const abierto = dt.classList.toggle('abierto');
+    dt.querySelector('.caret').textContent = abierto ? '▾' : '▸';
+    dt.closest('table, .col-list').querySelectorAll('.d-' + CSS.escape(dt.dataset.day)).forEach((r) => r.classList.toggle('hidden', !abierto));
+    return;
+  }
+  const mt = e.target.closest('.month-toggle');
+  if (mt) {
+    const abierto = mt.classList.toggle('abierto');
+    mt.querySelector('.caret').textContent = abierto ? '▾' : '▸';
+    mt.closest('table, .col-list').querySelectorAll('.m-' + CSS.escape(mt.dataset.month)).forEach((r) => r.classList.toggle('hidden', !abierto));
+  }
 });
 
 const botonesEdit = (tabla, id) =>
@@ -232,12 +320,79 @@ function renderLecheResumen() {
 }
 
 function renderVitaminas() {
+  renderVitaminaTipos();
   $('tablaVitaminas').innerHTML = tablaHTML(
     ['Hora', 'Gotas'],
     groupByDay(cache.vitaminas || [], 'fecha_hora'),
     (r) => `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.gotas} gotas</td>${accionesTd('vitaminas', r.id)}</tr>`
   );
 }
+
+// Vitaminas por nombre: lista maestra + checklist diario (igual patrón que Pastillas)
+const ordenarVitaminaTipos = (lista) => lista.slice().sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+function renderVitaminaTipos() {
+  const lista = ordenarVitaminaTipos(cache.vitaminas_tipos || []);
+  const hoy = dayKey(new Date());
+  if (!$('vitTipoFecha').value) $('vitTipoFecha').value = hoy;
+  if (!$('vitTipoHora').value) $('vitTipoHora').value = fmtTime(new Date());
+  const fechaSel = $('vitTipoFecha').value;
+  $('vitHoyTitulo').textContent = (fechaSel === hoy ? 'Hoy' : fmtDayLabel(fechaSel)) + ' — marca qué vitaminas tomó';
+  const tomadasSel = new Set((cache.vitaminas_tipos_log || []).filter((l) => l.fecha === fechaSel).map((l) => String(l.vitamina_id)));
+
+  // Checklist de la fecha seleccionada
+  $('vitTipoHoy').innerHTML = lista.length
+    ? lista.map((v) =>
+        `<label class="check-pill"><input type="checkbox" class="vit-check" data-id="${v.id}" ${tomadasSel.has(String(v.id)) ? 'checked' : ''}> ${escapeHtml(v.nombre)}${v.gotas_default ? ' · ' + v.gotas_default + ' gotas' : ''}</label>`
+      ).join('')
+    : '<p class="empty-msg">Agrega vitaminas a tu lista abajo</p>';
+
+  // Lista maestra (editar / eliminar)
+  $('vitTipoLista').innerHTML = lista.length
+    ? `<table><tbody>${lista.map((v) => `<tr><td>${escapeHtml(v.nombre)}</td><td>${v.gotas_default ? v.gotas_default + ' gotas' : '—'}</td>${accionesTd('vitaminas_tipos', v.id)}</tr>`).join('')}</tbody></table>`
+    : '<p class="empty-msg">Aún no agregas vitaminas</p>';
+
+  // Historial por día (colapsable; el mes actual por día, los meses completos colapsados)
+  const mapa = new Map((cache.vitaminas_tipos || []).map((v) => [String(v.id), v]));
+  const dias = [...new Set((cache.vitaminas_tipos_log || []).map((l) => l.fecha))].sort().reverse();
+  const itemsDelDia = (d) => (cache.vitaminas_tipos_log || [])
+    .filter((l) => l.fecha === d)
+    .map((l) => ({ l, v: mapa.get(String(l.vitamina_id)) }))
+    .filter((x) => x.v)
+    .sort((a, b) => (a.v.nombre || '').localeCompare(b.v.nombre || ''))
+    .map(({ l, v }) => {
+      const gotas = l.gotas ?? v.gotas_default;
+      return `<tr><td>${escapeHtml(v.nombre)}</td><td>${gotas ? gotas + ' gotas ' : ''}✅${l.hora ? ' · ' + l.hora.slice(0, 5) : ''}</td></tr>`;
+    });
+  $('tablaVitaminaTipos').innerHTML = historialChecklistHTML(dias, itemsDelDia, 2);
+}
+
+// Marcar/desmarcar una vitamina como tomada en la fecha/hora seleccionada
+$('vitTipoFecha').addEventListener('change', renderVitaminaTipos);
+
+async function toggleVitaminaTipoHoy(vitaminaId, tomada) {
+  const fecha = $('vitTipoFecha').value || dayKey(new Date());
+  const hora = $('vitTipoHora').value || null;
+  const tipo = (cache.vitaminas_tipos || []).find((v) => String(v.id) === String(vitaminaId));
+  const { error } = tomada
+    ? await db.from('vitaminas_tipos_log').upsert(
+        { bebe_id: bebe.id, vitamina_id: Number(vitaminaId), fecha, hora, gotas: tipo?.gotas_default ?? null },
+        { onConflict: 'vitamina_id,fecha' }
+      )
+    : await db.from('vitaminas_tipos_log').delete().eq('vitamina_id', vitaminaId).eq('fecha', fecha);
+  if (error) { toast(`Error: ${error.message}`, true); }
+  await loadData('vitaminas_tipos_log');
+  renderVitaminaTipos();
+}
+
+$('formVitaminaTipo').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nombre = $('vitTipoNombre').value.trim();
+  if (!nombre) { toast('Escribe el nombre de la vitamina', true); return; }
+  const gotas = Number($('vitTipoGotas').value);
+  const ok = await insertar('vitaminas_tipos', { nombre, gotas_default: gotas > 0 ? Math.round(gotas) : null });
+  if (ok) { $('vitTipoNombre').value = ''; $('vitTipoGotas').value = 5; renderVitaminaTipos(); }
+});
 
 const hm = (p) => `${escapeHtml(p.nombre)} · ${(p.horario || '').toUpperCase()}`;
 const ordenarPastillas = (lista) =>
@@ -264,28 +419,24 @@ function renderPastillas() {
     ? `<table><tbody>${lista.map((p) => `<tr><td>${escapeHtml(p.nombre)}</td><td>${(p.horario || '').toUpperCase()}</td>${accionesTd('pastillas', p.id)}</tr>`).join('')}</tbody></table>`
     : '<p class="empty-msg">Aún no agregas pastillas</p>';
 
-  // Historial por día (colapsable; el día actual queda expandido)
+  // Historial por día (colapsable; el mes actual por día, los meses completos colapsados)
   const mapa = new Map((cache.pastillas || []).map((p) => [String(p.id), p]));
-  const hoyKey = dayKey(new Date());
   const dias = [...new Set((cache.pastillas_log || []).map((l) => l.fecha))].sort().reverse();
-  $('tablaPastillas').innerHTML = dias.length
-    ? `<table><tbody>${dias.map((d) => {
-        const abierto = d === hoyKey;
-        const items = (cache.pastillas_log || [])
-          .filter((l) => l.fecha === d)
-          .map((l) => ({ l, p: mapa.get(String(l.pastilla_id)) }))
-          .filter((x) => x.p)
-          .sort((a, b) => (a.p.horario || '').localeCompare(b.p.horario || '') || (a.p.nombre || '').localeCompare(b.p.nombre || ''));
-        return `<tr class="day-row day-toggle${abierto ? ' abierto' : ''}" data-day="${d}"><td colspan="2"><span class="caret">${abierto ? '▾' : '▸'}</span> ${fmtDayLabel(d)}</td></tr>` +
-          items.map(({ l, p }) => `<tr class="drow d-${d}${abierto ? '' : ' hidden'}"><td>${escapeHtml(p.nombre)}</td><td>${(p.horario || '').toUpperCase()} ✅${l.hora ? ' · ' + l.hora.slice(0, 5) : ''}</td></tr>`).join('');
-      }).join('')}</tbody></table>`
-    : '<p class="empty-msg">Sin registros todavía</p>';
+  const itemsDelDia = (d) => (cache.pastillas_log || [])
+    .filter((l) => l.fecha === d)
+    .map((l) => ({ l, p: mapa.get(String(l.pastilla_id)) }))
+    .filter((x) => x.p)
+    .sort((a, b) => (a.p.horario || '').localeCompare(b.p.horario || '') || (a.p.nombre || '').localeCompare(b.p.nombre || ''))
+    .map(({ l, p }) => `<tr><td>${escapeHtml(p.nombre)}</td><td>${(p.horario || '').toUpperCase()} ✅${l.hora ? ' · ' + l.hora.slice(0, 5) : ''}</td></tr>`);
+  $('tablaPastillas').innerHTML = historialChecklistHTML(dias, itemsDelDia, 2);
 }
 
-// Marcar/desmarcar una pastilla como tomada en la fecha/hora seleccionada
+// Marcar/desmarcar una pastilla o vitamina como tomada en la fecha/hora seleccionada
 document.addEventListener('change', (e) => {
   const chk = e.target.closest('.pill-check');
-  if (chk) togglePastillaHoy(chk.dataset.id, chk.checked);
+  if (chk) { togglePastillaHoy(chk.dataset.id, chk.checked); return; }
+  const vchk = e.target.closest('.vit-check');
+  if (vchk) toggleVitaminaTipoHoy(vchk.dataset.id, vchk.checked);
 });
 
 $('pastFecha').addEventListener('change', renderPastillas);
@@ -304,6 +455,8 @@ async function togglePastillaHoy(pastillaId, tomada) {
   renderPastillas();
 }
 
+const totalPanal = (rows) => `💩 ${rows.filter((r) => r.heces).length} · 💧 ${rows.filter((r) => r.orina).length}`;
+
 function renderPanales() {
   if (!$('panFechaHora').value) $('panFechaHora').value = dtLocal(new Date());
   const rows = cache.panales || [];
@@ -311,7 +464,9 @@ function renderPanales() {
     ['Hora', 'Heces', 'Orina'],
     groupByDay(rows, 'fecha_hora'),
     (r) =>
-      `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.heces ? '💩 Sí' : '—'}</td><td>${r.orina ? '💧 Sí' : '—'}</td>${accionesTd('panales', r.id)}</tr>`
+      `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.heces ? '💩 Sí' : '—'}</td><td>${r.orina ? '💧 Sí' : '—'}</td>${accionesTd('panales', r.id)}</tr>`,
+    totalPanal,
+    totalPanal
   );
   renderPanalesDash();
 }
@@ -898,7 +1053,7 @@ $('formSueno').addEventListener('submit', async (e) => {
 // ---------- Edición de registros ----------
 let editRegistro = null; // { tabla, id }
 
-const EDIT_TITULOS = { tomas: 'Editar toma', vitaminas: 'Editar vitaminas', pastillas: 'Editar pastilla', panales: 'Editar cambio de pañal', sueno: 'Editar sueño', bitacora: 'Editar anotación' };
+const EDIT_TITULOS = { tomas: 'Editar toma', vitaminas: 'Editar vitaminas', pastillas: 'Editar pastilla', vitaminas_tipos: 'Editar vitamina', panales: 'Editar cambio de pañal', sueno: 'Editar sueño', bitacora: 'Editar anotación' };
 
 function abrirEdicion(tabla, id) {
   const r = (cache[tabla] || []).find((x) => String(x.id) === String(id));
@@ -923,6 +1078,10 @@ function abrirEdicion(tabla, id) {
         <option value="am"${r.horario === 'am' ? ' selected' : ''}>AM</option>
         <option value="pm"${r.horario === 'pm' ? ' selected' : ''}>PM</option>
       </select></label>`;
+  } else if (tabla === 'vitaminas_tipos') {
+    html = `
+      <label>Nombre<input type="text" id="edVitTipoNombre" maxlength="60" value="${escapeHtml(r.nombre || '')}"></label>
+      <label>Gotas por defecto<input type="number" id="edVitTipoGotas" step="any" inputmode="decimal" value="${r.gotas_default ?? ''}"></label>`;
   } else if (tabla === 'bitacora') {
     html = `
       <label>Título<input type="text" id="edBitTitulo" maxlength="80" value="${escapeHtml(r.titulo || '')}"></label>
@@ -970,6 +1129,12 @@ $('editGuardar').addEventListener('click', async () => {
     if (!nombre) { toast('Escribe el nombre de la pastilla', true); return; }
     cambios.nombre = nombre;
     cambios.horario = $('edPastHorario').value;
+  } else if (tabla === 'vitaminas_tipos') {
+    const nombre = $('edVitTipoNombre').value.trim();
+    if (!nombre) { toast('Escribe el nombre de la vitamina', true); return; }
+    cambios.nombre = nombre;
+    const g = Number($('edVitTipoGotas').value);
+    cambios.gotas_default = g > 0 ? Math.round(g) : null;
   } else if (tabla === 'bitacora') {
     const titulo = $('edBitTitulo').value.trim();
     if (!titulo) { toast('Escribe un título', true); return; }

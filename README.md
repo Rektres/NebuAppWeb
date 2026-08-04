@@ -12,6 +12,8 @@ App web móvil para registrar las rutinas de un bebé: tomas de leche, vitaminas
 
 > **Actualización 2** (siestas en vivo + fecha de nacimiento/peso/talla): si tu base ya corría el esquema de bebés, ejecuta también [`actualizacion-2.sql`](actualizacion-2.sql) una sola vez.
 
+> **Actualizaciones 3 a 8** (pastillas, info del bebé, bitácora, controles, juegos, hora en pastillas, vitaminas por nombre): ejecuta en orden `actualizacion-3.sql` … `actualizacion-8.sql`, cada una una sola vez.
+
 ### 2. Conectar la app
 Las credenciales viven en `config.js`, que **no se sube al repo** (está en `.gitignore`).
 
@@ -44,7 +46,7 @@ La app requiere iniciar sesión, y **solo los correos en la whitelist pueden reg
 ## Uso
 - **📊 Stats**: gráficos de barras de los últimos 7 días (leche, vitaminas, pañales, sueño).
 - **🍼 Leche**: registro de tomas, total del día y objetivo diario con barra de progreso.
-- **💊 Vitaminas**: registro de gotas (5 por defecto).
-- **🧷 Pañales**: registro con heces/orina, tiempo desde el último cambio y última feca.
+- **💊 Vitaminas**: lista de vitaminas por nombre con checklist diario (fecha/hora), además de un registro rápido de dosis sueltas (gotas, sin nombre).
+- **🧷 Pañales**: registro con heces/orina, tiempo desde el último cambio, última feca, y totales diario/mensual en el historial.
 - **😴 Sueño**: hora de dormir/despertar con duración calculada (soporta cruce de medianoche).
 - **⚙️ Configuración**: nombre y foto del bebé, color de la app (5 paletas) — se sincronizan entre dispositivos. Modo oscuro por defecto (botón ☀️/🌙, se guarda por dispositivo).
