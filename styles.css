@@ -152,6 +152,20 @@ main {
   margin-bottom: 12px;
 }
 
+/* Card colapsable (ej: "Mis pastillas") */
+details.card summary {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  list-style: none;
+}
+details.card summary::-webkit-details-marker { display: none; }
+details.card summary::before { content: '▸ '; color: var(--accent); }
+details.card[open] summary::before { content: '▾ '; }
+details.card[open] summary { margin-bottom: 12px; }
+details.card > form { margin-top: 4px; }
+
 /* ---------- Formularios ---------- */
 /* Separación uniforme entre bloques del formulario para que la etiqueta de un
    campo no se confunda con el input del campo de arriba */
@@ -247,6 +261,19 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
   font-size: 0.7rem; cursor: pointer; line-height: 1;
 }
 
+/* Lista del súper: checklist con cantidad, agregar rápido, items de una compra */
+.super-row { display: flex; align-items: center; gap: 8px; }
+.super-row .check-pill { flex: 1; min-width: 0; }
+.super-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+input.super-qty { width: 56px; flex: none; height: 40px; text-align: center; padding: 0 4px; }
+.super-cat { margin: 10px 0 2px; }
+.super-cat:first-child { margin-top: 0; }
+.super-quick { display: flex; gap: 8px; margin-top: 10px; }
+.super-quick input { flex: 1; }
+.super-quick button { width: auto; flex: none; }
+.super-items { list-style: none; display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.super-items li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.9rem; color: var(--text-2); }
+
 /* Reordenar pestañas (configuración) */
 .orden-lista { display: flex; flex-direction: column; gap: 6px; }
 .orden-row {
@@ -284,6 +311,36 @@ input[type="date"], input[type="time"] { display: block; line-height: 44px; }
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .check-pill input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+/* Checkbox propio (algunos navegadores/temas oscuros del sistema dibujan el
+   checkbox nativo como un switch grande y descuadran la fila) */
+.check-pill input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  flex: none;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  position: relative;
+}
+.check-pill input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.check-pill input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--accent-ink);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
 
 /* ---------- Botones ---------- */
 .btn-primary, .btn-secondary, .btn-danger {
