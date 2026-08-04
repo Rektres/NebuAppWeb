@@ -180,8 +180,9 @@ function tablaHTML(headers, grupos, filaFn, subtotalFn, subtotalMesFn) {
       html += `<tr class="month-row month-toggle" data-month="${grupo.mes}"><td colspan="${cols}"><span class="caret">▸</span> ${fmtMesLabel(grupo.mes)}${subtotalMes}</td></tr>`;
       for (const [key, rows] of grupo.dias) {
         const subtotal = subtotalFn ? `<span style="float:right">${subtotalFn(rows)}</span>` : '';
-        html += `<tr class="day-row m-${grupo.mes} hidden"><td colspan="${cols}">${fmtDayLabel(key)}${subtotal}</td></tr>`;
-        html += rows.map(filaFn).map((tr) => tr.replace('<tr>', `<tr class="m-${grupo.mes} hidden">`)).join('');
+        // Cada día dentro del mes también se puede colapsar (si no, la lista se hace interminable)
+        html += `<tr class="day-row day-toggle m-${grupo.mes} hidden" data-day="${key}"><td colspan="${cols}"><span class="caret">▸</span> ${fmtDayLabel(key)}${subtotal}</td></tr>`;
+        html += rows.map(filaFn).map((tr) => tr.replace('<tr>', `<tr class="drow d-${key} m-${grupo.mes} hidden">`)).join('');
       }
     }
   }
@@ -207,8 +208,9 @@ function historialColapsable(rows, keyFn, itemHTML) {
     } else {
       html += `<div class="col-month month-toggle" data-month="${grupo.mes}"><span class="caret">▸</span> ${fmtMesLabel(grupo.mes)}</div>`;
       for (const [key, items] of grupo.dias) {
-        html += `<div class="col-day m-${grupo.mes} hidden">${fmtDayLabel(key)}</div>`;
-        html += items.map((r) => `<div class="drow m-${grupo.mes} hidden">${itemHTML(r)}</div>`).join('');
+        // Cada día dentro del mes también se puede colapsar (si no, la lista se hace interminable)
+        html += `<div class="col-day day-toggle m-${grupo.mes} hidden" data-day="${key}"><span class="caret">▸</span> ${fmtDayLabel(key)}</div>`;
+        html += items.map((r) => `<div class="drow d-${key} m-${grupo.mes} hidden">${itemHTML(r)}</div>`).join('');
       }
     }
   }
@@ -232,8 +234,9 @@ function historialChecklistHTML(dias, itemsDelDiaFn, colspan) {
     } else {
       html += `<tr class="month-row month-toggle" data-month="${grupo.mes}"><td colspan="${colspan}"><span class="caret">▸</span> ${fmtMesLabel(grupo.mes)}</td></tr>`;
       for (const [d] of grupo.dias) {
-        html += `<tr class="day-row m-${grupo.mes} hidden"><td colspan="${colspan}">${fmtDayLabel(d)}</td></tr>`;
-        html += itemsDelDiaFn(d).map((tr) => tr.replace('<tr>', `<tr class="m-${grupo.mes} hidden">`)).join('');
+        // Cada día dentro del mes también se puede colapsar (si no, la lista se hace interminable)
+        html += `<tr class="day-row day-toggle m-${grupo.mes} hidden" data-day="${d}"><td colspan="${colspan}"><span class="caret">▸</span> ${fmtDayLabel(d)}</td></tr>`;
+        html += itemsDelDiaFn(d).map((tr) => tr.replace('<tr>', `<tr class="drow d-${d} m-${grupo.mes} hidden">`)).join('');
       }
     }
   }
@@ -253,7 +256,19 @@ document.addEventListener('click', (e) => {
   if (mt) {
     const abierto = mt.classList.toggle('abierto');
     mt.querySelector('.caret').textContent = abierto ? '▾' : '▸';
-    mt.closest('table, .col-list').querySelectorAll('.m-' + CSS.escape(mt.dataset.month)).forEach((r) => r.classList.toggle('hidden', !abierto));
+    mt.closest('table, .col-list').querySelectorAll('.m-' + CSS.escape(mt.dataset.month)).forEach((el) => {
+      if (el.classList.contains('day-toggle')) {
+        // Encabezados de día: aparecen/desaparecen con el mes, siempre colapsados al abrirlo
+        // (si no, la lista de un mes completo se hace interminable)
+        el.classList.toggle('hidden', !abierto);
+        el.classList.remove('abierto');
+        const caret = el.querySelector('.caret');
+        if (caret) caret.textContent = '▸';
+      } else {
+        // Filas de contenido: solo se ven si además se abre su día puntual
+        el.classList.add('hidden');
+      }
+    });
   }
 });
 
