@@ -19,7 +19,7 @@ create table bebes (
   grupo_sanguineo text,
   alergias text,
   rutinas text,
-  lata_gramos numeric default 800,     -- tamaño de la lata de fórmula
+  lata_gramos numeric default 800,     -- tamaño del tarro/lata de fórmula en gramos
   lata_abierta_en timestamptz,          -- cuándo se abrió la lata actual
   latas_usadas integer default 0,       -- contador de latas abiertas
   created_at timestamptz default now()
@@ -59,8 +59,7 @@ create table vitaminas (
   created_at timestamptz default now()
 );
 
--- Vitaminas por nombre: lista maestra + checklist diario (además del registro
--- rápido de arriba, sin nombre)
+-- Vitaminas por nombre: lista maestra + checklist diario
 create table vitaminas_tipos (
   id bigint generated always as identity primary key,
   bebe_id uuid not null references bebes(id) on delete cascade,
@@ -96,25 +95,6 @@ create table sueno (
   created_at timestamptz default now()
 );
 
--- Pastillas: lista maestra de medicamentos del bebé
-create table pastillas (
-  id bigint generated always as identity primary key,
-  bebe_id uuid not null references bebes(id) on delete cascade,
-  nombre text not null,
-  horario text, -- 'am' | 'pm'
-  created_at timestamptz default now()
-);
-
--- Registro diario: una fila = esa pastilla fue tomada ese día
-create table pastillas_log (
-  id bigint generated always as identity primary key,
-  bebe_id uuid not null references bebes(id) on delete cascade,
-  pastilla_id bigint not null references pastillas(id) on delete cascade,
-  fecha date not null,
-  hora time, -- hora en que se tomó (opcional)
-  unique (pastilla_id, fecha)
-);
-
 -- Bitácora: hitos / anotaciones libres
 create table bitacora (
   id bigint generated always as identity primary key,
@@ -122,24 +102,6 @@ create table bitacora (
   titulo text not null,
   fecha date not null,
   notas text,
-  created_at timestamptz default now()
-);
-
--- Controles médicos (control de niño sano)
-create table controles (
-  id bigint generated always as identity primary key,
-  bebe_id uuid not null references bebes(id) on delete cascade,
-  control text,                 -- cuál control (díada … 12 meses)
-  profesional text,
-  fecha date not null,
-  edad text,
-  peso_kg numeric,
-  talla_cm numeric,
-  perimetro_craneal numeric,
-  diagnostico_nutricional text,
-  diagnostico text,
-  indicaciones text,
-  alimentacion text,            -- códigos separados por coma: LME,LMP,FP,FE
   created_at timestamptz default now()
 );
 
@@ -154,35 +116,6 @@ create table juegos (
   observaciones text,
   fotos jsonb default '[]'::jsonb,  -- arreglo de imágenes base64
   created_at timestamptz default now()
-);
-
--- Lista del súper: lista maestra de productos
-create table super (
-  id bigint generated always as identity primary key,
-  bebe_id uuid not null references bebes(id) on delete cascade,
-  nombre text not null,
-  categoria text,
-  created_at timestamptz default now()
-);
-
--- Compras: una "Compra Finalizada" = un viaje/boleta, con foto y monto
-create table compras (
-  id bigint generated always as identity primary key,
-  bebe_id uuid not null references bebes(id) on delete cascade,
-  fecha_hora timestamptz not null,
-  foto_boleta text,      -- imagen base64 de la boleta (opcional)
-  monto_total numeric,
-  notas text,
-  created_at timestamptz default now()
-);
-
--- Productos dentro de una compra
-create table compra_items (
-  id bigint generated always as identity primary key,
-  bebe_id uuid not null references bebes(id) on delete cascade,
-  compra_id bigint not null references compras(id) on delete cascade,
-  producto_id bigint not null references super(id) on delete cascade,
-  cantidad integer not null default 1
 );
 
 -- ============================================================
@@ -259,16 +192,10 @@ alter table tomas enable row level security;
 alter table vitaminas enable row level security;
 alter table panales enable row level security;
 alter table sueno enable row level security;
-alter table pastillas enable row level security;
-alter table pastillas_log enable row level security;
 alter table vitaminas_tipos enable row level security;
 alter table vitaminas_tipos_log enable row level security;
 alter table bitacora enable row level security;
-alter table controles enable row level security;
 alter table juegos enable row level security;
-alter table super enable row level security;
-alter table compras enable row level security;
-alter table compra_items enable row level security;
 
 create policy "padres ven su bebe" on bebes for select to authenticated
   using (id in (select mis_bebes()));
@@ -288,23 +215,11 @@ create policy "solo padres" on panales for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
 create policy "solo padres" on sueno for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
-create policy "solo padres" on pastillas for all to authenticated
-  using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
-create policy "solo padres" on pastillas_log for all to authenticated
-  using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
 create policy "solo padres" on vitaminas_tipos for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
 create policy "solo padres" on vitaminas_tipos_log for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
 create policy "solo padres" on bitacora for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
-create policy "solo padres" on controles for all to authenticated
-  using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
 create policy "solo padres" on juegos for all to authenticated
-  using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
-create policy "solo padres" on super for all to authenticated
-  using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
-create policy "solo padres" on compras for all to authenticated
-  using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));
-create policy "solo padres" on compra_items for all to authenticated
   using (bebe_id in (select mis_bebes())) with check (bebe_id in (select mis_bebes()));

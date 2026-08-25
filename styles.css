@@ -391,7 +391,7 @@ tbody td { padding: 10px; border-bottom: 1px solid var(--grid); color: var(--tex
 tbody tr:last-child td { border-bottom: none; }
 
 tr.day-row td {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--text);
   font-weight: 700;
   font-size: 0.85rem;
@@ -401,7 +401,19 @@ tr.day-row td {
 tr.day-toggle { cursor: pointer; }
 .day-toggle .caret { display: inline-block; width: 1em; color: var(--accent); }
 
-/* Mes ya completo, colapsado: un solo renglón que se desgloza en días al abrirlo */
+/* Semana agrupada */
+tr.week-row td {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.84rem;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.week-toggle .caret { display: inline-block; width: 1em; color: var(--accent); }
+
+/* Mes ya completo, colapsado: un solo renglón que se desgloza en semanas al abrirlo */
 tr.month-row td {
   background: color-mix(in srgb, var(--accent) 26%, transparent);
   color: var(--text);
@@ -413,18 +425,30 @@ tr.month-row td {
 }
 .month-toggle .caret { display: inline-block; width: 1em; color: var(--accent); }
 
-/* Historial en tarjetas agrupado por día (bitácora, controles, juegos) */
+/* Historial en tarjetas agrupado por día (bitácora, juegos) */
 .col-day {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--text);
   font-weight: 700;
   font-size: 0.85rem;
   padding: 8px 10px;
   border-radius: 8px;
   cursor: pointer;
-  margin: 12px 0 8px;
+  margin: 8px 0 6px;
 }
 .col-day:first-child { margin-top: 0; }
+
+.col-week {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.84rem;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin: 10px 0 6px;
+}
+.col-week:first-child { margin-top: 0; }
 
 .col-month {
   background: color-mix(in srgb, var(--accent) 26%, transparent);
@@ -509,7 +533,34 @@ td.td-action { text-align: right; width: 64px; white-space: nowrap; }
 .seg-hint { margin: 8px 4px 0; }
 
 .chart-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
-.chart-head h2 { margin-bottom: 0; }
+.chart-head h2 { margin-bottom: 0; font-size: 0.95rem; }
+.chart-actions { display: flex; align-items: center; gap: 6px; }
+
+.chart-type-toggle {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+}
+.chart-type-toggle .type-btn {
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: var(--muted);
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.chart-type-toggle .type-btn.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
 .zoom-reset {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -520,7 +571,16 @@ td.td-action { text-align: right; width: 64px; white-space: nowrap; }
   flex-shrink: 0;
   cursor: pointer;
   font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+
+/* FAQ */
+.faq-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.faq-item { background: var(--surface-2); padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); }
+.faq-item strong { display: block; font-size: 0.88rem; color: var(--text); margin-bottom: 4px; }
+.faq-item p { font-size: 0.82rem; color: var(--text-2); margin: 0; line-height: 1.4; }
 
 /* ---------- Tab bar ---------- */
 .tabbar {

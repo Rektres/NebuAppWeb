@@ -41,7 +41,7 @@ function fmtDayLabel(key) {
 
 function groupByDay(rows, field) {
   const map = new Map();
-  for (const r of rows) {
+  for (const r of rows || []) {
     const k = dayKey(new Date(r[field]));
     if (!map.has(k)) map.set(k, []);
     map.get(k).push(r);
@@ -49,9 +49,7 @@ function groupByDay(rows, field) {
   return map;
 }
 
-// ---------- Agrupación mensual del historial ----------
-// El mes en curso se muestra por día como siempre; los meses ya completos se
-// colapsan en un solo renglón que se "desgloza" en sus días al abrirlo.
+// ---------- Agrupación semanal y mensual del historial ----------
 const mesActualKey = () => dayKey(new Date()).slice(0, 7);
 const mesKeyDe = (dk) => dk.slice(0, 7);
 
@@ -61,16 +59,53 @@ function fmtMesLabel(mk) {
   return txt.charAt(0).toUpperCase() + txt.slice(1);
 }
 
-// Recibe pares [dayKey, payload] YA ordenados (desc) y los agrupa por mes,
-// preservando el orden; marca cada grupo como "actual" (mes en curso) o no.
-function agruparPorMes(diasOrdenados) {
-  const actual = mesActualKey();
+function semanaDelMes(dayK) {
+  const d = new Date(`${dayK}T12:00`);
+  const dia = d.getDate();
+  return Math.floor((dia - 1) / 7) + 1; // 1..5
+}
+
+function semanaLabel(mesKey, semNum) {
+  const [y, m] = mesKey.split('-').map(Number);
+  const diasEnMes = new Date(y, m, 0).getDate();
+  const dIni = (semNum - 1) * 7 + 1;
+  const dFin = Math.min(diasEnMes, semNum * 7);
+  const dObj = new Date(y, m - 1, dIni, 12, 0);
+  const mesTxt = dObj.toLocaleDateString('es', { month: 'short' });
+  return `Semana ${semNum} · ${dIni} al ${dFin} de ${mesTxt}`;
+}
+
+// Agrupa días ordenados descendentemente en Meses y Semanas del Mes
+function agruparPorMesYSemana(diasOrdenados) {
+  const actualMes = mesActualKey();
+  const hoyK = dayKey(new Date());
+  const hoySemNum = semanaDelMes(hoyK);
+  const hoySemKey = `${actualMes}-s${hoySemNum}`;
+
   const meses = [];
   for (const [dk, payload] of diasOrdenados) {
     const mk = mesKeyDe(dk);
-    let grupo = meses[meses.length - 1];
-    if (!grupo || grupo.mes !== mk) { grupo = { mes: mk, actual: mk === actual, dias: [] }; meses.push(grupo); }
-    grupo.dias.push([dk, payload]);
+    let grupoMes = meses[meses.length - 1];
+    if (!grupoMes || grupoMes.mes !== mk) {
+      grupoMes = { mes: mk, actual: mk === actualMes, semanas: [] };
+      meses.push(grupoMes);
+    }
+
+    const semNum = semanaDelMes(dk);
+    const semKey = `${mk}-s${semNum}`;
+    let grupoSem = grupoMes.semanas[grupoMes.semanas.length - 1];
+    if (!grupoSem || grupoSem.key !== semKey) {
+      grupoSem = {
+        key: semKey,
+        num: semNum,
+        mes: mk,
+        label: semanaLabel(mk, semNum),
+        actual: semKey === hoySemKey,
+        dias: [],
+      };
+      grupoMes.semanas.push(grupoSem);
+    }
+    grupoSem.dias.push([dk, payload]);
   }
   return meses;
 }
@@ -92,36 +127,64 @@ function toast(msg, isError = false) {
 function setNowDefaults() {
   const now = new Date();
   const f = dayKey(now), h = fmtTime(now);
-  for (const id of ['vitFecha', 'suenoFecha']) $(id).value = f;
-  for (const id of ['vitHora', 'suenoInicio', 'suenoFin']) $(id).value = h;
+  for (const id of ['vitFecha', 'suenoFecha', 'panFechaHora', 'lecheFechaHora']) {
+    if ($(id)) {
+      if (id.includes('FechaHora')) $(id).value = dtLocal(now);
+      else $(id).value = f;
+    }
+  }
+  if ($('vitHora')) $('vitHora').value = h;
+  if ($('suenoInicio')) $('suenoInicio').value = h;
+  if ($('suenoFin')) $('suenoFin').value = h;
+  if ($('vitTipoFecha')) $('vitTipoFecha').value = f;
+  if ($('vitTipoHora')) $('vitTipoHora').value = h;
 }
 
 // ---------- Estado ----------
-const cache = { tomas: null, vitaminas: null, panales: null, sueno: null, pastillas: null, pastillas_log: null, vitaminas_tipos: null, vitaminas_tipos_log: null, miembros: null, bitacora: null, controles: null, juegos: null, super: null, compras: null, compra_items: null };
-let bebe = null;    // fila de la tabla bebes (nombre, foto, paleta, codigo)
-let miRol = null;   // 'madre' | 'padre'
-let usuario = null; // session.user
+const cache = {
+  tomas: null,
+  vitaminas: null,
+  panales: null,
+  sueno: null,
+  vitaminas_tipos: null,
+  vitaminas_tipos_log: null,
+  miembros: null,
+  bitacora: null,
+  juegos: null,
+};
+
+let bebe = null;
+let miRol = null;
+let usuario = null;
+let currentTab = 'stats';
 let statsDirty = true;
 let appStarted = false;
-let currentTab = 'stats';
-let fotoPendiente; // base64 elegido en el modal, aún sin guardar
 
 // ---------- Datos ----------
-async function fetchTable(tabla, campoOrden) {
-  const { data, error } = await db.from(tabla).select('*')
-    .eq('bebe_id', bebe.id)
-    .order(campoOrden, { ascending: false }).limit(500);
-  if (error) { toast(`Error cargando ${tabla}: ${error.message}`, true); return []; }
-  return data;
-}
+const ORDEN = {
+  sueno: 'inicio',
+  vitaminas_tipos: 'id',
+  vitaminas_tipos_log: 'fecha',
+  miembros: 'created_at',
+  bitacora: 'fecha',
+  juegos: 'fecha',
+};
 
-const ORDEN = { sueno: 'inicio', pastillas: 'id', pastillas_log: 'fecha', vitaminas_tipos: 'id', vitaminas_tipos_log: 'fecha', miembros: 'created_at', bitacora: 'fecha', controles: 'fecha', juegos: 'fecha', super: 'id', compra_items: 'id' };
 async function loadData(tabla) {
-  cache[tabla] = await fetchTable(tabla, ORDEN[tabla] || 'fecha_hora');
+  if (!bebe?.id) return;
+  const col = ORDEN[tabla] || 'fecha_hora';
+  const { data, error } = await db
+    .from(tabla)
+    .select('*')
+    .eq('bebe_id', bebe.id)
+    .order(col, { ascending: false })
+    .limit(500);
+  if (error) toast(`Error cargando ${tabla}: ${error.message}`, true);
+  else cache[tabla] = data || [];
 }
 
 async function loadAll() {
-  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno', 'pastillas', 'pastillas_log', 'vitaminas_tipos', 'vitaminas_tipos_log', 'miembros', 'bitacora', 'controles', 'juegos', 'super', 'compras', 'compra_items'].map(loadData));
+  await Promise.all(['tomas', 'vitaminas', 'panales', 'sueno', 'vitaminas_tipos', 'vitaminas_tipos_log', 'miembros', 'bitacora', 'juegos'].map(loadData));
   statsDirty = true;
 }
 
@@ -144,182 +207,240 @@ async function eliminar(tabla, id) {
   renderTab(currentTab);
 }
 
-// Delegación de clicks para los botones ✏️/🗑 de todas las tablas
+// Delegación de clicks para botones ✏️/🗑
 document.addEventListener('click', (e) => {
   const del = e.target.closest('.del-btn');
   if (del) { eliminar(del.dataset.tabla, del.dataset.id); return; }
   const ed = e.target.closest('.edit-btn');
   if (ed) {
-    if (ed.dataset.tabla === 'controles') cargarControl(ed.dataset.id);
-    else if (ed.dataset.tabla === 'juegos') cargarJuego(ed.dataset.id);
+    if (ed.dataset.tabla === 'juegos') cargarJuego(ed.dataset.id);
     else abrirEdicion(ed.dataset.tabla, ed.dataset.id);
   }
 });
 
-// ---------- Render de tablas ----------
-// Cada día muestra sus filas (día actual expandido, el resto compactado); una vez
-// que un mes queda completo (ya no es el mes en curso), sus días se colapsan bajo
-// un solo renglón de mes que se desgloza en días al abrirlo (subtotalMesFn opcional).
+// ---------- Render de tablas con colapso por Semana y Mes ----------
 function tablaHTML(headers, grupos, filaFn, subtotalFn, subtotalMesFn) {
   if (!grupos.size) return '<p class="empty-msg">Sin registros todavía</p>';
   const cols = headers.length + 1;
   const hoy = dayKey(new Date());
-  const meses = agruparPorMes([...grupos.entries()]);
+  const meses = agruparPorMesYSemana([...grupos.entries()]);
   let html = `<table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}<th></th></tr></thead><tbody>`;
-  for (const grupo of meses) {
-    if (grupo.actual) {
-      for (const [key, rows] of grupo.dias) {
-        const abierto = key === hoy;
-        const subtotal = subtotalFn ? `<span style="float:right">${subtotalFn(rows)}</span>` : '';
-        html += `<tr class="day-row day-toggle${abierto ? ' abierto' : ''}" data-day="${key}"><td colspan="${cols}"><span class="caret">${abierto ? '▾' : '▸'}</span> ${fmtDayLabel(key)}${subtotal}</td></tr>`;
-        html += rows.map(filaFn).map((tr) => tr.replace('<tr>', `<tr class="drow d-${key}${abierto ? '' : ' hidden'}">`)).join('');
+
+  for (const grupoMes of meses) {
+    if (grupoMes.actual) {
+      // Mes actual: se muestran directamente sus semanas
+      for (const sem of grupoMes.semanas) {
+        const semAbierta = sem.actual;
+        html += `<tr class="week-row week-toggle${semAbierta ? ' abierto' : ''}" data-week="${sem.key}"><td colspan="${cols}"><span class="caret">${semAbierta ? '▾' : '▸'}</span> <strong>${sem.label}</strong></td></tr>`;
+        for (const [key, rows] of sem.dias) {
+          const diaAbierto = semAbierta && key === hoy;
+          const subtotal = subtotalFn ? `<span style="float:right">${subtotalFn(rows)}</span>` : '';
+          html += `<tr class="day-row day-toggle w-${sem.key}${semAbierta ? '' : ' hidden'}${diaAbierto ? ' abierto' : ''}" data-day="${key}"><td colspan="${cols}"><span class="caret">${diaAbierto ? '▾' : '▸'}</span> ${fmtDayLabel(key)}${subtotal}</td></tr>`;
+          html += rows.map(filaFn).map((tr) => tr.replace('<tr>', `<tr class="drow d-${key} w-${sem.key}${diaAbierto ? '' : ' hidden'}">`)).join('');
+        }
       }
     } else {
-      const todasFilas = grupo.dias.flatMap(([, rows]) => rows);
+      // Mes completado: colapsado en un renglón mensual
+      const todasFilas = grupoMes.semanas.flatMap((s) => s.dias.flatMap(([, rows]) => rows));
       const subtotalMes = subtotalMesFn ? `<span style="float:right">${subtotalMesFn(todasFilas)}</span>` : '';
-      html += `<tr class="month-row month-toggle" data-month="${grupo.mes}"><td colspan="${cols}"><span class="caret">▸</span> ${fmtMesLabel(grupo.mes)}${subtotalMes}</td></tr>`;
-      for (const [key, rows] of grupo.dias) {
-        const subtotal = subtotalFn ? `<span style="float:right">${subtotalFn(rows)}</span>` : '';
-        // Cada día dentro del mes también se puede colapsar (si no, la lista se hace interminable)
-        html += `<tr class="day-row day-toggle m-${grupo.mes} hidden" data-day="${key}"><td colspan="${cols}"><span class="caret">▸</span> ${fmtDayLabel(key)}${subtotal}</td></tr>`;
-        html += rows.map(filaFn).map((tr) => tr.replace('<tr>', `<tr class="drow d-${key} m-${grupo.mes} hidden">`)).join('');
+      html += `<tr class="month-row month-toggle" data-month="${grupoMes.mes}"><td colspan="${cols}"><span class="caret">▸</span> <strong>${fmtMesLabel(grupoMes.mes)}</strong>${subtotalMes}</td></tr>`;
+      for (const sem of grupoMes.semanas) {
+        html += `<tr class="week-row week-toggle m-${grupoMes.mes} hidden" data-week="${sem.key}"><td colspan="${cols}"><span class="caret">▸</span> ${sem.label}</td></tr>`;
+        for (const [key, rows] of sem.dias) {
+          const subtotal = subtotalFn ? `<span style="float:right">${subtotalFn(rows)}</span>` : '';
+          html += `<tr class="day-row day-toggle m-${grupoMes.mes} w-${sem.key} hidden" data-day="${key}"><td colspan="${cols}"><span class="caret">▸</span> ${fmtDayLabel(key)}${subtotal}</td></tr>`;
+          html += rows.map(filaFn).map((tr) => tr.replace('<tr>', `<tr class="drow d-${key} m-${grupoMes.mes} w-${sem.key} hidden">`)).join('');
+        }
       }
     }
   }
   return html + '</tbody></table>';
 }
 
-// Historial en tarjetas agrupadas por día (bitácora, controles, juegos); misma
-// regla de colapso mensual que tablaHTML.
 function historialColapsable(rows, keyFn, itemHTML) {
   if (!rows.length) return '<p class="empty-msg">Sin registros todavía</p>';
   const hoy = dayKey(new Date());
   const grupos = new Map();
-  for (const r of rows) { const k = keyFn(r); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(r); }
-  const meses = agruparPorMes([...grupos.entries()]);
+  for (const r of rows) {
+    const k = keyFn(r);
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(r);
+  }
+  const meses = agruparPorMesYSemana([...grupos.entries()]);
   let html = '<div class="col-list">';
-  for (const grupo of meses) {
-    if (grupo.actual) {
-      for (const [key, items] of grupo.dias) {
-        const abierto = key === hoy;
-        html += `<div class="col-day day-toggle${abierto ? ' abierto' : ''}" data-day="${key}"><span class="caret">${abierto ? '▾' : '▸'}</span> ${fmtDayLabel(key)}</div>`;
-        html += items.map((r) => `<div class="drow d-${key}${abierto ? '' : ' hidden'}">${itemHTML(r)}</div>`).join('');
+
+  for (const grupoMes of meses) {
+    if (grupoMes.actual) {
+      for (const sem of grupoMes.semanas) {
+        const semAbierta = sem.actual;
+        html += `<div class="col-week week-toggle${semAbierta ? ' abierto' : ''}" data-week="${sem.key}"><span class="caret">${semAbierta ? '▾' : '▸'}</span> <strong>${sem.label}</strong></div>`;
+        for (const [key, items] of sem.dias) {
+          const diaAbierto = semAbierta && key === hoy;
+          html += `<div class="col-day day-toggle w-${sem.key}${semAbierta ? '' : ' hidden'}${diaAbierto ? ' abierto' : ''}" data-day="${key}"><span class="caret">${diaAbierto ? '▾' : '▸'}</span> ${fmtDayLabel(key)}</div>`;
+          html += items.map((r) => `<div class="drow d-${key} w-${sem.key}${diaAbierto ? '' : ' hidden'}">${itemHTML(r)}</div>`).join('');
+        }
       }
     } else {
-      html += `<div class="col-month month-toggle" data-month="${grupo.mes}"><span class="caret">▸</span> ${fmtMesLabel(grupo.mes)}</div>`;
-      for (const [key, items] of grupo.dias) {
-        // Cada día dentro del mes también se puede colapsar (si no, la lista se hace interminable)
-        html += `<div class="col-day day-toggle m-${grupo.mes} hidden" data-day="${key}"><span class="caret">▸</span> ${fmtDayLabel(key)}</div>`;
-        html += items.map((r) => `<div class="drow d-${key} m-${grupo.mes} hidden">${itemHTML(r)}</div>`).join('');
+      html += `<div class="col-month month-toggle" data-month="${grupoMes.mes}"><span class="caret">▸</span> <strong>${fmtMesLabel(grupoMes.mes)}</strong></div>`;
+      for (const sem of grupoMes.semanas) {
+        html += `<div class="col-week week-toggle m-${grupoMes.mes} hidden" data-week="${sem.key}"><span class="caret">▸</span> ${sem.label}</div>`;
+        for (const [key, items] of sem.dias) {
+          html += `<div class="col-day day-toggle m-${grupoMes.mes} w-${sem.key} hidden" data-day="${key}"><span class="caret">▸</span> ${fmtDayLabel(key)}</div>`;
+          html += items.map((r) => `<div class="drow d-${key} m-${grupoMes.mes} w-${sem.key} hidden">${itemHTML(r)}</div>`).join('');
+        }
       }
     }
   }
   return html + '</div>';
 }
 
-// Historial de un checklist diario (pastillas, vitaminas por nombre): mismo
-// esquema de colapso mensual; itemsDelDiaFn(d) devuelve las filas <tr> del día.
 function historialChecklistHTML(dias, itemsDelDiaFn, colspan) {
   if (!dias.length) return '<p class="empty-msg">Sin registros todavía</p>';
   const hoyKey = dayKey(new Date());
-  const meses = agruparPorMes(dias.map((d) => [d, d]));
+  const meses = agruparPorMesYSemana(dias.map((d) => [d, d]));
   let html = '';
-  for (const grupo of meses) {
-    if (grupo.actual) {
-      for (const [d] of grupo.dias) {
-        const abierto = d === hoyKey;
-        html += `<tr class="day-row day-toggle${abierto ? ' abierto' : ''}" data-day="${d}"><td colspan="${colspan}"><span class="caret">${abierto ? '▾' : '▸'}</span> ${fmtDayLabel(d)}</td></tr>`;
-        html += itemsDelDiaFn(d).map((tr) => tr.replace('<tr>', `<tr class="drow d-${d}${abierto ? '' : ' hidden'}">`)).join('');
+
+  for (const grupoMes of meses) {
+    if (grupoMes.actual) {
+      for (const sem of grupoMes.semanas) {
+        const semAbierta = sem.actual;
+        html += `<tr class="week-row week-toggle${semAbierta ? ' abierto' : ''}" data-week="${sem.key}"><td colspan="${colspan}"><span class="caret">${semAbierta ? '▾' : '▸'}</span> <strong>${sem.label}</strong></td></tr>`;
+        for (const [d] of sem.dias) {
+          const diaAbierto = semAbierta && d === hoyKey;
+          html += `<tr class="day-row day-toggle w-${sem.key}${semAbierta ? '' : ' hidden'}${diaAbierto ? ' abierto' : ''}" data-day="${d}"><td colspan="${colspan}"><span class="caret">${diaAbierto ? '▾' : '▸'}</span> ${fmtDayLabel(d)}</td></tr>`;
+          html += itemsDelDiaFn(d).map((tr) => tr.replace('<tr>', `<tr class="drow d-${d} w-${sem.key}${diaAbierto ? '' : ' hidden'}">`)).join('');
+        }
       }
     } else {
-      html += `<tr class="month-row month-toggle" data-month="${grupo.mes}"><td colspan="${colspan}"><span class="caret">▸</span> ${fmtMesLabel(grupo.mes)}</td></tr>`;
-      for (const [d] of grupo.dias) {
-        // Cada día dentro del mes también se puede colapsar (si no, la lista se hace interminable)
-        html += `<tr class="day-row day-toggle m-${grupo.mes} hidden" data-day="${d}"><td colspan="${colspan}"><span class="caret">▸</span> ${fmtDayLabel(d)}</td></tr>`;
-        html += itemsDelDiaFn(d).map((tr) => tr.replace('<tr>', `<tr class="drow d-${d} m-${grupo.mes} hidden">`)).join('');
+      html += `<tr class="month-row month-toggle" data-month="${grupoMes.mes}"><td colspan="${colspan}"><span class="caret">▸</span> <strong>${fmtMesLabel(grupoMes.mes)}</strong></td></tr>`;
+      for (const sem of grupoMes.semanas) {
+        html += `<tr class="week-row week-toggle m-${grupoMes.mes} hidden" data-week="${sem.key}"><td colspan="${colspan}"><span class="caret">▸</span> ${sem.label}</td></tr>`;
+        for (const [d] of sem.dias) {
+          html += `<tr class="day-row day-toggle m-${grupoMes.mes} w-${sem.key} hidden" data-day="${d}"><td colspan="${colspan}"><span class="caret">▸</span> ${fmtDayLabel(d)}</td></tr>`;
+          html += itemsDelDiaFn(d).map((tr) => tr.replace('<tr>', `<tr class="drow d-${d} m-${grupoMes.mes} w-${sem.key} hidden">`)).join('');
+        }
       }
     }
   }
   return `<table><tbody>${html}</tbody></table>`;
 }
 
-// Expandir/compactar un día o un mes del historial (tablas o listas de tarjetas)
+// Handler interactivo para colapso de Mes, Semana y Día
 document.addEventListener('click', (e) => {
   const dt = e.target.closest('.day-toggle');
   if (dt) {
     const abierto = dt.classList.toggle('abierto');
-    dt.querySelector('.caret').textContent = abierto ? '▾' : '▸';
+    const caret = dt.querySelector('.caret');
+    if (caret) caret.textContent = abierto ? '▾' : '▸';
     dt.closest('table, .col-list').querySelectorAll('.d-' + CSS.escape(dt.dataset.day)).forEach((r) => r.classList.toggle('hidden', !abierto));
     return;
   }
+
+  const wt = e.target.closest('.week-toggle');
+  if (wt) {
+    const abierto = wt.classList.toggle('abierto');
+    const caret = wt.querySelector('.caret');
+    if (caret) caret.textContent = abierto ? '▾' : '▸';
+    const cont = wt.closest('table, .col-list');
+    const wClass = '.w-' + CSS.escape(wt.dataset.week);
+    cont.querySelectorAll(wClass).forEach((el) => {
+      if (el.classList.contains('day-toggle')) {
+        el.classList.toggle('hidden', !abierto);
+        if (!abierto) {
+          el.classList.remove('abierto');
+          const dCaret = el.querySelector('.caret');
+          if (dCaret) dCaret.textContent = '▸';
+          cont.querySelectorAll('.d-' + CSS.escape(el.dataset.day)).forEach((r) => r.classList.add('hidden'));
+        }
+      } else if (el.classList.contains('drow')) {
+        if (!abierto) el.classList.add('hidden');
+      }
+    });
+    return;
+  }
+
   const mt = e.target.closest('.month-toggle');
   if (mt) {
     const abierto = mt.classList.toggle('abierto');
-    mt.querySelector('.caret').textContent = abierto ? '▾' : '▸';
-    mt.closest('table, .col-list').querySelectorAll('.m-' + CSS.escape(mt.dataset.month)).forEach((el) => {
-      if (el.classList.contains('day-toggle')) {
-        // Encabezados de día: aparecen/desaparecen con el mes, siempre colapsados al abrirlo
-        // (si no, la lista de un mes completo se hace interminable)
+    const caret = mt.querySelector('.caret');
+    if (caret) caret.textContent = abierto ? '▾' : '▸';
+    const cont = mt.closest('table, .col-list');
+    const mClass = '.m-' + CSS.escape(mt.dataset.month);
+    cont.querySelectorAll(mClass).forEach((el) => {
+      if (el.classList.contains('week-toggle')) {
         el.classList.toggle('hidden', !abierto);
-        el.classList.remove('abierto');
-        const caret = el.querySelector('.caret');
-        if (caret) caret.textContent = '▸';
-      } else {
-        // Filas de contenido: solo se ven si además se abre su día puntual
+        if (!abierto) {
+          el.classList.remove('abierto');
+          const wCaret = el.querySelector('.caret');
+          if (wCaret) wCaret.textContent = '▸';
+        }
+      } else if (el.classList.contains('day-toggle') || el.classList.contains('drow')) {
         el.classList.add('hidden');
+        if (el.classList.contains('day-toggle')) {
+          el.classList.remove('abierto');
+          const dCaret = el.querySelector('.caret');
+          if (dCaret) dCaret.textContent = '▸';
+        }
       }
     });
+    return;
   }
 });
 
-const botonesEdit = (tabla, id) =>
-  `<button class="edit-btn" data-tabla="${tabla}" data-id="${id}" title="Editar">✏️</button><button class="del-btn" data-tabla="${tabla}" data-id="${id}" title="Eliminar">🗑</button>`;
-const accionesTd = (tabla, id) => `<td class="td-action">${botonesEdit(tabla, id)}</td>`;
+const accionesTd = (tabla, id) => `<td class="acciones-cell"><button class="edit-btn" data-tabla="${tabla}" data-id="${id}" title="Editar">✏️</button><button class="del-btn" data-tabla="${tabla}" data-id="${id}" title="Eliminar">🗑</button></td>`;
+const botonesEdit = (tabla, id) => `<button class="edit-btn" data-tabla="${tabla}" data-id="${id}" title="Editar">✏️</button><button class="del-btn" data-tabla="${tabla}" data-id="${id}" title="Eliminar">🗑</button>`;
 
+// ---------- Tomas de Leche ----------
 function renderLeche() {
-  if (!$('lecheFechaHora').value) $('lecheFechaHora').value = dtLocal(new Date());
-  const rows = cache.tomas || [];
+  renderLecheResumen();
   $('tablaLeche').innerHTML = tablaHTML(
     ['Hora', 'Cantidad'],
-    groupByDay(rows, 'fecha_hora'),
+    groupByDay(cache.tomas || [], 'fecha_hora'),
     (r) => `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.cantidad_ml} ml</td>${accionesTd('tomas', r.id)}</tr>`,
-    (rs) => `Total: ${rs.reduce((s, r) => s + r.cantidad_ml, 0)} ml`
+    (rows) => `${rows.reduce((s, r) => s + r.cantidad_ml, 0)} ml`,
+    (rows) => `${rows.reduce((s, r) => s + r.cantidad_ml, 0)} ml`
   );
-  renderLecheResumen();
 }
 
 function renderLecheResumen() {
   const hoy = dayKey(new Date());
-  const total = (cache.tomas || [])
-    .filter((r) => dayKey(new Date(r.fecha_hora)) === hoy)
-    .reduce((s, r) => s + r.cantidad_ml, 0);
+  const tomasHoy = (cache.tomas || []).filter((r) => dayKey(new Date(r.fecha_hora)) === hoy);
+  const totalHoy = tomasHoy.reduce((s, r) => s + r.cantidad_ml, 0);
   const objetivo = Number(localStorage.getItem('objetivo_leche')) || 800;
+  
   $('objetivoInput').value = objetivo;
-  $('lecheHoy').textContent = total;
-  $('lecheProgress').style.width = Math.min(100, (total / objetivo) * 100) + '%';
+  $('lecheHoy').textContent = totalHoy;
+  $('lecheProgress').style.width = Math.min(100, (totalHoy / objetivo) * 100) + '%';
   $('lecheStatus').textContent =
-    total >= objetivo
-      ? `🎉 ¡Meta cumplida! (+${total - objetivo} ml sobre el objetivo)`
-      : `Faltan ${objetivo - total} ml para el objetivo 🎯`;
+    totalHoy >= objetivo
+      ? `🎉 ¡Meta cumplida! (+${totalHoy - objetivo} ml sobre el objetivo)`
+      : `Faltan ${objetivo - totalHoy} ml para el objetivo 🎯`;
 
-  // Fórmula: 4,3 g por cada 30 ml. Lata: resta los gramos consumidos desde que se abrió
-  const lata = Number(bebe?.lata_gramos) || 800;
+  // Cálculo histórico de tarros abiertos y fórmula acumulada
+  const totalHistoricoMl = (cache.tomas || []).reduce((s, r) => s + r.cantidad_ml, 0);
+  const totalHistoricoGr = totalHistoricoMl * G_POR_ML;
+  const lataGramos = Number(bebe?.lata_gramos) || 800;
+
+  const tarrosAbiertos = totalHistoricoGr > 0 ? Math.ceil(totalHistoricoGr / lataGramos) : 0;
+  const tarrosCompletados = Math.floor(totalHistoricoGr / lataGramos);
+  const usadoTarroActualGr = Math.round(totalHistoricoGr - (tarrosCompletados * lataGramos));
+  const restanteTarroActualGr = Math.max(0, lataGramos - usadoTarroActualGr);
+  const porcentajeRestante = Math.round((restanteTarroActualGr / lataGramos) * 100);
+
+  $('tarrosAbiertosVal').textContent = tarrosAbiertos;
+  $('formulaTotalTxt').textContent = `${Math.round(totalHistoricoGr)} g (${totalHistoricoMl} ml)`;
+  $('tarroActualTxt').textContent = `${restanteTarroActualGr} g restantes (${porcentajeRestante}%)`;
+  $('tarroProgress').style.width = porcentajeRestante + '%';
+  $('lataInput').value = lataGramos;
+
   const abierta = bebe?.lata_abierta_en ? new Date(bebe.lata_abierta_en).getTime() : 0;
-  const usadaLataMl = (cache.tomas || [])
-    .filter((r) => new Date(r.fecha_hora).getTime() >= abierta)
-    .reduce((s, r) => s + r.cantidad_ml, 0);
-  const usadaLataGr = Math.round(usadaLataMl * G_POR_ML);
-  $('lataInput').value = lata;
-  $('lecheGramosHoy').textContent = Math.round(total * G_POR_ML);
-  // No pisar el input mientras se está editando
   if (document.activeElement !== $('lataAbiertaInput')) {
     $('lataAbiertaInput').value = dtLocal(abierta ? new Date(abierta) : new Date());
   }
-  const abiertaTxt = abierta
-    ? new Date(abierta).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
-    : '—';
-  $('lataStatus').textContent =
-    `Quedan ~${Math.max(0, lata - usadaLataGr)} g · usados ${usadaLataGr} g desde la última lata (abierta ${abiertaTxt}) · Latas usadas: ${bebe?.latas_usadas || 0}`;
+
+  $('lataStatus').textContent = tarrosAbiertos > 0
+    ? `Tarro #${tarrosAbiertos} en uso · ${usadoTarroActualGr} g consumidos de este tarro · ${tarrosCompletados} tarro${tarrosCompletados === 1 ? '' : 's'} terminado${tarrosCompletados === 1 ? '' : 's'} en total`
+    : 'Sin registros de tomas aún';
 
   const rows = cache.tomas || [];
   if (!rows.length) {
@@ -334,257 +455,180 @@ function renderLecheResumen() {
   }
 }
 
+// ---------- Vitaminas ----------
 function renderVitaminas() {
   renderVitaminaTipos();
   $('tablaVitaminas').innerHTML = tablaHTML(
     ['Hora', 'Gotas'],
     groupByDay(cache.vitaminas || [], 'fecha_hora'),
-    (r) => `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.gotas} gotas</td>${accionesTd('vitaminas', r.id)}</tr>`
+    (r) => `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.gotas} gotas</td>${accionesTd('vitaminas', r.id)}</tr>`,
+    (rows) => `${rows.reduce((s, r) => s + r.gotas, 0)} gotas`,
+    (rows) => `${rows.reduce((s, r) => s + r.gotas, 0)} gotas`
   );
 }
 
-// Vitaminas por nombre: lista maestra + checklist diario (igual patrón que Pastillas)
 const ordenarVitaminaTipos = (lista) => lista.slice().sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
 
 function renderVitaminaTipos() {
   const lista = ordenarVitaminaTipos(cache.vitaminas_tipos || []);
-  const hoy = dayKey(new Date());
-  if (!$('vitTipoFecha').value) $('vitTipoFecha').value = hoy;
-  if (!$('vitTipoHora').value) $('vitTipoHora').value = fmtTime(new Date());
-  const fechaSel = $('vitTipoFecha').value;
-  $('vitHoyTitulo').textContent = (fechaSel === hoy ? 'Hoy' : fmtDayLabel(fechaSel)) + ' — marca qué vitaminas tomó';
-  const tomadasSel = new Set((cache.vitaminas_tipos_log || []).filter((l) => l.fecha === fechaSel).map((l) => String(l.vitamina_id)));
-
-  // Checklist de la fecha seleccionada
+  const fechaSel = $('vitTipoFecha').value || dayKey(new Date());
   $('vitTipoHoy').innerHTML = lista.length
-    ? lista.map((v) =>
-        `<label class="check-pill"><input type="checkbox" class="vit-check" data-id="${v.id}" ${tomadasSel.has(String(v.id)) ? 'checked' : ''}> ${escapeHtml(v.nombre)}${v.gotas_default ? ' · ' + v.gotas_default + ' gotas' : ''}</label>`
-      ).join('')
+    ? lista.map((v) => {
+        const row = (cache.vitaminas_tipos_log || []).find((l) => l.fecha === fechaSel && String(l.vitamina_id) === String(v.id));
+        const tomada = Boolean(row);
+        const detalle = row ? `(${row.gotas ?? v.gotas_default ?? 5}g${row.hora ? ' · ' + row.hora.slice(0, 5) : ''})` : `(${v.gotas_default || 5}g)`;
+        return `<button type="button" class="past-btn${tomada ? ' tomada' : ''}" data-id="${v.id}">${tomada ? '✓' : '＋'} ${escapeHtml(v.nombre)} <small>${detalle}</small></button>`;
+      }).join('')
     : '<p class="empty-msg">Agrega vitaminas a tu lista abajo</p>';
 
-  // Lista maestra (editar / eliminar)
   $('vitTipoLista').innerHTML = lista.length
-    ? `<table><tbody>${lista.map((v) => `<tr><td>${escapeHtml(v.nombre)}</td><td>${v.gotas_default ? v.gotas_default + ' gotas' : '—'}</td>${accionesTd('vitaminas_tipos', v.id)}</tr>`).join('')}</tbody></table>`
-    : '<p class="empty-msg">Aún no agregas vitaminas</p>';
+    ? `<table><tbody>${lista.map((v) => `<tr><td>${escapeHtml(v.nombre)}</td><td>${v.gotas_default || 5} gotas</td>${accionesTd('vitaminas_tipos', v.id)}</tr>`).join('')}</tbody></table>`
+    : '<p class="empty-msg">Aún no agregas vitaminas a tu lista</p>';
 
-  // Historial por día (colapsable; el mes actual por día, los meses completos colapsados)
   const mapa = new Map((cache.vitaminas_tipos || []).map((v) => [String(v.id), v]));
   const dias = [...new Set((cache.vitaminas_tipos_log || []).map((l) => l.fecha))].sort().reverse();
   const itemsDelDia = (d) => (cache.vitaminas_tipos_log || [])
     .filter((l) => l.fecha === d)
     .map((l) => ({ l, v: mapa.get(String(l.vitamina_id)) }))
     .filter((x) => x.v)
-    .sort((a, b) => (a.v.nombre || '').localeCompare(b.v.nombre || ''))
-    .map(({ l, v }) => {
-      const gotas = l.gotas ?? v.gotas_default;
-      return `<tr><td>${escapeHtml(v.nombre)}</td><td>${gotas ? gotas + ' gotas ' : ''}✅${l.hora ? ' · ' + l.hora.slice(0, 5) : ''}</td></tr>`;
-    });
-  $('tablaVitaminaTipos').innerHTML = historialChecklistHTML(dias, itemsDelDia, 2);
+    .map(({ l, v }) => `<tr><td>${escapeHtml(v.nombre)}</td><td>${l.gotas ?? v.gotas_default ?? 5} gotas ✅${l.hora ? ' · ' + l.hora.slice(0, 5) : ''}</td>${accionesTd('vitaminas_tipos_log', l.id)}</tr>`);
+
+  $('tablaVitaminaTipos').innerHTML = historialChecklistHTML(dias, itemsDelDia, 3);
 }
 
-// Marcar/desmarcar una vitamina como tomada en la fecha/hora seleccionada
-$('vitTipoFecha').addEventListener('change', renderVitaminaTipos);
-
-async function toggleVitaminaTipoHoy(vitaminaId, tomada) {
+// Toggle vitamina en checklist
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.past-btn');
+  if (!btn || !btn.dataset.id) return;
+  const vitId = Number(btn.dataset.id);
   const fecha = $('vitTipoFecha').value || dayKey(new Date());
-  const hora = $('vitTipoHora').value || null;
-  const tipo = (cache.vitaminas_tipos || []).find((v) => String(v.id) === String(vitaminaId));
-  const { error } = tomada
-    ? await db.from('vitaminas_tipos_log').upsert(
-        { bebe_id: bebe.id, vitamina_id: Number(vitaminaId), fecha, hora, gotas: tipo?.gotas_default ?? null },
-        { onConflict: 'vitamina_id,fecha' }
-      )
-    : await db.from('vitaminas_tipos_log').delete().eq('vitamina_id', vitaminaId).eq('fecha', fecha);
-  if (error) { toast(`Error: ${error.message}`, true); }
+  const hora = ($('vitTipoHora').value || fmtTime(new Date())) + ':00';
+  const yaTomada = btn.classList.contains('tomada');
+  const v = (cache.vitaminas_tipos || []).find((x) => x.id === vitId);
+  const gotas = v?.gotas_default || 5;
+
+  if (!yaTomada) {
+    await db.from('vitaminas_tipos_log').upsert({ bebe_id: bebe.id, vitamina_id: vitId, fecha, hora, gotas }, { onConflict: 'vitamina_id,fecha' });
+  } else {
+    await db.from('vitaminas_tipos_log').delete().eq('vitamina_id', vitId).eq('fecha', fecha);
+  }
   await loadData('vitaminas_tipos_log');
+  statsDirty = true;
   renderVitaminaTipos();
-}
-
-$('formVitaminaTipo').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const nombre = $('vitTipoNombre').value.trim();
-  if (!nombre) { toast('Escribe el nombre de la vitamina', true); return; }
-  const gotas = Number($('vitTipoGotas').value);
-  const ok = await insertar('vitaminas_tipos', { nombre, gotas_default: gotas > 0 ? Math.round(gotas) : null });
-  if (ok) { $('vitTipoNombre').value = ''; $('vitTipoGotas').value = 5; renderVitaminaTipos(); }
 });
 
-const hm = (p) => `${escapeHtml(p.nombre)} · ${(p.horario || '').toUpperCase()}`;
-const ordenarPastillas = (lista) =>
-  lista.slice().sort((a, b) => (a.horario || '').localeCompare(b.horario || '') || (a.nombre || '').localeCompare(b.nombre || ''));
-
-function renderPastillas() {
-  const lista = ordenarPastillas(cache.pastillas || []);
-  const hoy = dayKey(new Date());
-  if (!$('pastFecha').value) $('pastFecha').value = hoy;
-  if (!$('pastHora').value) $('pastHora').value = fmtTime(new Date());
-  const fechaSel = $('pastFecha').value;
-  $('pastHoyTitulo').textContent = (fechaSel === hoy ? 'Hoy' : fmtDayLabel(fechaSel)) + ' — marca lo que tomó';
-  const tomadasSel = new Set((cache.pastillas_log || []).filter((l) => l.fecha === fechaSel).map((l) => String(l.pastilla_id)));
-
-  // Checklist de la fecha seleccionada
-  $('pastHoy').innerHTML = lista.length
-    ? lista.map((p) =>
-        `<label class="check-pill"><input type="checkbox" class="pill-check" data-id="${p.id}" ${tomadasSel.has(String(p.id)) ? 'checked' : ''}> ${hm(p)}</label>`
-      ).join('')
-    : '<p class="empty-msg">Agrega pastillas a tu lista abajo</p>';
-
-  // Lista maestra (editar / eliminar)
-  $('pastLista').innerHTML = lista.length
-    ? `<table><tbody>${lista.map((p) => `<tr><td>${escapeHtml(p.nombre)}</td><td>${(p.horario || '').toUpperCase()}</td>${accionesTd('pastillas', p.id)}</tr>`).join('')}</tbody></table>`
-    : '<p class="empty-msg">Aún no agregas pastillas</p>';
-
-  // Historial por día (colapsable; el mes actual por día, los meses completos colapsados)
-  const mapa = new Map((cache.pastillas || []).map((p) => [String(p.id), p]));
-  const dias = [...new Set((cache.pastillas_log || []).map((l) => l.fecha))].sort().reverse();
-  const itemsDelDia = (d) => (cache.pastillas_log || [])
-    .filter((l) => l.fecha === d)
-    .map((l) => ({ l, p: mapa.get(String(l.pastilla_id)) }))
-    .filter((x) => x.p)
-    .sort((a, b) => (a.p.horario || '').localeCompare(b.p.horario || '') || (a.p.nombre || '').localeCompare(b.p.nombre || ''))
-    .map(({ l, p }) => `<tr><td>${escapeHtml(p.nombre)}</td><td>${(p.horario || '').toUpperCase()} ✅${l.hora ? ' · ' + l.hora.slice(0, 5) : ''}</td>${accionesTd('pastillas_log', l.id)}</tr>`);
-  $('tablaPastillas').innerHTML = historialChecklistHTML(dias, itemsDelDia, 3);
-}
-
-// Marcar/desmarcar una pastilla o vitamina como tomada en la fecha/hora seleccionada
-document.addEventListener('change', (e) => {
-  const chk = e.target.closest('.pill-check');
-  if (chk) { togglePastillaHoy(chk.dataset.id, chk.checked); return; }
-  const vchk = e.target.closest('.vit-check');
-  if (vchk) toggleVitaminaTipoHoy(vchk.dataset.id, vchk.checked);
-});
-
-$('pastFecha').addEventListener('change', renderPastillas);
-
-async function togglePastillaHoy(pastillaId, tomada) {
-  const fecha = $('pastFecha').value || dayKey(new Date());
-  const hora = $('pastHora').value || null;
-  const { error } = tomada
-    ? await db.from('pastillas_log').upsert(
-        { bebe_id: bebe.id, pastilla_id: Number(pastillaId), fecha, hora },
-        { onConflict: 'pastilla_id,fecha' }
-      )
-    : await db.from('pastillas_log').delete().eq('pastilla_id', pastillaId).eq('fecha', fecha);
-  if (error) { toast(`Error: ${error.message}`, true); }
-  await loadData('pastillas_log');
-  renderPastillas();
-}
-
-const totalPanal = (rows) => `💩 ${rows.filter((r) => r.heces).length} · 💧 ${rows.filter((r) => r.orina).length}`;
-
+// ---------- Pañales ----------
 function renderPanales() {
-  if (!$('panFechaHora').value) $('panFechaHora').value = dtLocal(new Date());
-  const rows = cache.panales || [];
-  $('tablaPanales').innerHTML = tablaHTML(
-    ['Hora', 'Heces', 'Orina'],
-    groupByDay(rows, 'fecha_hora'),
-    (r) =>
-      `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.heces ? '💩 Sí' : '—'}</td><td>${r.orina ? '💧 Sí' : '—'}</td>${accionesTd('panales', r.id)}</tr>`,
-    totalPanal,
-    totalPanal
-  );
-  renderPanalesDash();
-}
-
-function renderPanalesDash() {
   const rows = cache.panales || [];
   if (!rows.length) {
     $('ultimoCambio').textContent = '—';
-    $('ultimaFeca').textContent = '—';
-    return;
+    $('ultimaFeca').textContent = 'Sin registros';
+  } else {
+    const ult = new Date(rows[0].fecha_hora);
+    $('ultimoCambio').textContent = fmtDur(Math.max(0, (Date.now() - ult) / 60000));
+    const ultFeca = rows.find((r) => r.heces);
+    if (!ultFeca) {
+      $('ultimaFeca').textContent = 'Sin fecas';
+    } else {
+      const dF = new Date(ultFeca.fecha_hora);
+      $('ultimaFeca').textContent =
+        dF.toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' }) +
+        ', ' + fmtTime(dF);
+    }
   }
-  const mins = Math.max(0, (Date.now() - new Date(rows[0].fecha_hora)) / 60000);
-  $('ultimoCambio').textContent = fmtDur(mins);
-  const feca = rows.find((r) => r.heces);
-  $('ultimaFeca').textContent = feca
-    ? new Date(feca.fecha_hora).toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' }) +
-      ', ' + fmtTime(new Date(feca.fecha_hora))
-    : 'Sin registros';
+
+  $('tablaPanales').innerHTML = tablaHTML(
+    ['Hora', 'Detalle'],
+    groupByDay(rows, 'fecha_hora'),
+    (r) => {
+      const tipos = [r.heces && '💩 Heces', r.orina && '💧 Orina'].filter(Boolean).join(' · ') || '—';
+      return `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${tipos}</td>${accionesTd('panales', r.id)}</tr>`;
+    },
+    (rs) => `💩 ${rs.filter((r) => r.heces).length} · 💧 ${rs.filter((r) => r.orina).length}`,
+    (rs) => `💩 ${rs.filter((r) => r.heces).length} · 💧 ${rs.filter((r) => r.orina).length}`
+  );
 }
 
-// Refresca el "hace X" cada minuto
-setInterval(() => {
-  if (!appStarted) return;
-  if (cache.panales) renderPanalesDash();
-  if (cache.tomas) renderLecheResumen();
-  if (cache.sueno) renderSuenoDash();
-}, 60000);
-
+// ---------- Sueño ----------
 function duracionMin(r) {
-  return (new Date(r.fin) - new Date(r.inicio)) / 60000;
+  if (!r.inicio || !r.fin) return 0;
+  return Math.max(0, (new Date(r.fin) - new Date(r.inicio)) / 60000);
 }
 
-// Divide una sesión de sueño en tramos por día, cortando en cada medianoche,
-// para que cada día sume solo las horas dormidas dentro de ese día
 function tramosPorDia(r) {
+  if (!r.inicio || !r.fin) return [];
+  const ini = new Date(r.inicio), fin = new Date(r.fin);
+  if (fin <= ini) return [];
   const tramos = [];
-  if (!r.fin) return tramos; // siesta en curso: aún sin duración
-  let ini = new Date(r.inicio);
-  const fin = new Date(r.fin);
-  while (ini < fin) {
-    const corte = new Date(ini);
-    corte.setHours(24, 0, 0, 0);
-    const finTramo = corte < fin ? corte : fin;
-    tramos.push({
-      key: dayKey(ini),
-      inicio: ini,
-      fin: finTramo,
-      mins: (finTramo - ini) / 60000,
-      id: r.id,
-      esInicio: +ini === +new Date(r.inicio),
-      esFin: +finTramo === +fin,
-    });
-    ini = finTramo;
+  let cur = new Date(ini);
+  while (cur < fin) {
+    const dStr = dayKey(cur);
+    const midNext = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1, 0, 0, 0);
+    const finTramo = fin < midNext ? fin : midNext;
+    const mins = (finTramo - cur) / 60000;
+    if (mins > 0) tramos.push({ key: dStr, mins });
+    cur = finTramo;
   }
   return tramos;
 }
 
+let siestaTimer = null;
+function pintarSiestaActiva(siesta) {
+  clearInterval(siestaTimer);
+  const abierta = $('siestaAbierta'), btnD = $('btnDormir');
+  if (!siesta) {
+    abierta.classList.add('hidden');
+    btnD.classList.remove('hidden');
+    return;
+  }
+  btnD.classList.add('hidden');
+  abierta.classList.remove('hidden');
+  const ini = new Date(siesta.inicio);
+  $('siestaDesde').textContent = `${fmtTime(ini)} (${ini.toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' })})`;
+  const tick = () => { $('siestaLleva').textContent = fmtDur(Math.max(0, (Date.now() - ini) / 60000)); };
+  tick();
+  siestaTimer = setInterval(tick, 30000);
+}
+
 function renderSueno() {
-  const tramos = (cache.sueno || [])
-    .flatMap(tramosPorDia)
-    .sort((a, b) => b.inicio - a.inicio);
+  const rows = cache.sueno || [];
+  const siestaActiva = rows.find((r) => !r.fin);
+  pintarSiestaActiva(siestaActiva);
+
+  const cerradas = rows.filter((r) => r.fin);
+  if (!cerradas.length) {
+    $('despiertoHace').textContent = '—';
+    $('ultimoSueno').textContent = 'Sin registros';
+  } else {
+    const ultFin = new Date(cerradas[0].fin);
+    $('despiertoHace').textContent = fmtDur(Math.max(0, (Date.now() - ultFin) / 60000));
+    const ult = cerradas[0];
+    $('ultimoSueno').textContent = `${fmtTime(new Date(ult.inicio))} - ${fmtTime(new Date(ult.fin))} · ${fmtDur(duracionMin(ult))}`;
+  }
+
   $('tablaSueno').innerHTML = tablaHTML(
     ['Inicio', 'Fin', 'Duración'],
-    groupByDay(tramos, 'inicio'),
-    (t) =>
-      `<tr><td>${t.esInicio ? '' : '↪ '}${fmtTime(t.inicio)}</td><td>${t.esFin ? fmtTime(t.fin) : '00:00 🌙'}</td><td>${fmtDur(t.mins)}</td>${accionesTd('sueno', t.id)}</tr>`,
-    (ts) => `Durmió: ${fmtDur(ts.reduce((s, t) => s + t.mins, 0))}`
+    groupByDay(rows, 'inicio'),
+    (r) => {
+      const finTxt = r.fin ? fmtTime(new Date(r.fin)) : '<span style="color:var(--accent)">Durmiendo…</span>';
+      const durTxt = r.fin ? fmtDur(duracionMin(r)) : '—';
+      return `<tr><td>${fmtTime(new Date(r.inicio))}</td><td>${finTxt}</td><td>${durTxt}</td>${accionesTd('sueno', r.id)}</tr>`;
+    },
+    (rs) => fmtDur(rs.reduce((s, r) => s + duracionMin(r), 0)),
+    (rs) => fmtDur(rs.reduce((s, r) => s + duracionMin(r), 0))
   );
-  renderSuenoDash();
 }
 
-const siestaAbierta = () => (cache.sueno || []).find((r) => !r.fin) || null;
-
-function renderSuenoDash() {
-  const abierta = siestaAbierta();
-  $('btnDormir').classList.toggle('hidden', !!abierta);
-  $('siestaAbierta').classList.toggle('hidden', !abierta);
-
-  const ult = (cache.sueno || [])
-    .filter((r) => r.fin)
-    .sort((a, b) => new Date(b.fin) - new Date(a.fin))[0];
-
-  if (abierta) {
-    $('siestaDesde').textContent = fmtTime(new Date(abierta.inicio));
-    $('siestaLleva').textContent = fmtDur(Math.max(0, (Date.now() - new Date(abierta.inicio)) / 60000));
-    $('despiertoHace').textContent = '😴 Durmiendo';
-  } else {
-    $('despiertoHace').textContent = ult ? fmtDur(Math.max(0, (Date.now() - new Date(ult.fin)) / 60000)) : '—';
-  }
-  $('ultimoSueno').textContent = ult
-    ? `${fmtDur(duracionMin(ult))} · ${fmtTime(new Date(ult.inicio))}→${fmtTime(new Date(ult.fin))}`
-    : 'Sin registros';
-}
-
+// Botones de siesta en vivo
 $('btnDormir').addEventListener('click', async () => {
   const ok = await insertar('sueno', { inicio: new Date().toISOString(), fin: null });
   if (ok) renderSueno();
 });
 
 $('btnDespertar').addEventListener('click', async () => {
-  const abierta = siestaAbierta();
-  if (!abierta) return;
-  const { error } = await db.from('sueno').update({ fin: new Date().toISOString() }).eq('id', abierta.id);
+  const siesta = (cache.sueno || []).find((r) => !r.fin);
+  if (!siesta) return;
+  const { error } = await db.from('sueno').update({ fin: new Date().toISOString() }).eq('id', siesta.id);
   if (error) { toast(`Error: ${error.message}`, true); return; }
   await loadData('sueno');
   statsDirty = true;
@@ -592,21 +636,34 @@ $('btnDespertar').addEventListener('click', async () => {
   renderSueno();
 });
 
-// ---------- Gráficos (Chart.js) ----------
+// ---------- Gráficos y Estadísticas (Chart.js + Zoom) ----------
 const charts = {};
 
 const SERIES = {
-  dark:  { azul: '#3987e5', ambar: '#c98500', violeta: '#9085e9' },
-  light: { azul: '#2a78d6', ambar: '#eda100', violeta: '#4a3aa7' },
+  dark:  { azul: '#3987e5', ambar: '#c98500', violeta: '#9085e9', verde: '#199e70' },
+  light: { azul: '#2a78d6', ambar: '#eda100', violeta: '#4a3aa7', verde: '#12825b' },
 };
 
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-function ultimos7Dias() {
+let statsRange = localStorage.getItem('stats_range') || '7d';
+
+const chartTypes = {
+  leche: localStorage.getItem('chart_type_leche') || 'bar',
+  vitaminas: localStorage.getItem('chart_type_vitaminas') || 'bar',
+  panales: localStorage.getItem('chart_type_panales') || 'bar',
+  sueno: localStorage.getItem('chart_type_sueno') || 'bar',
+};
+
+function obtenerDiasRango(range) {
+  const numDias = range === '1d' ? 1 : range === '14d' ? 14 : range === '30d' ? 30 : 7;
   const dias = [];
-  for (let i = 6; i >= 0; i--) {
+  for (let i = numDias - 1; i >= 0; i--) {
     const d = new Date(Date.now() - i * 86400000);
-    dias.push({ key: dayKey(d), label: d.toLocaleDateString('es', { weekday: 'short', day: 'numeric' }) });
+    const label = numDias === 1
+      ? 'Hoy'
+      : d.toLocaleDateString('es', { weekday: numDias <= 7 ? 'short' : undefined, day: 'numeric', month: numDias > 7 ? 'short' : undefined });
+    dias.push({ key: dayKey(d), label });
   }
   return dias;
 }
@@ -620,7 +677,10 @@ function sumarPorDia(rows, campoFecha, valorFn) {
   return tot;
 }
 
-function baseOpts(extraTooltip = {}) {
+const BAR = { maxBarThickness: 32, borderRadius: 5, categoryPercentage: 0.72, barPercentage: 0.9 };
+const LINEA = { tension: 0.32, borderWidth: 2.5, pointRadius: 4, pointHoverRadius: 6, fill: false };
+
+function baseChartOpts(extraTooltip = {}) {
   const muted = cssVar('--muted'), grid = cssVar('--grid');
   return {
     responsive: true,
@@ -637,6 +697,10 @@ function baseOpts(extraTooltip = {}) {
         padding: 10,
         ...extraTooltip,
       },
+      zoom: {
+        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
+        pan: { enabled: true, mode: 'x' },
+      },
     },
     scales: {
       x: { grid: { display: false }, border: { display: false }, ticks: { color: muted, font: { size: 11 } } },
@@ -650,830 +714,314 @@ function baseOpts(extraTooltip = {}) {
   };
 }
 
-const BAR = { maxBarThickness: 26, borderRadius: 4, categoryPercentage: 0.72, barPercentage: 0.9 };
-const LINEA = { tension: 0.3, borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, pointHitRadius: 14, fill: false };
+function actualizarStatsUI() {
+  document.querySelectorAll('.seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.range === statsRange));
+  
+  // Actualizar toggles de tipo de gráfico
+  for (const [key, type] of Object.entries(chartTypes)) {
+    document.querySelectorAll(`.chart-type-toggle[data-chart="${key}"] .type-btn`).forEach((b) => {
+      b.classList.toggle('active', b.dataset.type === type);
+    });
+  }
 
-let statsMode = localStorage.getItem('stats_mode') || 'semana';
-
-const TITULOS = {
-  semana: {
-    Leche: '🍼 Leche · últimos 7 días (ml)',
-    Vitaminas: '💊 Vitaminas · últimos 7 días (gotas)',
-    Panales: '🧷 Pañales · últimos 7 días',
-    Sueno: '😴 Sueño · últimos 7 días (horas)',
-  },
-  diario: {
-    Leche: '🍼 Leche · por toma, 3 días (ml)',
-    Vitaminas: '💊 Vitaminas · por toma, 3 días (gotas)',
-    Panales: '🧷 Pañales · acumulado, 3 días',
-    Sueno: '😴 Sueño · por siesta, 3 días (horas)',
-  },
-};
-
-function actualizarSegUI() {
-  document.querySelectorAll('.seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.mode === statsMode));
-  const diario = statsMode === 'diario';
-  $('segHint').classList.toggle('hidden', !diario);
-  document.querySelectorAll('.zoom-reset').forEach((b) => b.classList.toggle('hidden', !diario));
-  for (const k of ['Leche', 'Vitaminas', 'Panales', 'Sueno']) $('titulo' + k).textContent = TITULOS[statsMode][k];
+  const rangeLabels = {
+    '1d': 'hoy',
+    '7d': 'últimos 7 días',
+    '14d': 'últimos 14 días',
+    '30d': 'últimos 30 días',
+  };
+  const suf = rangeLabels[statsRange] || 'últimos 7 días';
+  $('tituloLeche').textContent = `🍼 Leche · ${suf} (ml)`;
+  $('tituloVitaminas').textContent = `💊 Vitaminas · ${suf} (gotas)`;
+  $('tituloPanales').textContent = `🧷 Pañales · ${suf}`;
+  $('tituloSueno').textContent = `😴 Sueño · ${suf} (horas)`;
 }
 
+// Selector de rango
 document.querySelectorAll('.seg-btn').forEach((b) =>
   b.addEventListener('click', () => {
-    statsMode = b.dataset.mode;
-    localStorage.setItem('stats_mode', statsMode);
-    actualizarSegUI();
+    statsRange = b.dataset.range;
+    localStorage.setItem('stats_range', statsRange);
     renderCharts();
   })
 );
 
+// Selector de tipo de gráfico por métrica
+document.querySelectorAll('.chart-type-toggle .type-btn').forEach((b) =>
+  b.addEventListener('click', (e) => {
+    const parent = e.target.closest('.chart-type-toggle');
+    const chartKey = parent.dataset.chart;
+    const type = b.dataset.type;
+    chartTypes[chartKey] = type;
+    localStorage.setItem(`chart_type_${chartKey}`, type);
+    renderCharts();
+  })
+);
+
+// Reset de zoom
 document.querySelectorAll('.zoom-reset').forEach((b) =>
   b.addEventListener('click', () => charts[b.dataset.key]?.resetZoom())
 );
 
 function renderCharts() {
   Object.values(charts).forEach((c) => c.destroy());
-  actualizarSegUI();
-  if (statsMode === 'diario') renderChartsDiario();
-  else renderChartsSemana();
-  statsDirty = false;
-}
+  actualizarStatsUI();
 
-function renderChartsSemana() {
-  const dias = ultimos7Dias();
+  const dias = obtenerDiasRango(statsRange);
   const labels = dias.map((d) => d.label);
   const s = SERIES[document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'];
   const surface = cssVar('--surface');
 
+  // 1. Leche
   const leche = sumarPorDia(cache.tomas, 'fecha_hora', (r) => r.cantidad_ml);
+  const typeLeche = chartTypes.leche || 'bar';
   charts.leche = new Chart($('chartLeche'), {
-    type: 'bar',
-    data: { labels, datasets: [{ data: dias.map((d) => leche[d.key] || 0), backgroundColor: s.azul, ...BAR }] },
-    options: baseOpts({ callbacks: { label: (c) => ` ${c.parsed.y} ml` } }),
-  });
-
-  const vit = sumarPorDia(cache.vitaminas, 'fecha_hora', (r) => r.gotas);
-  charts.vitaminas = new Chart($('chartVitaminas'), {
-    type: 'bar',
-    data: { labels, datasets: [{ data: dias.map((d) => vit[d.key] || 0), backgroundColor: s.ambar, ...BAR }] },
-    options: baseOpts({ callbacks: { label: (c) => ` ${c.parsed.y} gotas` } }),
-  });
-
-  const heces = sumarPorDia(cache.panales, 'fecha_hora', (r) => (r.heces ? 1 : 0));
-  const orina = sumarPorDia(cache.panales, 'fecha_hora', (r) => (r.orina ? 1 : 0));
-  const optsPan = baseOpts();
-  optsPan.scales.x.stacked = true;
-  optsPan.scales.y.stacked = true;
-  optsPan.plugins.legend = {
-    display: true,
-    position: 'top',
-    labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 7, boxHeight: 7, color: cssVar('--text-2'), font: { size: 11 } },
-  };
-  charts.panales = new Chart($('chartPanales'), {
-    type: 'bar',
+    type: typeLeche,
     data: {
       labels,
-      datasets: [
-        { label: 'Orina', data: dias.map((d) => orina[d.key] || 0), backgroundColor: s.azul, borderColor: surface, borderWidth: 2, ...BAR, borderRadius: 3 },
-        { label: 'Heces', data: dias.map((d) => heces[d.key] || 0), backgroundColor: s.ambar, borderColor: surface, borderWidth: 2, ...BAR, borderRadius: 3 },
-      ],
-    },
-    options: optsPan,
-  });
-
-  const sueno = {};
-  (cache.sueno || []).forEach((r) => tramosPorDia(r).forEach((t) => { sueno[t.key] = (sueno[t.key] || 0) + t.mins; }));
-  charts.sueno = new Chart($('chartSueno'), {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{ data: dias.map((d) => Math.round(((sueno[d.key] || 0) / 60) * 10) / 10), backgroundColor: s.violeta, ...BAR }],
-    },
-    options: baseOpts({ callbacks: { label: (c) => ` ${fmtDur(c.parsed.y * 60)}` } }),
-  });
-}
-
-// ----- Modo diario: línea por hora de los últimos 3 días, con zoom/pan -----
-function baseOptsDiario(ini, fin, labelFn) {
-  const muted = cssVar('--muted'), grid = cssVar('--grid');
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: cssVar('--surface-2'),
-        titleColor: cssVar('--text'),
-        bodyColor: cssVar('--text-2'),
-        borderColor: grid,
-        borderWidth: 1,
-        cornerRadius: 8,
-        padding: 10,
-        callbacks: {
-          title: (items) =>
-            new Date(items[0].parsed.x).toLocaleString('es', { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }),
-          label: labelFn,
-        },
-      },
-      zoom: {
-        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
-        pan: { enabled: true, mode: 'x' },
-        limits: { x: { min: ini, max: fin, minRange: 3600000 } },
-      },
-    },
-    scales: {
-      x: {
-        type: 'linear',
-        min: ini,
-        max: fin,
-        grid: { display: false },
-        border: { display: false },
-        ticks: {
-          color: muted,
-          font: { size: 11 },
-          maxRotation: 0,
-          autoSkip: true,
-          maxTicksLimit: 8,
-          stepSize: 6 * 3600000,
-          callback: (v) => {
-            const d = new Date(v);
-            return d.getHours() === 0
-              ? d.toLocaleDateString('es', { weekday: 'short', day: 'numeric' })
-              : d.getHours() + 'h';
-          },
-        },
-      },
-      y: {
-        beginAtZero: true,
-        grid: { color: grid },
-        border: { display: false },
-        ticks: { color: muted, font: { size: 11 }, precision: 0 },
-      },
-    },
-  };
-}
-
-function renderChartsDiario() {
-  const s = SERIES[document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'];
-  const iniD = new Date(); iniD.setHours(0, 0, 0, 0);
-  const ini = iniD.getTime() - 2 * 86400000; // desde el inicio de hace 2 días
-  const fin = iniD.getTime() + 86400000;     // hasta el fin de hoy
-  const enRango = (t) => { const ms = new Date(t).getTime(); return ms >= ini && ms <= fin; };
-  const puntos = (rows, campo, val) =>
-    (rows || [])
-      .filter((r) => enRango(r[campo]))
-      .map((r) => ({ x: new Date(r[campo]).getTime(), y: val(r) }))
-      .sort((a, b) => a.x - b.x);
-
-  charts.leche = new Chart($('chartLeche'), {
-    type: 'line',
-    data: { datasets: [{ data: puntos(cache.tomas, 'fecha_hora', (r) => r.cantidad_ml), borderColor: s.azul, backgroundColor: s.azul, ...LINEA }] },
-    options: baseOptsDiario(ini, fin, (c) => ` ${c.parsed.y} ml`),
-  });
-
-  charts.vitaminas = new Chart($('chartVitaminas'), {
-    type: 'line',
-    data: { datasets: [{ data: puntos(cache.vitaminas, 'fecha_hora', (r) => r.gotas), borderColor: s.ambar, backgroundColor: s.ambar, ...LINEA }] },
-    options: baseOptsDiario(ini, fin, (c) => ` ${c.parsed.y} gotas`),
-  });
-
-  // Pañales: conteo acumulado de eventos en los 3 días (escalones)
-  const acumulado = (cond) => {
-    let n = 0;
-    return (cache.panales || [])
-      .filter((r) => enRango(r.fecha_hora) && cond(r))
-      .map((r) => new Date(r.fecha_hora).getTime())
-      .sort((a, b) => a - b)
-      .map((t) => ({ x: t, y: ++n }));
-  };
-  const optsPan = baseOptsDiario(ini, fin, (c) => ` ${c.dataset.label}: ${c.parsed.y} acumulado`);
-  optsPan.plugins.legend = {
-    display: true,
-    position: 'top',
-    labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 7, boxHeight: 7, color: cssVar('--text-2'), font: { size: 11 } },
-  };
-  charts.panales = new Chart($('chartPanales'), {
-    type: 'line',
-    data: {
-      datasets: [
-        { label: 'Orina', data: acumulado((r) => r.orina), borderColor: s.azul, backgroundColor: s.azul, ...LINEA, stepped: 'before', tension: 0, pointRadius: 3 },
-        { label: 'Heces', data: acumulado((r) => r.heces), borderColor: s.ambar, backgroundColor: s.ambar, ...LINEA, stepped: 'before', tension: 0, pointRadius: 3 },
-      ],
-    },
-    options: optsPan,
-  });
-
-  charts.sueno = new Chart($('chartSueno'), {
-    type: 'line',
-    data: {
       datasets: [{
-        data: puntos((cache.sueno || []).filter((r) => r.fin), 'inicio', (r) => Math.round((duracionMin(r) / 60) * 10) / 10),
-        borderColor: s.violeta, backgroundColor: s.violeta, ...LINEA,
+        label: 'Leche (ml)',
+        data: dias.map((d) => leche[d.key] || 0),
+        backgroundColor: s.azul,
+        borderColor: s.azul,
+        ...(typeLeche === 'bar' ? BAR : LINEA),
       }],
     },
-    options: baseOptsDiario(ini, fin, (c) => ` ${fmtDur(c.parsed.y * 60)}`),
+    options: baseChartOpts({ callbacks: { label: (c) => ` ${c.parsed.y} ml` } }),
   });
+
+  // 2. Vitaminas
+  const vit = sumarPorDia(cache.vitaminas, 'fecha_hora', (r) => r.gotas);
+  const typeVit = chartTypes.vitaminas || 'bar';
+  charts.vitaminas = new Chart($('chartVitaminas'), {
+    type: typeVit,
+    data: {
+      labels,
+      datasets: [{
+        label: 'Vitaminas (gotas)',
+        data: dias.map((d) => vit[d.key] || 0),
+        backgroundColor: s.ambar,
+        borderColor: s.ambar,
+        ...(typeVit === 'bar' ? BAR : LINEA),
+      }],
+    },
+    options: baseChartOpts({ callbacks: { label: (c) => ` ${c.parsed.y} gotas` } }),
+  });
+
+  // 3. Pañales
+  const heces = sumarPorDia(cache.panales, 'fecha_hora', (r) => (r.heces ? 1 : 0));
+  const orina = sumarPorDia(cache.panales, 'fecha_hora', (r) => (r.orina ? 1 : 0));
+  const typePan = chartTypes.panales || 'bar';
+  const optsPan = baseChartOpts();
+  optsPan.plugins.legend = {
+    display: true,
+    position: 'top',
+    labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 7, boxHeight: 7, color: cssVar('--text-2'), font: { size: 11 } },
+  };
+
+  if (typePan === 'bar') {
+    optsPan.scales.x.stacked = true;
+    optsPan.scales.y.stacked = true;
+    charts.panales = new Chart($('chartPanales'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Orina', data: dias.map((d) => orina[d.key] || 0), backgroundColor: s.azul, borderColor: surface, borderWidth: 2, ...BAR, borderRadius: 3 },
+          { label: 'Heces', data: dias.map((d) => heces[d.key] || 0), backgroundColor: s.ambar, borderColor: surface, borderWidth: 2, ...BAR, borderRadius: 3 },
+        ],
+      },
+      options: optsPan,
+    });
+  } else {
+    charts.panales = new Chart($('chartPanales'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Orina', data: dias.map((d) => orina[d.key] || 0), borderColor: s.azul, backgroundColor: s.azul, ...LINEA },
+          { label: 'Heces', data: dias.map((d) => heces[d.key] || 0), borderColor: s.ambar, backgroundColor: s.ambar, ...LINEA },
+        ],
+      },
+      options: optsPan,
+    });
+  }
+
+  // 4. Sueño
+  const sueno = {};
+  (cache.sueno || []).forEach((r) => tramosPorDia(r).forEach((t) => { sueno[t.key] = (sueno[t.key] || 0) + t.mins; }));
+  const typeSueno = chartTypes.sueno || 'bar';
+  charts.sueno = new Chart($('chartSueno'), {
+    type: typeSueno,
+    data: {
+      labels,
+      datasets: [{
+        label: 'Sueño (horas)',
+        data: dias.map((d) => Math.round(((sueno[d.key] || 0) / 60) * 10) / 10),
+        backgroundColor: s.violeta,
+        borderColor: s.violeta,
+        ...(typeSueno === 'bar' ? BAR : LINEA),
+      }],
+    },
+    options: baseChartOpts({ callbacks: { label: (c) => ` ${fmtDur(c.parsed.y * 60)}` } }),
+  });
+
+  statsDirty = false;
 }
 
 // ---------- Tabs ----------
+const TABS = {
+  stats: { icon: '📊', label: 'Stats' },
+  leche: { icon: '🍼', label: 'Leche' },
+  vitaminas: { icon: '💊', label: 'Vitaminas' },
+  panales: { icon: '🧷', label: 'Pañales' },
+  sueno: { icon: '😴', label: 'Sueño' },
+  info: { icon: '👶', label: 'Info' },
+  bitacora: { icon: '📖', label: 'Bitácora' },
+  juegos: { icon: '🧸', label: 'Juegos' },
+};
+
+const ORDEN_DEFAULT = ['stats', 'leche', 'vitaminas', 'panales', 'sueno', 'info', 'bitacora', 'juegos'];
+
+function leerOrdenTabs() {
+  try {
+    const guardado = JSON.parse(localStorage.getItem('orden_tabs') || 'null');
+    if (Array.isArray(guardado)) {
+      const validos = guardado.filter((k) => TABS[k]);
+      const faltantes = ORDEN_DEFAULT.filter((k) => !validos.includes(k));
+      return [...validos, ...faltantes];
+    }
+  } catch {}
+  return ORDEN_DEFAULT.slice();
+}
+
+function renderTabbar() {
+  const orden = leerOrdenTabs();
+  const barra = orden.slice(0, 4);
+  const mas = orden.slice(4);
+
+  let html = barra
+    .map((k) => `<button class="tab-btn${k === currentTab ? ' active' : ''}" data-tab="${k}"><span>${TABS[k].icon}</span>${TABS[k].label}</button>`)
+    .join('');
+
+  if (mas.length) {
+    const enMas = mas.includes(currentTab);
+    const iconoActivo = enMas ? TABS[currentTab].icon : '⋯';
+    const labelActivo = enMas ? TABS[currentTab].label : 'Más';
+    html += `<button class="tab-btn${enMas ? ' active' : ''}" id="tabMasBtn" aria-haspopup="true"><span>${iconoActivo}</span>${labelActivo}</button>`;
+    html += `<div class="tab-menu hidden" id="tabMenu">${mas
+      .map((k) => `<button class="tab-btn tab-menu-item${k === currentTab ? ' active' : ''}" data-tab="${k}"><span>${TABS[k].icon}</span>${TABS[k].label}</button>`)
+      .join('')}</div>`;
+  }
+  $('tabbar').innerHTML = html;
+}
+
 function renderTab(tab) {
+  document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+  const el = $('tab-' + tab);
+  if (el) el.classList.add('active');
+
+  // Metatítulo dinámico y semántico para SEO/PWA
+  const tabName = TABS[tab]?.label || 'Rutinas';
+  document.title = `${tabName} | Rutinas del Bebé`;
+
   if (tab === 'stats') { if (statsDirty) renderCharts(); }
   else if (tab === 'leche') renderLeche();
   else if (tab === 'vitaminas') renderVitaminas();
-  else if (tab === 'pastillas') renderPastillas();
-  else if (tab === 'info') renderInfo();
-  else if (tab === 'bitacora') renderBitacora();
-  else if (tab === 'controles') renderControles();
-  else if (tab === 'juegos') renderJuegos();
-  else if (tab === 'super') renderSuper();
   else if (tab === 'panales') renderPanales();
   else if (tab === 'sueno') renderSueno();
-}
-
-const TAB_META = {
-  stats:     { icon: '📊', label: 'Stats' },
-  leche:     { icon: '🍼', label: 'Leche' },
-  vitaminas: { icon: '💊', label: 'Vitaminas' },
-  pastillas: { icon: '💊', label: 'Pastillas' },
-  panales:   { icon: '🧷', label: 'Pañales' },
-  sueno:     { icon: '😴', label: 'Sueño' },
-  info:      { icon: '👶', label: 'Info' },
-  bitacora:  { icon: '📓', label: 'Bitácora' },
-  controles: { icon: '🩺', label: 'Controles' },
-  juegos:    { icon: '🧸', label: 'Juegos' },
-  super:     { icon: '🛒', label: 'Súper' },
-};
-const ORDEN_DEFAULT = ['stats', 'leche', 'vitaminas', 'panales', 'pastillas', 'info', 'bitacora', 'controles', 'juegos', 'super', 'sueno'];
-const BAR_COUNT = 4; // primeras N pestañas en la barra, el resto en el menú "Más"
-
-// Orden guardado por usuario (localStorage), completado con pestañas nuevas
-function ordenTabs() {
-  let saved = [];
-  try { saved = JSON.parse(localStorage.getItem('orden_tabs') || '[]'); } catch { saved = []; }
-  const orden = saved.filter((t) => TAB_META[t]);
-  for (const t of ORDEN_DEFAULT) if (!orden.includes(t)) orden.push(t);
-  return orden;
-}
-function guardarOrden(orden) { localStorage.setItem('orden_tabs', JSON.stringify(orden)); }
-
-function renderTabbar() {
-  const orden = ordenTabs();
-  const btn = (t, cls) => `<button class="tab-btn ${cls}" data-tab="${t}"><span>${TAB_META[t].icon}</span>${TAB_META[t].label}</button>`;
-  const bar = orden.slice(0, BAR_COUNT).map((t) => btn(t, '')).join('');
-  const menu = orden.slice(BAR_COUNT).map((t) => btn(t, 'tab-menu-item')).join('');
-  $('tabbar').innerHTML =
-    bar +
-    `<button class="tab-btn" id="masBtn" type="button"><span>⋯</span>Más</button>` +
-    `<div id="masMenu" class="tab-menu hidden">${menu}</div>`;
-  document.querySelectorAll('#tabbar .tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === currentTab));
+  else if (tab === 'info') renderInfoBebe();
+  else if (tab === 'bitacora') renderBitacora();
+  else if (tab === 'juegos') renderJuegos();
 }
 
 function activarTab(tab) {
-  if (!TAB_META[tab]) tab = 'stats';
   currentTab = tab;
   localStorage.setItem('tab', tab);
-  document.querySelectorAll('#tabbar .tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
-  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === 'tab-' + tab));
+  renderTabbar();
+  renderTab(tab);
 }
 
-// Delegación de clicks de la barra (se rearma sola al reordenar)
 document.addEventListener('click', (e) => {
-  const tb = e.target.closest('.tab-btn');
-  if (tb) {
-    if (tb.id === 'masBtn') { e.stopPropagation(); $('masMenu').classList.toggle('hidden'); return; }
-    if (tb.dataset.tab) { activarTab(tb.dataset.tab); $('masMenu')?.classList.add('hidden'); renderTab(currentTab); }
+  const b = e.target.closest('.tab-btn:not(#tabMasBtn)');
+  if (b?.dataset?.tab) {
+    activarTab(b.dataset.tab);
+    $('tabMenu')?.classList.add('hidden');
     return;
   }
-  $('masMenu')?.classList.add('hidden'); // click fuera cierra el menú
+  const masBtn = e.target.closest('#tabMasBtn');
+  if (masBtn) {
+    $('tabMenu')?.classList.toggle('hidden');
+    return;
+  }
+  if (!e.target.closest('#tabMenu')) $('tabMenu')?.classList.add('hidden');
 });
 
-// Reordenar pestañas (en Configuración)
-function renderOrdenUI() {
-  const orden = ordenTabs();
-  $('ordenTabsUI').innerHTML = orden.map((t, i) =>
-    `<div class="orden-row">
-       <span>${TAB_META[t].icon} ${TAB_META[t].label}${i < BAR_COUNT ? ' · barra' : ''}</span>
-       <span class="orden-btns">
-         <button type="button" class="icon-btn orden-up" data-tab="${t}" ${i === 0 ? 'disabled' : ''}>▲</button>
-         <button type="button" class="icon-btn orden-down" data-tab="${t}" ${i === orden.length - 1 ? 'disabled' : ''}>▼</button>
-       </span>
-     </div>`
-  ).join('');
-}
-
-$('ordenTabsUI').addEventListener('click', (e) => {
-  const b = e.target.closest('.orden-up, .orden-down');
-  if (!b) return;
-  const orden = ordenTabs();
-  const i = orden.indexOf(b.dataset.tab);
-  const j = b.classList.contains('orden-up') ? i - 1 : i + 1;
-  if (j < 0 || j >= orden.length) return;
-  [orden[i], orden[j]] = [orden[j], orden[i]];
-  guardarOrden(orden);
-  renderOrdenUI();
-  renderTabbar();
-});
-
-// Recargar la app: botón manual + automático cada 10 minutos
-$('reloadBtn').addEventListener('click', () => location.reload());
-setInterval(() => {
-  if (document.querySelector('.modal:not(.hidden)')) return; // no recargar con un modal abierto
-  location.reload();
-}, 600000);
-
-// ---------- Formularios ----------
-async function guardarToma(fechaISO) {
-  const cantidad = Number($('lecheCantidad').value);
-  if (!(cantidad > 0)) { toast('La cantidad debe ser mayor a 0', true); return; }
-  const ok = await insertar('tomas', { fecha_hora: fechaISO, cantidad_ml: Math.round(cantidad) });
-  if (ok) { $('lecheCantidad').value = ''; $('lecheFechaHora').value = dtLocal(new Date()); renderLeche(); }
-}
-$('formLeche').addEventListener('submit', (e) => {
+// ---------- Formularios Principales ----------
+$('formLeche').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const v = $('lecheFechaHora').value;
-  guardarToma(v ? new Date(v).toISOString() : new Date().toISOString());
+  const v = Number($('lecheCantidad').value);
+  if (!v || v <= 0) { toast('Ingresa una cantidad válida', true); return; }
+  const fh = $('lecheFechaHora').value ? new Date($('lecheFechaHora').value).toISOString() : new Date().toISOString();
+  const ok = await insertar('tomas', { cantidad_ml: v, fecha_hora: fh });
+  if (ok) { $('lecheCantidad').value = ''; setNowDefaults(); renderLeche(); }
 });
-$('lecheAhora').addEventListener('click', () => guardarToma(new Date().toISOString()));
+
+$('lecheAhora').addEventListener('click', () => { $('lecheFechaHora').value = dtLocal(new Date()); });
+
+$('formVitaminas').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const v = Number($('vitGotas').value);
+  if (!v || v <= 0) { toast('Ingresa una cantidad válida', true); return; }
+  const ok = await insertar('vitaminas', { gotas: v, fecha_hora: toISO($('vitFecha').value, $('vitHora').value) });
+  if (ok) { setNowDefaults(); renderVitaminas(); }
+});
+
+$('formVitaminaTipo').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nombre = $('vitTipoNombre').value.trim();
+  if (!nombre) return;
+  const gotas = Number($('vitTipoGotas').value) || 5;
+  const ok = await insertar('vitaminas_tipos', { nombre, gotas_default: gotas });
+  if (ok) { $('vitTipoNombre').value = ''; $('vitTipoGotas').value = '5'; renderVitaminaTipos(); }
+});
+
+$('formPanales').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const h = $('panHeces').checked, o = $('panOrina').checked;
+  if (!h && !o) { toast('Marca al menos heces u orina', true); return; }
+  const fh = $('panFechaHora').value ? new Date($('panFechaHora').value).toISOString() : new Date().toISOString();
+  const ok = await insertar('panales', { heces: h, orina: o, fecha_hora: fh });
+  if (ok) { $('panHeces').checked = false; $('panOrina').checked = false; setNowDefaults(); renderPanales(); }
+});
+
+$('panAhora').addEventListener('click', () => { $('panFechaHora').value = dtLocal(new Date()); });
+
+$('formSueno').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = $('suenoFecha').value, ini = $('suenoInicio').value, fin = $('suenoFin').value;
+  const dtIni = new Date(`${f}T${ini}`);
+  let dtFin = new Date(`${f}T${fin}`);
+  if (dtFin <= dtIni) dtFin = new Date(dtFin.getTime() + 86400000);
+  const ok = await insertar('sueno', { inicio: dtIni.toISOString(), fin: dtFin.toISOString() });
+  if (ok) { setNowDefaults(); renderSueno(); }
+});
 
 $('objetivoInput').addEventListener('change', () => {
   const v = Number($('objetivoInput').value);
-  localStorage.setItem('objetivo_leche', v > 0 ? v : 800);
-  renderLecheResumen();
+  if (v > 0) { localStorage.setItem('objetivo_leche', v); renderLecheResumen(); }
 });
-
-// Guarda cambios en la ficha del bebé y refresca el objeto local
-async function actualizarBebe(cambios) {
-  const { error } = await db.from('bebes').update(cambios).eq('id', bebe.id);
-  if (error) { toast(`Error: ${error.message}`, true); return false; }
-  bebe = { ...bebe, ...cambios };
-  return true;
-}
 
 $('lataInput').addEventListener('change', async () => {
   const v = Number($('lataInput').value);
   await actualizarBebe({ lata_gramos: v > 0 ? v : 800 });
-  renderLecheResumen();
 });
 
 $('abrirLataBtn').addEventListener('click', async () => {
   const val = $('lataAbiertaInput').value;
   const fecha = val ? new Date(val) : new Date();
   const ok = await actualizarBebe({ lata_abierta_en: fecha.toISOString(), latas_usadas: (bebe?.latas_usadas || 0) + 1 });
-  if (ok) { toast('Lata nueva abierta ✓'); renderLecheResumen(); }
-});
-
-$('formPastillas').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const nombre = $('pastNombre').value.trim();
-  if (!nombre) { toast('Escribe el nombre de la pastilla', true); return; }
-  const ok = await insertar('pastillas', { nombre, horario: $('pastHorario').value });
-  if (ok) { $('pastNombre').value = ''; renderPastillas(); }
-});
-
-$('formVitaminas').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const gotas = Number($('vitGotas').value);
-  if (!(gotas > 0)) { toast('Las gotas deben ser mayores a 0', true); return; }
-  const ok = await insertar('vitaminas', {
-    fecha_hora: toISO($('vitFecha').value, $('vitHora').value),
-    gotas: Math.round(gotas),
-  });
-  if (ok) { setNowDefaults(); $('vitGotas').value = 5; renderVitaminas(); }
-});
-
-// Sin checkboxes marcados también es válido: fue un cambio sin heces ni orina
-async function guardarPanal(fechaISO) {
-  const ok = await insertar('panales', {
-    fecha_hora: fechaISO,
-    heces: $('panHeces').checked,
-    orina: $('panOrina').checked,
-  });
-  if (ok) { $('panHeces').checked = false; $('panOrina').checked = false; $('panFechaHora').value = dtLocal(new Date()); renderPanales(); }
-}
-$('formPanales').addEventListener('submit', (e) => {
-  e.preventDefault();
-  const v = $('panFechaHora').value;
-  guardarPanal(v ? new Date(v).toISOString() : new Date().toISOString());
-});
-$('panAhora').addEventListener('click', () => guardarPanal(new Date().toISOString()));
-
-$('formSueno').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const fecha = $('suenoFecha').value;
-  const inicio = new Date(`${fecha}T${$('suenoInicio').value}`);
-  let fin = new Date(`${fecha}T${$('suenoFin').value}`);
-  if (fin <= inicio) fin = new Date(fin.getTime() + 86400000); // cruzó la medianoche
-  const ok = await insertar('sueno', { inicio: inicio.toISOString(), fin: fin.toISOString() });
-  if (ok) { setNowDefaults(); renderSueno(); }
-});
-
-// ---------- Edición de registros ----------
-let editRegistro = null; // { tabla, id }
-
-const EDIT_TITULOS = { tomas: 'Editar toma', vitaminas: 'Editar vitaminas', pastillas: 'Editar pastilla', pastillas_log: 'Editar registro de pastilla', vitaminas_tipos: 'Editar vitamina', panales: 'Editar cambio de pañal', sueno: 'Editar sueño', bitacora: 'Editar anotación', super: 'Editar producto', compras: 'Editar compra', compra_items: 'Editar cantidad' };
-
-function abrirEdicion(tabla, id) {
-  const r = (cache[tabla] || []).find((x) => String(x.id) === String(id));
-  if (!r) return;
-  editRegistro = { tabla, id: r.id };
-  $('editTitulo').textContent = EDIT_TITULOS[tabla] || 'Editar registro';
-  const f = (d) => dayKey(new Date(d));
-  const h = (d) => fmtTime(new Date(d));
-  let html;
-  if (tabla === 'sueno') {
-    html = `
-      <label>Fecha (se durmió)<input type="date" id="edFecha" value="${f(r.inicio)}"></label>
-      <div class="fila-2">
-        <label>Se durmió<input type="time" id="edInicio" value="${h(r.inicio)}"></label>
-        <label>Despertó<input type="time" id="edFin" value="${r.fin ? h(new Date(r.fin)) : ''}"></label>
-      </div>
-      <p class="form-hint">Si la hora de despertar es menor, se asume que cruzó la medianoche.${r.fin ? '' : ' Deja "Despertó" vacío si sigue durmiendo.'}</p>`;
-  } else if (tabla === 'pastillas') {
-    html = `
-      <label>Nombre<input type="text" id="edPastNombre" maxlength="60" value="${escapeHtml(r.nombre || '')}"></label>
-      <label>Horario<select id="edPastHorario">
-        <option value="am"${r.horario === 'am' ? ' selected' : ''}>AM</option>
-        <option value="pm"${r.horario === 'pm' ? ' selected' : ''}>PM</option>
-      </select></label>`;
-  } else if (tabla === 'vitaminas_tipos') {
-    html = `
-      <label>Nombre<input type="text" id="edVitTipoNombre" maxlength="60" value="${escapeHtml(r.nombre || '')}"></label>
-      <label>Gotas por defecto<input type="number" id="edVitTipoGotas" step="any" inputmode="decimal" value="${r.gotas_default ?? ''}"></label>`;
-  } else if (tabla === 'bitacora') {
-    html = `
-      <label>Título<input type="text" id="edBitTitulo" maxlength="80" value="${escapeHtml(r.titulo || '')}"></label>
-      <label>Fecha<input type="date" id="edBitFecha" value="${r.fecha}"></label>
-      <label>Anotaciones<textarea id="edBitNotas" rows="3" maxlength="1000">${escapeHtml(r.notas || '')}</textarea></label>`;
-  } else if (tabla === 'pastillas_log') {
-    html = `
-      <div class="fila-2">
-        <label>Fecha<input type="date" id="edPastLogFecha" value="${r.fecha}"></label>
-        <label>Hora<input type="time" id="edPastLogHora" value="${r.hora ? r.hora.slice(0, 5) : ''}"></label>
-      </div>`;
-  } else if (tabla === 'super') {
-    html = `
-      <label>Nombre<input type="text" id="edSuperNombre" maxlength="60" value="${escapeHtml(r.nombre || '')}"></label>
-      <label>Categoría (opcional)<input type="text" id="edSuperCategoria" maxlength="40" value="${escapeHtml(r.categoria || '')}"></label>`;
-  } else if (tabla === 'compra_items') {
-    html = `<label>Cantidad<input type="number" id="edItemCantidad" min="1" step="1" value="${r.cantidad || 1}"></label>`;
-  } else {
-    html = `
-      <div class="fila-2">
-        <label>Fecha<input type="date" id="edFecha" value="${f(r.fecha_hora)}"></label>
-        <label>Hora<input type="time" id="edHora" value="${h(r.fecha_hora)}"></label>
-      </div>`;
-    if (tabla === 'tomas')
-      html += `<label>Cantidad (ml)<input type="number" id="edCantidad" step="any" inputmode="decimal" value="${r.cantidad_ml}"></label>`;
-    if (tabla === 'vitaminas')
-      html += `<label>Gotas<input type="number" id="edGotas" step="any" inputmode="decimal" value="${r.gotas}"></label>`;
-    if (tabla === 'panales')
-      html += `
-      <div class="check-row">
-        <label class="check-pill"><input type="checkbox" id="edHeces" ${r.heces ? 'checked' : ''}> 💩 Heces</label>
-        <label class="check-pill"><input type="checkbox" id="edOrina" ${r.orina ? 'checked' : ''}> 💧 Orina</label>
-      </div>`;
-    if (tabla === 'compras')
-      html += `
-      <label>Monto total (opcional)<input type="number" id="edMonto" step="any" inputmode="decimal" value="${r.monto_total ?? ''}"></label>
-      <label>Notas<textarea id="edNotas" rows="2" maxlength="500">${escapeHtml(r.notas || '')}</textarea></label>`;
-  }
-  $('editCampos').innerHTML = html;
-  $('editModal').classList.remove('hidden');
-}
-
-$('editClose').addEventListener('click', () => $('editModal').classList.add('hidden'));
-$('editModal').addEventListener('click', (e) => { if (e.target === $('editModal')) $('editModal').classList.add('hidden'); });
-
-$('editGuardar').addEventListener('click', async () => {
-  if (!editRegistro) return;
-  const { tabla, id } = editRegistro;
-  const cambios = {};
-  if (tabla === 'sueno') {
-    const inicio = new Date(`${$('edFecha').value}T${$('edInicio').value}`);
-    let fin = null;
-    if ($('edFin').value) {
-      fin = new Date(`${$('edFecha').value}T${$('edFin').value}`);
-      if (fin <= inicio) fin = new Date(fin.getTime() + 86400000); // cruzó la medianoche
-    }
-    cambios.inicio = inicio.toISOString();
-    cambios.fin = fin ? fin.toISOString() : null;
-  } else if (tabla === 'pastillas') {
-    const nombre = $('edPastNombre').value.trim();
-    if (!nombre) { toast('Escribe el nombre de la pastilla', true); return; }
-    cambios.nombre = nombre;
-    cambios.horario = $('edPastHorario').value;
-  } else if (tabla === 'vitaminas_tipos') {
-    const nombre = $('edVitTipoNombre').value.trim();
-    if (!nombre) { toast('Escribe el nombre de la vitamina', true); return; }
-    cambios.nombre = nombre;
-    const g = Number($('edVitTipoGotas').value);
-    cambios.gotas_default = g > 0 ? Math.round(g) : null;
-  } else if (tabla === 'bitacora') {
-    const titulo = $('edBitTitulo').value.trim();
-    if (!titulo) { toast('Escribe un título', true); return; }
-    cambios.titulo = titulo;
-    cambios.fecha = $('edBitFecha').value;
-    cambios.notas = $('edBitNotas').value.trim() || null;
-  } else if (tabla === 'pastillas_log') {
-    cambios.fecha = $('edPastLogFecha').value;
-    cambios.hora = $('edPastLogHora').value || null;
-  } else if (tabla === 'super') {
-    const nombre = $('edSuperNombre').value.trim();
-    if (!nombre) { toast('Escribe el nombre del producto', true); return; }
-    cambios.nombre = nombre;
-    cambios.categoria = $('edSuperCategoria').value.trim() || null;
-  } else if (tabla === 'compra_items') {
-    const v = Number($('edItemCantidad').value);
-    if (!(v > 0)) { toast('La cantidad debe ser mayor a 0', true); return; }
-    cambios.cantidad = Math.round(v);
-  } else {
-    cambios.fecha_hora = toISO($('edFecha').value, $('edHora').value);
-    if (tabla === 'tomas') {
-      const v = Number($('edCantidad').value);
-      if (!(v > 0)) { toast('La cantidad debe ser mayor a 0', true); return; }
-      cambios.cantidad_ml = Math.round(v);
-    }
-    if (tabla === 'compras') {
-      const m = Number($('edMonto').value);
-      cambios.monto_total = m > 0 ? m : null;
-      cambios.notas = $('edNotas').value.trim() || null;
-    }
-    if (tabla === 'vitaminas') {
-      const v = Number($('edGotas').value);
-      if (!(v > 0)) { toast('Las gotas deben ser mayores a 0', true); return; }
-      cambios.gotas = Math.round(v);
-    }
-    if (tabla === 'panales') {
-      cambios.heces = $('edHeces').checked;
-      cambios.orina = $('edOrina').checked;
-    }
-  }
-  const { error } = await db.from(tabla).update(cambios).eq('id', id);
-  if (error) { toast(`Error al guardar: ${error.message}`, true); return; }
-  $('editModal').classList.add('hidden');
-  await loadData(tabla);
-  statsDirty = true;
-  toast('Registro actualizado ✓');
-  renderTab(currentTab);
-});
-
-// ---------- Tema (dark/light) ----------
-function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme;
-  localStorage.setItem('tema', theme);
-  $('themeBtn').textContent = theme === 'dark' ? '☀️' : '🌙';
-  document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#0d0d0d' : '#f9f9f7';
-  if (appStarted) { statsDirty = true; if (currentTab === 'stats') renderCharts(); }
-  if (bgTipo !== 'none' && !bgRaf) bgDibujar(); // refresca colores del fondo pausado
-}
-
-$('themeBtn').addEventListener('click', () => {
-  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
-});
-
-// ---------- Configuración (bebé: nombre, foto, paleta, código; mi rol) ----------
-function calcularEdad(fechaNac) {
-  const nac = new Date(fechaNac + 'T12:00');
-  const hoy = new Date();
-  let anios = hoy.getFullYear() - nac.getFullYear();
-  let meses = hoy.getMonth() - nac.getMonth();
-  let dias = hoy.getDate() - nac.getDate();
-  if (dias < 0) { meses--; dias += new Date(hoy.getFullYear(), hoy.getMonth(), 0).getDate(); }
-  if (meses < 0) { anios--; meses += 12; }
-  if (anios >= 1) return `${anios}a ${meses}m`;
-  if (meses >= 1) return `${meses}m ${dias}d`;
-  return `${dias}d`;
-}
-
-function aplicarBebe() {
-  $('babyName').textContent = bebe?.nombre || 'Mi bebé';
-  document.documentElement.dataset.palette = bebe?.paleta || 'celeste';
-  const img = $('babyPhoto'), fb = $('avatarFallback');
-  if (bebe?.foto_base64) { img.src = bebe.foto_base64; img.classList.remove('hidden'); fb.classList.add('hidden'); }
-  else { img.classList.add('hidden'); fb.classList.remove('hidden'); }
-  const badge = $('rolBadge');
-  badge.textContent = miRol === 'padre' ? '👨 Padre' : '👩 Madre';
-  badge.classList.toggle('hidden', !miRol);
-
-  const stats = [];
-  if (bebe?.fecha_nacimiento) {
-    const [y, m, d] = bebe.fecha_nacimiento.split('-');
-    stats.push(`🎂 ${d}-${m}-${y} (${calcularEdad(bebe.fecha_nacimiento)})`);
-  }
-  if (bebe?.peso_kg) stats.push(`⚖️ ${bebe.peso_kg} kg`);
-  if (bebe?.talla_cm) stats.push(`📏 ${bebe.talla_cm} cm`);
-  $('babyStats').textContent = stats.join(' · ');
-  $('babyStats').classList.toggle('hidden', !stats.length);
-}
-
-function abrirModal() {
-  fotoPendiente = bebe?.foto_base64;
-  $('cfgNombre').value = bebe?.nombre || '';
-  $('cfgNacimiento').value = bebe?.fecha_nacimiento || '';
-  $('cfgPeso').value = bebe?.peso_kg ?? '';
-  $('cfgTalla').value = bebe?.talla_cm ?? '';
-  $('cfgCodigo').textContent = bebe?.codigo || '——————';
-  const rolInput = document.querySelector(`input[name="cfgRol"][value="${miRol}"]`);
-  if (rolInput) rolInput.checked = true;
-  actualizarPreviewFoto();
-  marcarSwatch(bebe?.paleta || 'celeste');
-  renderOrdenUI();
-  $('settingsModal').classList.remove('hidden');
-}
-
-function cerrarModal() {
-  $('settingsModal').classList.add('hidden');
-  document.documentElement.dataset.palette = bebe?.paleta || 'celeste'; // revierte paleta no guardada
-}
-
-$('copiarCodigo').addEventListener('click', async () => {
-  try {
-    await navigator.clipboard.writeText(bebe?.codigo || '');
-    toast('Código copiado ✓');
-  } catch {
-    toast('No se pudo copiar el código', true);
-  }
-});
-
-function actualizarPreviewFoto() {
-  const img = $('cfgFotoPreview'), fb = $('cfgAvatarFallback');
-  if (fotoPendiente) { img.src = fotoPendiente; img.classList.remove('hidden'); fb.classList.add('hidden'); }
-  else { img.classList.add('hidden'); fb.classList.remove('hidden'); }
-}
-
-function marcarSwatch(paleta) {
-  document.querySelectorAll('.swatch').forEach((s) => s.classList.toggle('selected', s.dataset.palette === paleta));
-}
-
-$('settingsBtn').addEventListener('click', abrirModal);
-$('settingsClose').addEventListener('click', cerrarModal);
-$('settingsModal').addEventListener('click', (e) => { if (e.target === $('settingsModal')) cerrarModal(); });
-
-$('swatchRow').addEventListener('click', (e) => {
-  const sw = e.target.closest('.swatch');
-  if (!sw) return;
-  marcarSwatch(sw.dataset.palette);
-  document.documentElement.dataset.palette = sw.dataset.palette; // vista previa inmediata
-});
-
-$('cfgFotoBtn').addEventListener('click', () => $('cfgFoto').click());
-
-$('cfgFoto').addEventListener('change', () => {
-  const file = $('cfgFoto').files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    const img = new Image();
-    img.onload = () => {
-      // Redimensiona a 256px máx y comprime para guardar como base64
-      const escala = Math.min(1, 256 / Math.max(img.width, img.height));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(img.width * escala);
-      canvas.height = Math.round(img.height * escala);
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      fotoPendiente = canvas.toDataURL('image/jpeg', 0.82);
-      actualizarPreviewFoto();
-    };
-    img.src = reader.result;
-  };
-  reader.readAsDataURL(file);
-});
-
-$('cfgGuardar').addEventListener('click', async () => {
-  const cambios = {
-    nombre: $('cfgNombre').value.trim() || 'Mi bebé',
-    foto_base64: fotoPendiente || null,
-    paleta: document.querySelector('.swatch.selected')?.dataset.palette || 'celeste',
-    fecha_nacimiento: $('cfgNacimiento').value || null,
-    peso_kg: Number($('cfgPeso').value) > 0 ? Number($('cfgPeso').value) : null,
-    talla_cm: Number($('cfgTalla').value) > 0 ? Number($('cfgTalla').value) : null,
-  };
-  const rolSel = document.querySelector('input[name="cfgRol"]:checked')?.value || miRol;
-  const [rBebe, rRol] = await Promise.all([
-    db.from('bebes').update(cambios).eq('id', bebe.id),
-    db.from('miembros').update({ rol: rolSel }).eq('user_id', usuario.id),
-  ]);
-  const error = rBebe.error || rRol.error;
-  if (error) { toast(`Error al guardar: ${error.message}`, true); return; }
-  bebe = { ...bebe, ...cambios };
-  miRol = rolSel;
-  aplicarBebe();
-  $('settingsModal').classList.add('hidden');
-  toast('Configuración guardada ✓');
-});
-
-$('logoutBtn').addEventListener('click', async () => {
-  await db.auth.signOut();
-  $('settingsModal').classList.add('hidden');
-});
-
-// ---------- Info del bebé + padres ----------
-let infoFotoPendiente;
-
-function infoResumenTexto() {
-  const partes = [];
-  if (bebe?.fecha_nacimiento) {
-    const [y, m, d] = bebe.fecha_nacimiento.split('-');
-    partes.push(`🎂 ${d}-${m}-${y} (${calcularEdad(bebe.fecha_nacimiento)})`);
-  }
-  if (bebe?.peso_kg) partes.push(`⚖️ ${bebe.peso_kg} kg`);
-  if (bebe?.talla_cm) partes.push(`📏 ${bebe.talla_cm} cm`);
-  if (bebe?.grupo_sanguineo) partes.push(`🩸 ${bebe.grupo_sanguineo}`);
-  return partes.join(' · ');
-}
-
-function renderInfo() {
-  infoFotoPendiente = bebe?.foto_base64;
-  const img = $('infoFotoPreview'), fb = $('infoAvatarFallback');
-  if (infoFotoPendiente) { img.src = infoFotoPendiente; img.classList.remove('hidden'); fb.classList.add('hidden'); }
-  else { img.classList.add('hidden'); fb.classList.remove('hidden'); }
-  $('infoNombre').value = bebe?.nombre || '';
-  $('infoNombreCompleto').value = bebe?.nombre_completo || '';
-  $('infoGrupo').value = bebe?.grupo_sanguineo || '';
-  $('infoNacimiento').value = bebe?.fecha_nacimiento || '';
-  $('infoPeso').value = bebe?.peso_kg ?? '';
-  $('infoTalla').value = bebe?.talla_cm ?? '';
-  $('infoAlergias').value = bebe?.alergias || '';
-  $('infoRutinas').value = bebe?.rutinas || '';
-  $('infoResumen').textContent = infoResumenTexto();
-}
-
-$('infoFotoBtn').addEventListener('click', () => $('infoFoto').click());
-$('infoFoto').addEventListener('change', () => {
-  const file = $('infoFoto').files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    const im = new Image();
-    im.onload = () => {
-      const escala = Math.min(1, 256 / Math.max(im.width, im.height));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(im.width * escala);
-      canvas.height = Math.round(im.height * escala);
-      canvas.getContext('2d').drawImage(im, 0, 0, canvas.width, canvas.height);
-      infoFotoPendiente = canvas.toDataURL('image/jpeg', 0.82);
-      const img = $('infoFotoPreview'), fb = $('infoAvatarFallback');
-      img.src = infoFotoPendiente; img.classList.remove('hidden'); fb.classList.add('hidden');
-    };
-    im.src = reader.result;
-  };
-  reader.readAsDataURL(file);
-});
-
-$('formInfo').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const cambios = {
-    nombre: $('infoNombre').value.trim() || 'Mi bebé',
-    nombre_completo: $('infoNombreCompleto').value.trim() || null,
-    grupo_sanguineo: $('infoGrupo').value || null,
-    fecha_nacimiento: $('infoNacimiento').value || null,
-    peso_kg: Number($('infoPeso').value) > 0 ? Number($('infoPeso').value) : null,
-    talla_cm: Number($('infoTalla').value) > 0 ? Number($('infoTalla').value) : null,
-    alergias: $('infoAlergias').value.trim() || null,
-    rutinas: $('infoRutinas').value.trim() || null,
-    foto_base64: infoFotoPendiente || null,
-  };
-  const ok = await actualizarBebe(cambios);
-  if (!ok) return;
-  aplicarBebe();       // refresca la barra superior
-  renderInfo();
-  toast('Datos guardados ✓');
-});
-
-// Modal de padre / madre (contacto)
-function abrirParent(rol) {
-  const m = (cache.miembros || []).find((x) => x.rol === rol);
-  $('parentTitulo').textContent = rol === 'padre' ? '👨 Padre' : '👩 Madre';
-  const propio = m && m.user_id === usuario.id;
-  $('parentNombre').value = m?.nombre_completo || '';
-  $('parentTelefono').value = m?.telefono || '';
-  $('parentCorreo').value = m?.correo_contacto || '';
-  $('parentGrupo').value = m?.grupo_sanguineo || '';
-  ['parentNombre', 'parentTelefono', 'parentCorreo', 'parentGrupo'].forEach((id) => { $(id).disabled = !propio; });
-  $('parentGuardar').classList.toggle('hidden', !propio);
-  const aviso = $('parentAviso');
-  if (!m) { aviso.textContent = 'Este rol aún no está vinculado.'; aviso.classList.remove('hidden'); }
-  else if (!propio) { aviso.textContent = 'Solo puedes editar tu propia información.'; aviso.classList.remove('hidden'); }
-  else { aviso.classList.add('hidden'); }
-  $('parentModal').classList.remove('hidden');
-}
-
-$('verMadreBtn').addEventListener('click', () => abrirParent('madre'));
-$('verPadreBtn').addEventListener('click', () => abrirParent('padre'));
-$('parentClose').addEventListener('click', () => $('parentModal').classList.add('hidden'));
-$('parentModal').addEventListener('click', (e) => { if (e.target === $('parentModal')) $('parentModal').classList.add('hidden'); });
-
-$('parentGuardar').addEventListener('click', async () => {
-  const { error } = await db.from('miembros').update({
-    nombre_completo: $('parentNombre').value.trim() || null,
-    telefono: $('parentTelefono').value.trim() || null,
-    correo_contacto: $('parentCorreo').value.trim() || null,
-    grupo_sanguineo: $('parentGrupo').value || null,
-  }).eq('user_id', usuario.id);
-  if (error) { toast(`Error: ${error.message}`, true); return; }
-  await loadData('miembros');
-  $('parentModal').classList.add('hidden');
-  toast('Guardado ✓');
+  if (ok) toast('🥫 Nueva lata registrada');
 });
 
 // ---------- Bitácora ----------
@@ -1499,94 +1047,13 @@ $('formBitacora').addEventListener('submit', async (e) => {
   if (ok) { $('bitTitulo').value = ''; $('bitNotas').value = ''; $('bitFecha').value = dayKey(new Date()); renderBitacora(); }
 });
 
-// ---------- Controles médicos ----------
-const CONTROLES_SCHED = ['Díada (7-10 días)', '1 mes', '2 meses', '3 meses', '4 meses', '5 meses', '6 meses', '8 meses', '12 meses (primer año)'];
-let ctrlEditId = null;
-
-function limpiarControlForm() {
-  ctrlEditId = null;
-  $('ctrlSubmit').textContent = 'Guardar control';
-  ['ctrlProfesional', 'ctrlEdad', 'ctrlPeso', 'ctrlTalla', 'ctrlPerimetro', 'ctrlDxNutri', 'ctrlDx', 'ctrlIndicaciones'].forEach((id) => { $(id).value = ''; });
-  document.querySelectorAll('.ctrl-alim').forEach((c) => { c.checked = false; });
-  $('ctrlControl').selectedIndex = 0;
-  $('ctrlFecha').value = dayKey(new Date());
-}
-
-function renderControles() {
-  if (!$('ctrlControl').options.length) $('ctrlControl').innerHTML = CONTROLES_SCHED.map((c) => `<option>${c}</option>`).join('');
-  if (!$('ctrlFecha').value) $('ctrlFecha').value = dayKey(new Date());
-  $('ctrlLista').innerHTML = historialColapsable(cache.controles || [], (r) => r.fecha, (r) => {
-    const linea = [r.edad && `Edad: ${escapeHtml(r.edad)}`, r.peso_kg && `Peso: ${r.peso_kg} kg`, r.talla_cm && `Talla: ${r.talla_cm} cm`, r.perimetro_craneal && `PC: ${r.perimetro_craneal} cm`, r.alimentacion && `Alim: ${escapeHtml(r.alimentacion)}`].filter(Boolean).join(' · ');
-    return `
-        <div class="bit-item">
-          <div class="bit-head"><strong>${escapeHtml(r.control || 'Control')}</strong></div>
-          ${linea ? `<p class="ctrl-detalle">${linea}</p>` : ''}
-          ${r.diagnostico_nutricional ? `<p>Dx nutricional: ${escapeHtml(r.diagnostico_nutricional)}</p>` : ''}
-          ${r.diagnostico ? `<p>Dx: ${escapeHtml(r.diagnostico)}</p>` : ''}
-          ${r.indicaciones ? `<p>Indicaciones: ${escapeHtml(r.indicaciones)}</p>` : ''}
-          ${r.profesional ? `<p class="ctrl-prof">👩‍⚕️ ${escapeHtml(r.profesional)}</p>` : ''}
-          <div class="bit-acciones">${botonesEdit('controles', r.id)}</div>
-        </div>`;
-  });
-}
-
-function cargarControl(id) {
-  const r = (cache.controles || []).find((x) => String(x.id) === String(id));
-  if (!r) return;
-  ctrlEditId = r.id;
-  $('ctrlSubmit').textContent = 'Actualizar control';
-  const opt = [...$('ctrlControl').options].findIndex((o) => o.value === r.control);
-  $('ctrlControl').selectedIndex = opt >= 0 ? opt : 0;
-  $('ctrlProfesional').value = r.profesional || '';
-  $('ctrlFecha').value = r.fecha || dayKey(new Date());
-  $('ctrlEdad').value = r.edad || '';
-  $('ctrlPeso').value = r.peso_kg ?? '';
-  $('ctrlTalla').value = r.talla_cm ?? '';
-  $('ctrlPerimetro').value = r.perimetro_craneal ?? '';
-  $('ctrlDxNutri').value = r.diagnostico_nutricional || '';
-  $('ctrlDx').value = r.diagnostico || '';
-  $('ctrlIndicaciones').value = r.indicaciones || '';
-  const alim = (r.alimentacion || '').split(',');
-  document.querySelectorAll('.ctrl-alim').forEach((c) => { c.checked = alim.includes(c.value); });
-  $('formControles').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-$('formControles').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const valores = {
-    control: $('ctrlControl').value,
-    profesional: $('ctrlProfesional').value.trim() || null,
-    fecha: $('ctrlFecha').value || dayKey(new Date()),
-    edad: $('ctrlEdad').value.trim() || null,
-    peso_kg: Number($('ctrlPeso').value) > 0 ? Number($('ctrlPeso').value) : null,
-    talla_cm: Number($('ctrlTalla').value) > 0 ? Number($('ctrlTalla').value) : null,
-    perimetro_craneal: Number($('ctrlPerimetro').value) > 0 ? Number($('ctrlPerimetro').value) : null,
-    diagnostico_nutricional: $('ctrlDxNutri').value.trim() || null,
-    diagnostico: $('ctrlDx').value.trim() || null,
-    indicaciones: $('ctrlIndicaciones').value.trim() || null,
-    alimentacion: [...document.querySelectorAll('.ctrl-alim:checked')].map((c) => c.value).join(',') || null,
-  };
-  if (ctrlEditId) {
-    const { error } = await db.from('controles').update(valores).eq('id', ctrlEditId);
-    if (error) { toast(`Error: ${error.message}`, true); return; }
-    await loadData('controles');
-    toast('Control actualizado ✓');
-  } else {
-    const ok = await insertar('controles', valores);
-    if (!ok) return;
-  }
-  limpiarControlForm();
-  renderControles();
-});
-
-// ---------- Juegos ----------
+// ---------- Juegos y Estimulación ----------
 let juegoEditId = null;
 let juegoFotos = [];
 let juegoRAF = null, juegoT0 = 0, juegoSeg = 0;
 
 const fmtCrono = (seg) => `${pad2(Math.floor(seg / 60))}:${pad2(seg % 60)}`;
 
-// Redimensiona una foto a 256px y devuelve base64 JPEG (promesa)
 function redimensionarFoto(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1611,12 +1078,12 @@ function redimensionarFoto(file) {
 const pintarCrono = () => { $('juegoCrono').textContent = fmtCrono(juegoSeg); };
 function detenerCrono() { clearInterval(juegoRAF); juegoRAF = null; $('juegoStart').textContent = '▶️ Iniciar'; }
 
-// Persiste el cronómetro para que sobreviva a la recarga automática
 function guardarCronoLS() {
   if (juegoRAF) localStorage.setItem('juego_crono', JSON.stringify({ running: true, t0: juegoT0 }));
   else if (juegoSeg > 0) localStorage.setItem('juego_crono', JSON.stringify({ running: false, seg: juegoSeg }));
   else localStorage.removeItem('juego_crono');
 }
+
 function restaurarCrono() {
   let s; try { s = JSON.parse(localStorage.getItem('juego_crono') || 'null'); } catch { s = null; }
   if (!s) return;
@@ -1632,16 +1099,17 @@ function restaurarCrono() {
 
 $('juegoStart').addEventListener('click', () => {
   if (juegoRAF) { detenerCrono(); guardarCronoLS(); return; }
-  juegoT0 = Date.now() - juegoSeg * 1000; // reanuda desde lo acumulado
+  juegoT0 = Date.now() - juegoSeg * 1000;
   juegoRAF = setInterval(() => { juegoSeg = Math.floor((Date.now() - juegoT0) / 1000); pintarCrono(); }, 1000);
   $('juegoStart').textContent = '⏸️ Pausar';
   guardarCronoLS();
 });
+
 $('juegoReset').addEventListener('click', () => { detenerCrono(); juegoSeg = 0; pintarCrono(); guardarCronoLS(); });
 
 function pintarFotosPrev() {
   $('juegoFotosPrev').innerHTML = juegoFotos.map((f, i) =>
-    `<div class="album-item"><img src="${f}" alt=""><button type="button" class="album-del" data-i="${i}">✕</button></div>`
+    `<div class="album-item"><img src="${f}" alt="Foto de sesión de juego"><button type="button" class="album-del" data-i="${i}">✕</button></div>`
   ).join('');
 }
 $('juegoFotoBtn').addEventListener('click', () => $('juegoFoto').click());
@@ -1677,7 +1145,7 @@ function renderJuegos() {
         <div class="bit-head"><strong>${escapeHtml(r.nombre || 'Juego')}</strong><span>${new Date(r.fecha).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', hour12: false })}</span></div>
         ${r.duracion_seg ? `<p class="ctrl-detalle">⏱️ ${fmtCrono(r.duracion_seg)}</p>` : ''}
         ${r.observaciones ? `<p>${escapeHtml(r.observaciones)}</p>` : ''}
-        ${(Array.isArray(r.fotos) && r.fotos.length) ? `<div class="album">${r.fotos.map((f) => `<div class="album-item"><img src="${f}" alt=""></div>`).join('')}</div>` : ''}
+        ${(Array.isArray(r.fotos) && r.fotos.length) ? `<div class="album">${r.fotos.map((f) => `<div class="album-item"><img src="${f}" alt="Foto adjunta de juego"></div>`).join('')}</div>` : ''}
         <div class="bit-acciones">${botonesEdit('juegos', r.id)}</div>
       </div>`);
 }
@@ -1722,163 +1190,391 @@ $('formJuegos').addEventListener('submit', async (e) => {
   renderJuegos();
 });
 
-// ---------- Lista del súper ----------
-// Estado del checklist en curso: Map(productoId string -> cantidad), persistido
-// en localStorage para sobrevivir a la auto-recarga de la app cada 10 min.
-function leerSuperChecklistLS() {
-  try { return new Map(Object.entries(JSON.parse(localStorage.getItem('super_checklist') || '{}'))); }
-  catch { return new Map(); }
-}
-let superChecklist = leerSuperChecklistLS();
-let superFotoPendiente = null;
+// ---------- Edición Genérica de Registros ----------
+let editTabla = null;
+let editId = null;
 
-function guardarSuperChecklistLS() {
-  localStorage.setItem('super_checklist', JSON.stringify(Object.fromEntries(superChecklist)));
+const EDIT_TITULOS = {
+  tomas: 'Editar toma',
+  vitaminas: 'Editar vitaminas',
+  vitaminas_tipos: 'Editar vitamina',
+  vitaminas_tipos_log: 'Editar dosis de vitamina',
+  panales: 'Editar cambio de pañal',
+  sueno: 'Editar sueño',
+  bitacora: 'Editar anotación',
+};
+
+function abrirEdicion(tabla, id) {
+  editTabla = tabla;
+  editId = id;
+  const reg = (cache[tabla] || []).find((r) => String(r.id) === String(id));
+  if (!reg) return;
+
+  $('editTitulo').textContent = EDIT_TITULOS[tabla] || 'Editar registro';
+  const c = $('editCampos');
+  c.innerHTML = '';
+
+  if (tabla === 'tomas') {
+    const d = new Date(reg.fecha_hora);
+    c.innerHTML = `
+      <label>Cantidad (ml)<input type="number" id="edLecheCant" step="any" inputmode="decimal" value="${reg.cantidad_ml}" required></label>
+      <div class="fila-2"><label>Fecha<input type="date" id="edLecheFecha" value="${dayKey(d)}"></label><label>Hora<input type="time" id="edLecheHora" value="${fmtTime(d)}"></label></div>`;
+  } else if (tabla === 'vitaminas') {
+    const d = new Date(reg.fecha_hora);
+    c.innerHTML = `
+      <label>Gotas<input type="number" id="edVitGotas" step="any" inputmode="decimal" value="${reg.gotas}" required></label>
+      <div class="fila-2"><label>Fecha<input type="date" id="edVitFecha" value="${dayKey(d)}"></label><label>Hora<input type="time" id="edVitHora" value="${fmtTime(d)}"></label></div>`;
+  } else if (tabla === 'vitaminas_tipos') {
+    c.innerHTML = `
+      <label>Nombre<input type="text" id="edVitNombre" maxlength="60" value="${escapeHtml(reg.nombre)}" required></label>
+      <label>Gotas por defecto<input type="number" id="edVitGotasDef" step="any" inputmode="decimal" value="${reg.gotas_default || 5}"></label>`;
+  } else if (tabla === 'vitaminas_tipos_log') {
+    c.innerHTML = `
+      <div class="fila-2"><label>Fecha<input type="date" id="edVitLogFecha" value="${reg.fecha}" required></label><label>Hora<input type="time" id="edVitLogHora" value="${reg.hora ? reg.hora.slice(0, 5) : ''}"></label></div>
+      <label>Gotas<input type="number" id="edVitLogGotas" step="any" inputmode="decimal" value="${reg.gotas ?? 5}"></label>`;
+  } else if (tabla === 'panales') {
+    const d = new Date(reg.fecha_hora);
+    c.innerHTML = `
+      <div class="check-row"><label class="check-pill"><input type="checkbox" id="edPanHeces" ${reg.heces ? 'checked' : ''}> 💩 Heces</label><label class="check-pill"><input type="checkbox" id="edPanOrina" ${reg.orina ? 'checked' : ''}> 💧 Orina</label></div>
+      <div class="fila-2"><label>Fecha<input type="date" id="edPanFecha" value="${dayKey(d)}"></label><label>Hora<input type="time" id="edPanHora" value="${fmtTime(d)}"></label></div>`;
+  } else if (tabla === 'sueno') {
+    const dIni = new Date(reg.inicio);
+    const dFin = reg.fin ? new Date(reg.fin) : null;
+    c.innerHTML = `
+      <label>Fecha de inicio<input type="date" id="edSuenoFecha" value="${dayKey(dIni)}"></label>
+      <div class="fila-2"><label>Se durmió<input type="time" id="edSuenoIni" value="${fmtTime(dIni)}"></label><label>Despertó<input type="time" id="edSuenoFin" value="${dFin ? fmtTime(dFin) : ''}"></label></div>`;
+  } else if (tabla === 'bitacora') {
+    c.innerHTML = `
+      <label>Título<input type="text" id="edBitTitulo" maxlength="80" value="${escapeHtml(reg.titulo)}" required></label>
+      <label>Fecha<input type="date" id="edBitFecha" value="${reg.fecha}" required></label>
+      <label>Anotaciones<textarea id="edBitNotas" rows="3" maxlength="1000">${escapeHtml(reg.notas || '')}</textarea></label>`;
+  }
+  $('editModal').classList.remove('hidden');
 }
 
-function ordenarSuper(lista) {
-  return lista.slice().sort((a, b) => (a.categoria || '').localeCompare(b.categoria || '') || (a.nombre || '').localeCompare(b.nombre || ''));
-}
+$('editClose').addEventListener('click', () => $('editModal').classList.add('hidden'));
+$('editModal').addEventListener('click', (e) => { if (e.target === $('editModal')) $('editModal').classList.add('hidden'); });
 
-function renderSuperChecklist() {
-  const lista = ordenarSuper(cache.super || []);
-  if (!lista.length) {
-    $('superListaHoy').innerHTML = '<p class="empty-msg">Agrega productos en "Mis productos" abajo</p>';
-    $('superContador').textContent = '';
-    return;
+$('editGuardar').addEventListener('click', async () => {
+  let patch = null;
+  if (editTabla === 'tomas') {
+    patch = { cantidad_ml: Number($('edLecheCant').value), fecha_hora: toISO($('edLecheFecha').value, $('edLecheHora').value) };
+  } else if (editTabla === 'vitaminas') {
+    patch = { gotas: Number($('edVitGotas').value), fecha_hora: toISO($('edVitFecha').value, $('edVitHora').value) };
+  } else if (editTabla === 'vitaminas_tipos') {
+    patch = { nombre: $('edVitNombre').value.trim(), gotas_default: Number($('edVitGotasDef').value) || 5 };
+  } else if (editTabla === 'vitaminas_tipos_log') {
+    patch = { fecha: $('edVitLogFecha').value, hora: $('edVitLogHora').value ? $('edVitLogHora').value + ':00' : null, gotas: Number($('edVitLogGotas').value) || null };
+  } else if (editTabla === 'panales') {
+    patch = { heces: $('edPanHeces').checked, orina: $('edPanOrina').checked, fecha_hora: toISO($('edPanFecha').value, $('edPanHora').value) };
+  } else if (editTabla === 'sueno') {
+    const f = $('edSuenoFecha').value, ini = $('edSuenoIni').value, fin = $('edSuenoFin').value;
+    const dIni = new Date(`${f}T${ini}`);
+    let dFin = fin ? new Date(`${f}T${fin}`) : null;
+    if (dFin && dFin <= dIni) dFin = new Date(dFin.getTime() + 86400000);
+    patch = { inicio: dIni.toISOString(), fin: dFin ? dFin.toISOString() : null };
+  } else if (editTabla === 'bitacora') {
+    patch = { titulo: $('edBitTitulo').value.trim(), fecha: $('edBitFecha').value, notas: $('edBitNotas').value.trim() || null };
   }
-  const hayCategorias = lista.some((p) => p.categoria);
-  let html = '';
-  let catActual;
-  for (const p of lista) {
-    const cat = p.categoria || (hayCategorias ? 'Otros' : null);
-    if (hayCategorias && cat !== catActual) { html += `<div class="stat-label super-cat">${escapeHtml(cat)}</div>`; catActual = cat; }
-    const marcado = superChecklist.has(String(p.id));
-    const qty = superChecklist.get(String(p.id)) || 1;
-    html += `
-      <div class="super-row">
-        <label class="check-pill"><input type="checkbox" class="super-check" data-id="${p.id}" ${marcado ? 'checked' : ''}> <span class="super-nombre">${escapeHtml(p.nombre)}</span></label>
-        <input type="number" class="super-qty" data-id="${p.id}" min="1" step="1" value="${qty}" ${marcado ? '' : 'disabled'}>
-      </div>`;
-  }
-  $('superListaHoy').innerHTML = html;
-  const n = superChecklist.size;
-  $('superContador').textContent = n ? `${n} producto${n === 1 ? '' : 's'} seleccionado${n === 1 ? '' : 's'}` : '';
-}
+  if (!patch) return;
 
-document.addEventListener('change', (e) => {
-  const chk = e.target.closest('.super-check');
-  if (chk) {
-    if (chk.checked) superChecklist.set(chk.dataset.id, superChecklist.get(chk.dataset.id) || 1);
-    else superChecklist.delete(chk.dataset.id);
-    guardarSuperChecklistLS();
-    renderSuperChecklist();
-    return;
-  }
-  const qty = e.target.closest('.super-qty');
-  if (qty) {
-    superChecklist.set(qty.dataset.id, Math.max(1, Math.round(Number(qty.value) || 1)));
-    guardarSuperChecklistLS();
-  }
+  const { error } = await db.from(editTabla).update(patch).eq('id', editId);
+  if (error) { toast(`Error al actualizar: ${error.message}`, true); return; }
+  await loadData(editTabla);
+  statsDirty = true;
+  $('editModal').classList.add('hidden');
+  toast('Registro actualizado ✓');
+  renderTab(currentTab);
 });
 
-$('formSuperQuick').addEventListener('submit', async (e) => {
+// ---------- Información del Bebé y Padres ----------
+function calcularEdad(fNac) {
+  if (!fNac) return '';
+  const nac = new Date(fNac + 'T12:00'), hoy = new Date();
+  let m = (hoy.getFullYear() - nac.getFullYear()) * 12 + (hoy.getMonth() - nac.getMonth());
+  if (hoy.getDate() < nac.getDate()) m--;
+  if (m < 1) {
+    const d = Math.max(0, Math.floor((hoy - nac) / 86400000));
+    return `${d} día${d === 1 ? '' : 's'}`;
+  }
+  const meses = m;
+  return `${meses} mes${meses === 1 ? '' : 'es'}`;
+}
+
+function renderInfoBebe() {
+  if (!bebe) return;
+  $('infoNombre').value = bebe.nombre || '';
+  $('infoNombreCompleto').value = bebe.nombre_completo || '';
+  $('infoGrupo').value = bebe.grupo_sanguineo || '';
+  $('infoNacimiento').value = bebe.fecha_nacimiento || '';
+  $('infoPeso').value = bebe.peso_kg ?? '';
+  $('infoTalla').value = bebe.talla_cm ?? '';
+  $('infoAlergias').value = bebe.alergias || '';
+  $('infoRutinas').value = bebe.rutinas || '';
+
+  const edad = calcularEdad(bebe.fecha_nacimiento);
+  const partes = [];
+  if (edad) partes.push(edad);
+  if (bebe.peso_kg) partes.push(`${bebe.peso_kg} kg`);
+  if (bebe.talla_cm) partes.push(`${bebe.talla_cm} cm`);
+  if (bebe.grupo_sanguineo) partes.push(`GS: ${bebe.grupo_sanguineo}`);
+  $('infoResumen').textContent = partes.join(' · ');
+
+  if (bebe.foto_base64) {
+    $('infoFotoPreview').src = bebe.foto_base64;
+    $('infoFotoPreview').classList.remove('hidden');
+    $('infoAvatarFallback').classList.add('hidden');
+  } else {
+    $('infoFotoPreview').classList.add('hidden');
+    $('infoAvatarFallback').classList.remove('hidden');
+  }
+}
+
+$('formInfo').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const nombre = $('superQuickNombre').value.trim();
-  if (!nombre) return;
-  const { data, error } = await db.from('super').insert({ bebe_id: bebe.id, nombre }).select().single();
-  if (error) { toast(`Error: ${error.message}`, true); return; }
-  await loadData('super');
-  superChecklist.set(String(data.id), 1);
-  guardarSuperChecklistLS();
-  $('superQuickNombre').value = '';
-  renderSuper();
-});
-
-function pintarSuperFotoPrev() {
-  const wrap = $('superFotoWrap');
-  wrap.classList.toggle('hidden', !superFotoPendiente);
-  if (superFotoPendiente) $('superFotoPreview').src = superFotoPendiente;
-}
-$('superFotoBtn').addEventListener('click', () => $('superFoto').click());
-$('superFoto').addEventListener('change', async () => {
-  const file = $('superFoto').files[0];
-  if (!file) return;
-  try { superFotoPendiente = await redimensionarFoto(file); } catch { toast('No se pudo procesar la foto', true); return; }
-  pintarSuperFotoPrev();
-});
-$('superFotoQuitar').addEventListener('click', () => {
-  superFotoPendiente = null;
-  $('superFoto').value = '';
-  pintarSuperFotoPrev();
-});
-
-$('superFinalizarBtn').addEventListener('click', async () => {
-  if (!superChecklist.size) { toast('Marca al menos un producto', true); return; }
-  const monto = Number($('superMonto').value);
-  const { data: compra, error: e1 } = await db.from('compras').insert({
-    bebe_id: bebe.id,
-    fecha_hora: new Date().toISOString(),
-    foto_boleta: superFotoPendiente || null,
-    monto_total: monto > 0 ? monto : null,
-  }).select().single();
-  if (e1) { toast(`Error: ${e1.message}`, true); return; }
-  const items = [...superChecklist.entries()].map(([producto_id, cantidad]) => ({
-    bebe_id: bebe.id, compra_id: compra.id, producto_id: Number(producto_id), cantidad,
-  }));
-  const { error: e2 } = await db.from('compra_items').insert(items);
-  if (e2) { toast(`Error: ${e2.message}`, true); return; }
-  await Promise.all([loadData('compras'), loadData('compra_items')]);
-  const n = items.length;
-  superChecklist = new Map();
-  guardarSuperChecklistLS();
-  superFotoPendiente = null;
-  $('superFoto').value = '';
-  $('superMonto').value = '';
-  pintarSuperFotoPrev();
-  toast(`Compra registrada ✓ (${n} producto${n === 1 ? '' : 's'})`);
-  renderSuper();
-});
-
-function renderSuper() {
-  renderSuperChecklist();
-  pintarSuperFotoPrev();
-
-  const mapaProd = new Map((cache.super || []).map((p) => [String(p.id), p]));
-  $('tablaSuper').innerHTML = historialColapsable(cache.compras || [], (r) => dayKey(new Date(r.fecha_hora)), (r) => {
-    const items = (cache.compra_items || []).filter((it) => it.compra_id === r.id);
-    return `
-      <div class="bit-item">
-        <div class="bit-head"><strong>🛒 Compra</strong><span>${fmtTime(new Date(r.fecha_hora))}</span></div>
-        ${items.length ? `<ul class="super-items">${items.map((it) => {
-          const p = mapaProd.get(String(it.producto_id));
-          return `<li><span>${escapeHtml(p?.nombre || '—')}${it.cantidad > 1 ? ` × ${it.cantidad}` : ''}</span>${botonesEdit('compra_items', it.id)}</li>`;
-        }).join('')}</ul>` : ''}
-        ${r.monto_total != null ? `<p class="ctrl-detalle">Total: $${r.monto_total}</p>` : ''}
-        ${r.notas ? `<p>${escapeHtml(r.notas)}</p>` : ''}
-        ${r.foto_boleta ? `<div class="album"><div class="album-item"><img src="${r.foto_boleta}" alt=""></div></div>` : ''}
-        <div class="bit-acciones">${botonesEdit('compras', r.id)}</div>
-      </div>`;
+  await actualizarBebe({
+    nombre: $('infoNombre').value.trim() || 'Mi bebé',
+    nombre_completo: $('infoNombreCompleto').value.trim() || null,
+    grupo_sanguineo: $('infoGrupo').value || null,
+    fecha_nacimiento: $('infoNacimiento').value || null,
+    peso_kg: Number($('infoPeso').value) > 0 ? Number($('infoPeso').value) : null,
+    talla_cm: Number($('infoTalla').value) > 0 ? Number($('infoTalla').value) : null,
+    alergias: $('infoAlergias').value.trim() || null,
+    rutinas: $('infoRutinas').value.trim() || null,
   });
+  renderInfoBebe();
+});
 
-  const maestro = ordenarSuper(cache.super || []);
-  $('superLista').innerHTML = maestro.length
-    ? `<table><tbody>${maestro.map((p) => `<tr><td>${escapeHtml(p.nombre)}</td><td>${escapeHtml(p.categoria || '')}</td>${accionesTd('super', p.id)}</tr>`).join('')}</tbody></table>`
-    : '<p class="empty-msg">Aún no agregas productos</p>';
+$('infoFotoBtn').addEventListener('click', () => $('infoFoto').click());
+$('infoFoto').addEventListener('change', async () => {
+  const file = $('infoFoto').files[0];
+  if (!file) return;
+  try {
+    const foto_base64 = await redimensionarFoto(file);
+    await actualizarBebe({ foto_base64 });
+    renderInfoBebe();
+  } catch {
+    toast('No se pudo procesar la foto', true);
+  }
+});
+
+// Modal Padre / Madre
+function abrirParent(rol) {
+  const m = (cache.miembros || []).find((x) => x.rol === rol);
+  const propio = miRol === rol;
+  $('parentTitulo').textContent = rol === 'madre' ? '👩 Madre' : '👨 Padre';
+  $('parentNombre').value = m?.nombre_completo || '';
+  $('parentTelefono').value = m?.telefono || '';
+  $('parentCorreo').value = m?.correo_contacto || '';
+  $('parentGrupo').value = m?.grupo_sanguineo || '';
+  ['parentNombre', 'parentTelefono', 'parentCorreo', 'parentGrupo'].forEach((id) => { $(id).disabled = !propio; });
+  $('parentGuardar').classList.toggle('hidden', !propio);
+  const aviso = $('parentAviso');
+  if (!m) { aviso.textContent = 'Este rol aún no está vinculado.'; aviso.classList.remove('hidden'); }
+  else if (!propio) { aviso.textContent = 'Solo puedes editar tu propia información.'; aviso.classList.remove('hidden'); }
+  else { aviso.classList.add('hidden'); }
+  $('parentModal').classList.remove('hidden');
 }
 
-$('formSuper').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const nombre = $('superNombre').value.trim();
-  if (!nombre) { toast('Escribe el nombre del producto', true); return; }
-  const ok = await insertar('super', { nombre, categoria: $('superCategoria').value.trim() || null });
-  if (ok) { $('superNombre').value = ''; $('superCategoria').value = ''; renderSuper(); }
+$('verMadreBtn').addEventListener('click', () => abrirParent('madre'));
+$('verPadreBtn').addEventListener('click', () => abrirParent('padre'));
+$('parentClose').addEventListener('click', () => $('parentModal').classList.add('hidden'));
+$('parentModal').addEventListener('click', (e) => { if (e.target === $('parentModal')) $('parentModal').classList.add('hidden'); });
+
+$('parentGuardar').addEventListener('click', async () => {
+  const { error } = await db.from('miembros').update({
+    nombre_completo: $('parentNombre').value.trim() || null,
+    telefono: $('parentTelefono').value.trim() || null,
+    correo_contacto: $('parentCorreo').value.trim() || null,
+    grupo_sanguineo: $('parentGrupo').value || null,
+  }).eq('user_id', usuario.id);
+  if (error) { toast(`Error: ${error.message}`, true); return; }
+  await loadData('miembros');
+  $('parentModal').classList.add('hidden');
+  toast('Guardado ✓');
+});
+
+// ---------- Configuración y Sincronización del Bebé ----------
+async function actualizarBebe(patch) {
+  const { data, error } = await db.from('bebes').update(patch).eq('id', bebe.id).select().single();
+  if (error) { toast(`Error: ${error.message}`, true); return false; }
+  bebe = data;
+  aplicarBebe();
+  toast('Guardado ✓');
+  return true;
+}
+
+function aplicarBebe() {
+  if (!bebe) return;
+  $('babyName').textContent = bebe.nombre || 'Mi bebé';
+  const badge = $('rolBadge');
+  if (miRol) {
+    badge.textContent = miRol === 'madre' ? '👩 Mamá' : '👨 Papá';
+    badge.classList.remove('hidden');
+  } else badge.classList.add('hidden');
+
+  const edad = calcularEdad(bebe.fecha_nacimiento);
+  const partes = [];
+  if (edad) partes.push(edad);
+  if (bebe.peso_kg) partes.push(`${bebe.peso_kg} kg`);
+  if (bebe.talla_cm) partes.push(`${bebe.talla_cm} cm`);
+  const bStats = $('babyStats');
+  if (partes.length) { bStats.textContent = partes.join(' · '); bStats.classList.remove('hidden'); }
+  else bStats.classList.add('hidden');
+
+  const photo = $('babyPhoto'), fallback = $('avatarFallback');
+  if (bebe.foto_base64) {
+    photo.src = bebe.foto_base64;
+    photo.classList.remove('hidden');
+    fallback.classList.add('hidden');
+  } else {
+    photo.classList.add('hidden');
+    fallback.classList.remove('hidden');
+  }
+  applyPalette(bebe.paleta || 'celeste');
+}
+
+function renderOrdenTabsUI() {
+  const orden = leerOrdenTabs();
+  $('ordenTabsUI').innerHTML = orden.map((k, i) => `
+    <div class="orden-item${i < 4 ? ' en-barra' : ''}">
+      <span>${TABS[k].icon} ${TABS[k].label} ${i < 4 ? '<strong>(Barra)</strong>' : ''}</span>
+      <div class="orden-btns">
+        <button type="button" class="icon-btn-sm" data-move="up" data-k="${k}" ${i === 0 ? 'disabled' : ''}>▲</button>
+        <button type="button" class="icon-btn-sm" data-move="down" data-k="${k}" ${i === orden.length - 1 ? 'disabled' : ''}>▼</button>
+      </div>
+    </div>`).join('');
+}
+
+$('ordenTabsUI').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-move]');
+  if (!b) return;
+  const k = b.dataset.k, dir = b.dataset.move;
+  const orden = leerOrdenTabs();
+  const idx = orden.indexOf(k);
+  if (idx < 0) return;
+  const target = dir === 'up' ? idx - 1 : idx + 1;
+  if (target < 0 || target >= orden.length) return;
+  orden.splice(idx, 1);
+  orden.splice(target, 0, k);
+  localStorage.setItem('orden_tabs', JSON.stringify(orden));
+  renderOrdenTabsUI();
+  renderTabbar();
+});
+
+$('settingsBtn').addEventListener('click', () => {
+  if (!bebe) return;
+  $('cfgCodigo').textContent = bebe.codigo || '——————';
+  $('cfgNombre').value = bebe.nombre || '';
+  $('cfgNacimiento').value = bebe.fecha_nacimiento || '';
+  $('cfgPeso').value = bebe.peso_kg ?? '';
+  $('cfgTalla').value = bebe.talla_cm ?? '';
+  const rRadio = document.querySelector(`input[name="cfgRol"][value="${miRol}"]`);
+  if (rRadio) rRadio.checked = true;
+
+  const photo = $('cfgFotoPreview'), fallback = $('cfgAvatarFallback');
+  if (bebe.foto_base64) { photo.src = bebe.foto_base64; photo.classList.remove('hidden'); fallback.classList.add('hidden'); }
+  else { photo.classList.add('hidden'); fallback.classList.remove('hidden'); }
+
+  document.querySelectorAll('.swatch').forEach((s) => s.classList.toggle('selected', s.dataset.palette === (bebe.paleta || 'celeste')));
+  renderOrdenTabsUI();
+  $('settingsModal').classList.remove('hidden');
+});
+
+$('settingsClose').addEventListener('click', () => $('settingsModal').classList.add('hidden'));
+$('settingsModal').addEventListener('click', (e) => { if (e.target === $('settingsModal')) $('settingsModal').classList.add('hidden'); });
+
+$('copiarCodigo').addEventListener('click', async () => {
+  if (!bebe?.codigo) return;
+  try {
+    await navigator.clipboard.writeText(bebe.codigo);
+    toast('Código copiado al portapapeles ✓');
+  } catch {
+    toast(`Código: ${bebe.codigo}`);
+  }
+});
+
+// Compartir código nativo / WhatsApp
+$('compartirCodigoBtn')?.addEventListener('click', async () => {
+  if (!bebe?.codigo) return;
+  const text = `¡Hola! Únete al registro de ${bebe.nombre || 'nuestro bebé'} en NebuApp con este código: ${bebe.codigo}`;
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Rutinas del Bebé', text }); } catch {}
+  } else {
+    try { await navigator.clipboard.writeText(text); toast('Mensaje copiado ✓'); } catch {}
+  }
+});
+
+$('whatsappCodigoBtn')?.addEventListener('click', () => {
+  if (!bebe?.codigo) return;
+  const msg = `¡Hola! Únete al registro de ${bebe.nombre || 'nuestro bebé'} en NebuApp con este código: ${bebe.codigo}`;
+  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+});
+
+$('cfgFotoBtn').addEventListener('click', () => $('cfgFoto').click());
+$('cfgFoto').addEventListener('change', async () => {
+  const file = $('cfgFoto').files[0];
+  if (!file) return;
+  try {
+    const base64 = await redimensionarFoto(file);
+    $('cfgFotoPreview').src = base64;
+    $('cfgFotoPreview').classList.remove('hidden');
+    $('cfgAvatarFallback').classList.add('hidden');
+    $('cfgFoto').dataset.nuevo = base64;
+  } catch {
+    toast('No se pudo procesar la foto', true);
+  }
+});
+
+$('swatchRow').addEventListener('click', (e) => {
+  const sw = e.target.closest('.swatch');
+  if (!sw) return;
+  document.querySelectorAll('.swatch').forEach((s) => s.classList.remove('selected'));
+  sw.classList.add('selected');
+});
+
+$('cfgGuardar').addEventListener('click', async () => {
+  const nombre = $('cfgNombre').value.trim() || 'Mi bebé';
+  const paleta = document.querySelector('.swatch.selected')?.dataset?.palette || bebe.paleta || 'celeste';
+  const nuevoRol = document.querySelector('input[name="cfgRol"]:checked')?.value || miRol;
+  const patch = {
+    nombre,
+    paleta,
+    fecha_nacimiento: $('cfgNacimiento').value || null,
+    peso_kg: Number($('cfgPeso').value) > 0 ? Number($('cfgPeso').value) : null,
+    talla_cm: Number($('cfgTalla').value) > 0 ? Number($('cfgTalla').value) : null,
+  };
+  if ($('cfgFoto').dataset.nuevo) {
+    patch.foto_base64 = $('cfgFoto').dataset.nuevo;
+    delete $('cfgFoto').dataset.nuevo;
+  }
+  if (nuevoRol !== miRol) {
+    const { error: eRol } = await db.from('miembros').update({ rol: nuevoRol }).eq('user_id', usuario.id);
+    if (!eRol) miRol = nuevoRol;
+  }
+  const ok = await actualizarBebe(patch);
+  if (ok) $('settingsModal').classList.add('hidden');
+});
+
+$('logoutBtn').addEventListener('click', () => db.auth.signOut());
+$('reloadBtn').addEventListener('click', () => { toast('Recargando…'); loadAll().then(() => renderTab(currentTab)); });
+
+// ---------- Temas y Paletas ----------
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  $('themeBtn').textContent = theme === 'dark' ? '☀️' : '🌙';
+  localStorage.setItem('tema', theme);
+  if (appStarted && currentTab === 'stats') renderCharts();
+}
+function applyPalette(pal) { document.documentElement.dataset.palette = pal; }
+
+$('themeBtn').addEventListener('click', () => {
+  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 });
 
 // ---------- Autenticación ----------
 let modoRegistro = false;
 
-// Recordar credenciales (opt-in; contraseña en texto plano en este dispositivo)
 function precargarCredenciales() {
   if (localStorage.getItem('recordar') !== '1') return;
   $('authRemember').checked = true;
@@ -1921,7 +1617,6 @@ $('authForm').addEventListener('submit', async (e) => {
   $('authError').classList.add('hidden');
   try {
     if (modoRegistro) {
-      // Whitelist: solo correos autorizados pueden crear cuenta
       const { data: autorizado, error: errWl } = await db.rpc('email_autorizado', { correo: email });
       if (errWl) throw errWl;
       if (!autorizado) throw new Error('Este correo no está autorizado para registrarse.');
@@ -1947,7 +1642,7 @@ $('authForm').addEventListener('submit', async (e) => {
   }
 });
 
-// ---------- Vincular bebé (crear o unirse con código) ----------
+// ---------- Vinculación del Bebé ----------
 const rolSeleccionado = () => document.querySelector('input[name="linkRol"]:checked')?.value || 'madre';
 
 function mostrarLinkError(msg) {
@@ -1979,14 +1674,13 @@ $('formUnirse').addEventListener('submit', async (e) => {
 
 $('linkLogout').addEventListener('click', () => db.auth.signOut());
 
-// ---------- Entrada a la app ----------
+// ---------- Entrada ----------
 async function entrar(session) {
   usuario = session.user;
   $('authScreen').classList.add('hidden');
   const { data: miembro, error } = await db.from('miembros').select('*').eq('user_id', usuario.id).maybeSingle();
   if (error) { toast(`Error: ${error.message}`, true); return; }
   if (!miembro) {
-    // Aún no está vinculado a ningún bebé
     $('app').classList.add('hidden');
     $('linkScreen').classList.remove('hidden');
     return;
@@ -2004,7 +1698,7 @@ function iniciarApp(b, rol) {
   appStarted = true;
   aplicarBebe();
   setNowDefaults();
-  activarTab(localStorage.getItem('tab') || 'stats'); // recuerda la pestaña tras recargar
+  activarTab(localStorage.getItem('tab') || 'stats');
   renderLecheResumen();
   loadAll().then(() => renderTab(currentTab));
 }
@@ -2017,7 +1711,7 @@ function showAuth() {
   $('authScreen').classList.remove('hidden');
 }
 
-// ---------- Fondo animado (mar / espacio) ----------
+// ---------- Fondo Animado (Canvas) ----------
 const bgCanvas = $('bgCanvas');
 const bgCtx = bgCanvas.getContext('2d');
 let bgTipo = localStorage.getItem('fondo') || 'none';
@@ -2049,7 +1743,7 @@ function bgDibujar() {
   if (bgTipo === 'espacio') {
     for (const e of estrellas) {
       e.x += e.v; if (e.x > w) e.x = 0;
-      const brillo = 0.55 + 0.45 * Math.sin(bgT * 1.5 + e.f); // titileo suave
+      const brillo = 0.55 + 0.45 * Math.sin(bgT * 1.5 + e.f);
       bgCtx.globalAlpha = (oscuro ? 0.9 : 0.5) * brillo;
       bgCtx.fillStyle = oscuro ? '#ffffff' : '#4a3aa7';
       bgCtx.beginPath(); bgCtx.arc(e.x, e.y, e.r, 0, 7); bgCtx.fill();
@@ -2093,7 +1787,7 @@ function aplicarFondo() {
     bgCtx.clearRect(0, 0, innerWidth, innerHeight);
   } else {
     if (!estrellas.length) bgInitParticulas();
-    if (bgPausado) bgDibujar(); // cuadro estático
+    if (bgPausado) bgDibujar();
     else bgLoop();
   }
   document.querySelectorAll('.bg-opt').forEach((b) => b.classList.toggle('selected', b.dataset.bg === bgTipo));
@@ -2116,11 +1810,10 @@ $('bgPauseBtn').addEventListener('click', () => {
   aplicarFondo();
 });
 
-// ---------- Inicio ----------
+// ---------- Inicialización ----------
 applyTheme(localStorage.getItem('tema') || 'dark');
 bgResize();
 aplicarFondo();
-actualizarSegUI();
 renderTabbar();
 restaurarCrono();
 precargarCredenciales();

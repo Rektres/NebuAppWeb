@@ -1,0 +1,24 @@
+# Rutinas del Bebé (NebuAppWeb)
+
+> Aplicación web móvil progresiva diseñada para que dos padres (madre y padre) compartan, coordinen y registren en tiempo real el cuidado y las rutinas diarias de su bebé con sincronización instantánea y estadísticas interactivas.
+
+## Resumen del Proyecto
+- **Propósito**: Registro colaborativo entre padres de tomas de leche, pañales, vitaminas, sueño, desarrollo y juegos de estimulación.
+- **Stack Técnico**: Vanilla HTML5, CSS3, JavaScript ES6+ (arquitectura estática zero-build sin bundlers).
+- **Backend**: Supabase (PostgreSQL, Supabase Auth, Row Level Security, Triggers y RPCs).
+- **Despliegue**: GitHub Pages mediante GitHub Actions.
+
+## Módulos y Capacidades
+1. **Estadísticas (Stats)**: Gráficos interactivos con Chart.js con soporte para zoom táctil (pinch/wheel) y paneo. Filtros por rango de tiempo (1 día, 7 días, 14 días, 1 mes) y alternancia de visualización individual entre barras y líneas.
+2. **Tomas de Leche**: Registro de ml por toma, meta diaria con barra de progreso, tiempo desde la última toma y cálculo histórico del número acumulado de tarros de fórmula abiertos (4,3 g cada 30 ml).
+3. **Vitaminas**: Catálogo de vitaminas con checklist diario y registro rápido de dosis sueltas.
+4. **Pañales**: Registro de cambios clasificando orina y/o heces, tiempo desde el último cambio y fecha de última feca.
+5. **Sueño**: Registro de siestas y noches, cálculo de duración, botón de siesta en vivo y división inteligente en medianoche.
+6. **Ficha del Bebé y Contactos**: Datos del bebé (nombre, nacimiento, peso, talla, grupo sanguíneo, alergias, rutinas) y contacto de los padres con opción de compartir código de vinculación por WhatsApp o Web Share API.
+7. **Bitácora**: Cuaderno cronológico de hitos del desarrollo y notas libres.
+8. **Juegos**: Temporizador para estimulación temprana con álbum de fotos y observaciones.
+
+## Seguridad y Acceso
+- **Autenticación restringida por Whitelist**: Solo correos electrónicos autorizados pueden registrarse.
+- **Vinculación por Código Único**: Código de 6 caracteres para vincular a un máximo de 2 padres por bebé.
+- **Aislamiento RLS**: Todas las consultas a la base de datos están restringidas a los padres vinculados al bebé mediante la función PostgreSQL `mis_bebes()`.

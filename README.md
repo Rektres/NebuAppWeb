@@ -1,53 +1,69 @@
 # NebuAppWeb 🍼
 
-App web móvil para registrar las rutinas de un bebé: tomas de leche, vitaminas, cambios de pañal y sueño, con estadísticas de los últimos 7 días. HTML + CSS + Vanilla JS, sin build tools — lista para GitHub Pages.
+App web móvil colaborativa para registrar las rutinas de un bebé: tomas de leche, vitaminas, cambios de pañal, sueño, bitácora y juegos de estimulación, con estadísticas interactivas configurables (1 día, 7 días, 14 días y 1 mes) y cálculo automático de tarros de fórmula abiertos. HTML + CSS + Vanilla JS, sin herramientas de compilación (`zero-build`) — lista para GitHub Pages.
+
+---
 
 ## Configuración (una sola vez)
 
 ### 1. Crear el proyecto en Supabase
 1. Crea un proyecto en [supabase.com](https://supabase.com).
-2. Ve a **SQL Editor → New query**, pega el contenido de [`supabase.sql`](supabase.sql) y ejecuta **Run**. Esto crea las tablas (`bebes`, `miembros`, `whitelist`, `tomas`, `vitaminas`, `panales`, `sueno`), las funciones y el RLS: **solo los padres vinculados a un bebé pueden ver y escribir sus datos**.
+2. Ve a **SQL Editor → New query**, pega el contenido de [`supabase.sql`](supabase.sql) y ejecuta **Run**. Esto crea las tablas activas (`bebes`, `miembros`, `whitelist`, `tomas`, `vitaminas`, `vitaminas_tipos`, `vitaminas_tipos_log`, `panales`, `sueno`, `bitacora`, `juegos`), las funciones y las políticas de RLS: **solo los padres vinculados a un bebé pueden ver y escribir sus datos**.
 
-> **Si tu base ya existía con el esquema anterior** (tabla `config`, datos sin bebé): ejecuta [`migracion.sql`](migracion.sql) UNA sola vez en lugar de `supabase.sql`. Conserva todos los registros, los asigna a un bebé nuevo y vincula a los usuarios existentes (quedan como "madre" por defecto — cada uno corrige su rol en ⚙️).
-
-> **Actualización 2** (siestas en vivo + fecha de nacimiento/peso/talla): si tu base ya corría el esquema de bebés, ejecuta también [`actualizacion-2.sql`](actualizacion-2.sql) una sola vez.
-
-> **Actualizaciones 3 a 9** (pastillas, info del bebé, bitácora, controles, juegos, hora en pastillas, vitaminas por nombre, lista del súper): ejecuta en orden `actualizacion-3.sql` … `actualizacion-9.sql`, cada una una sola vez.
+> **Si tu base de datos ya tenía datos y versiones anteriores**: ejecuta [`actualizacion-10.sql`](actualizacion-10.sql) en el SQL Editor para eliminar las tablas y dependencias de módulos obsoletos (pastillas, controles, supermercado y compras).
 
 ### 2. Conectar la app
 Las credenciales viven en `config.js`, que **no se sube al repo** (está en `.gitignore`).
 
 - **Local**: copia [`config.example.js`](config.example.js) como `config.js` y pega tu **Project URL** y **anon public key** (Supabase → **Project Settings → API**).
-- **GitHub Pages**: el workflow [`deploy.yml`](.github/workflows/deploy.yml) genera `config.js` al desplegar usando los Secrets del repo. Configúralos en **Settings → Secrets and variables → Actions → New repository secret**:
+- **GitHub Pages**: el workflow [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) genera `config.js` al desplegar usando los Secrets del repo. Configúralos en **Settings → Secrets and variables → Actions → New repository secret**:
   - `SUPABASE_URL` → `https://tu-proyecto.supabase.co`
   - `SUPABASE_ANON_KEY` → tu anon/publishable key
 
-> Nota: la anon key igualmente es visible en el navegador de quien use la app (es una clave pública por diseño); la protección real de los datos es el RLS + login.
-
 ### 3. Usuarios, whitelist y vinculación
-La app requiere iniciar sesión, y **solo los correos en la whitelist pueden registrarse** (un trigger en la base lo bloquea, incluso desde el Dashboard). Los usuarios ya existentes no se ven afectados.
+La app requiere iniciar sesión, y **solo los correos en la whitelist pueden registrarse** (un trigger en PostgreSQL lo bloquea).
 
 - **Autorizar un correo** (SQL Editor):
   ```sql
   insert into whitelist (email) values ('correo@ejemplo.com');
   ```
-- **Registro desde la app**: por defecto Supabase pide confirmar el email; para registro inmediato desactívalo en **Authentication → Providers → Email → Confirm email**.
 
-**Flujo de vinculación** (después del primer login):
-1. Un padre/madre elige su rol (👩/👨), crea al bebé y recibe un **código único** (visible en ⚙️, con botón Copiar).
-2. El otro entra con su cuenta, elige su rol y se une con ese código (máximo 2 padres por bebé).
-3. Desde ahí ambos comparten los datos del bebé; **nadie más puede verlos** (RLS por `bebe_id`).
+**Flujo de vinculación**:
+1. Un padre/madre crea al bebé y recibe un **código único** de 6 caracteres (visible en ⚙️ con botón para compartir por WhatsApp o copiar).
+2. El otro progenitor entra con su cuenta, elige su rol (👩/👨) y se une con ese código (máximo 2 padres por bebé).
+3. Ambos comparten y sincronizan los datos en tiempo real bajo aislamiento RLS.
 
-### 4. Publicar en GitHub Pages
-1. Sube el repo a GitHub y configura los dos Secrets del paso 2.
-2. **Settings → Pages → Source: GitHub Actions** (necesario para que el workflow despliegue).
-3. Cada push a `main` despliega automáticamente. La app queda en `https://tu-usuario.github.io/NebuAppWeb/`.
+---
 
-## Uso
-- **📊 Stats**: gráficos de barras de los últimos 7 días (leche, vitaminas, pañales, sueño).
-- **🍼 Leche**: registro de tomas, total del día y objetivo diario con barra de progreso.
-- **💊 Vitaminas**: lista de vitaminas por nombre con checklist diario (fecha/hora), además de un registro rápido de dosis sueltas (gotas, sin nombre).
-- **🧷 Pañales**: registro con heces/orina, tiempo desde el último cambio, última feca, y totales diario/mensual en el historial.
-- **😴 Sueño**: hora de dormir/despertar con duración calculada (soporta cruce de medianoche).
-- **🛒 Súper**: lista maestra de productos con checklist de compra (cantidad por producto) e historial de compras finalizadas con foto de boleta y monto.
-- **⚙️ Configuración**: nombre y foto del bebé, color de la app (5 paletas) — se sincronizan entre dispositivos. Modo oscuro por defecto (botón ☀️/🌙, se guarda por dispositivo).
+## Módulos y Uso
+
+- **📊 Stats (Estadísticas Interactivas)**:
+  - Selector de rangos de tiempo: **1 día**, **7 días**, **14 días** y **1 mes** (30 días).
+  - Alternancia individual entre gráfico de **Barras 📊** y **Línea 📈** por cada métrica.
+  - Zoom táctil (pinch / rueda de mouse) y paneo interactivo con botón de restablecimiento (`⟲`).
+- **🍼 Leche**:
+  - Registro rápido de tomas con objetivo diario y barra de progreso.
+  - Tiempo transcurrido desde la última toma.
+  - **Cálculo de Tarros de Fórmula**: cálculo histórico automático del número de tarros abiertos/usados según el total acumulado de ml ingeridos (4,3 g por cada 30 ml), peso configurable del tarro (ej. 800 g), gramos restantes y porcentaje de uso del tarro en curso.
+- **💊 Vitaminas**:
+  - Lista de vitaminas por nombre con checklist diario (fecha/hora y dosis).
+  - Registro rápido de dosis sueltas (gotas).
+- **🧷 Pañales**:
+  - Registro distinguiendo heces y/u orina.
+  - Contador de tiempo desde el último cambio y fecha de la última feca.
+- **😴 Sueño**:
+  - Horas de dormir y despertar con cálculo de duración y soporte para cruce de medianoche.
+  - Botón de siesta activa en vivo (*"Se durmió"* / *"Despertó"*).
+- **👶 Info del Bebé y Padres**:
+  - Ficha médica y de desarrollo: peso, talla, edad exacta calculada, grupo sanguíneo, alergias y rutinas.
+  - Datos de contacto de los padres y preguntas frecuentes (FAQ).
+  - Botones directos para compartir código de vinculación vía **Web Share API** y **WhatsApp**.
+- **📖 Bitácora**:
+  - Registro cronológico de hitos, recuerdos y anotaciones.
+- **🧸 Juegos y Estimulación**:
+  - Temporizador / cronómetro con persistencia, álbum fotográfico de la sesión y notas de observación.
+- **📂 Historiales Optimizados**:
+  - Agrupación colapsable multinivel: semanas del mes para el mes en curso y colapso mensual para meses anteriores terminados.
+- **⚙️ Configuración y Personalización**:
+  - 5 paletas de colores (*Celeste, Rosa, Verde, Lila, Ámbar*), modo oscuro/claro independiente por dispositivo y fondos animados en `<canvas>`.
+  - Reorganización personalizable del orden de pestañas de la barra inferior.

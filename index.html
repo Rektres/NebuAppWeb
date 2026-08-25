@@ -4,7 +4,72 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#0d0d0d">
-  <title>Rutinas del Bebé</title>
+  
+  <title>Rutinas del Bebé | Registro Colaborativo y Estadísticas</title>
+  <meta name="description" content="App web colaborativa para padres: registra y sincroniza tomas de leche, pañales, vitaminas y sueño de tu bebé en tiempo real con estadísticas interactivas.">
+  <link rel="canonical" href="https://rektres.github.io/NebuAppWeb/">
+
+  <!-- Open Graph & Social Sharing -->
+  <meta property="og:title" content="Rutinas del Bebé | Registro y Estadísticas">
+  <meta property="og:description" content="Registra y comparte en tiempo real las tomas de leche, pañales, vitaminas y sueño de tu bebé con gráficos interactivos y sincronización segura.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://rektres.github.io/NebuAppWeb/">
+  <meta property="og:locale" content="es_CL">
+  <meta property="og:site_name" content="Rutinas del Bebé">
+  
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Rutinas del Bebé | Registro y Estadísticas">
+  <meta name="twitter:description" content="Registra y comparte en tiempo real las tomas de leche, pañales, vitaminas y sueño de tu bebé con gráficos interactivos y sincronización segura.">
+
+  <!-- Schema.org JSON-LD (WebApplication & FAQPage) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Rutinas del Bebé",
+    "applicationCategory": "HealthApplication",
+    "operatingSystem": "All",
+    "description": "App web móvil para padres para registrar tomas de leche, pañales, vitaminas y sueño de su bebé con estadísticas interactivas.",
+    "offers": {
+      "@type": "Offer",
+      "price": "0"
+    }
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "¿Cómo vincular a ambos padres a un mismo bebé?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Un padre crea al bebé desde la pantalla de vinculación y obtiene un código único de 6 caracteres. El segundo padre ingresa con su propia cuenta y se une ingresando dicho código."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "¿Cómo se calculan los tarros de leche consumidos?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "La app suma todos los ml de leche registrados desde el inicio y calcula los gramos de fórmula consumidos (4,3 g cada 30 ml) dividiéndolo por el peso de la lata (ej. 800 g) para obtener los tarros abiertos y el restante en curso."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "¿Cómo se contabiliza el sueño que cruza la medianoche?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "La app divide automáticamente los tramos de sueño a las 00:00 h para asignar con exactitud las horas de descanso correspondientes a cada día."
+        }
+      }
+    ]
+  }
+  </script>
+
   <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍼</text></svg>">
 </head>
@@ -35,7 +100,7 @@
   <div id="linkScreen" class="auth-screen hidden">
     <div class="auth-card">
       <div class="auth-logo">👶</div>
-      <h1>Vincula a tu bebé</h1>
+      <h1 id="linkTitle">Vincula a tu bebé</h1>
       <p class="link-sub">¿Quién eres?</p>
       <div class="rol-row">
         <label class="check-pill"><input type="radio" name="linkRol" value="madre" checked> 👩 Madre</label>
@@ -83,36 +148,66 @@
       <section id="tab-stats" class="tab active">
         <div class="card seg-card">
           <div class="seg">
-            <button class="seg-btn active" data-mode="semana">Barras · 7 días</button>
-            <button class="seg-btn" data-mode="diario">Línea · 3 días</button>
+            <button class="seg-btn" data-range="1d">1 día</button>
+            <button class="seg-btn active" data-range="7d">7 días</button>
+            <button class="seg-btn" data-range="14d">14 días</button>
+            <button class="seg-btn" data-range="30d">1 mes</button>
           </div>
-          <p class="form-hint seg-hint hidden" id="segHint">Pellizca (o usa la rueda) para acercar, arrastra para moverte · ⟲ restablece</p>
+          <p class="form-hint seg-hint" id="segHint">Pellizca o usa la rueda para acercar/alejar, arrastra para moverte · ⟲ restablece</p>
         </div>
+        
         <div class="card chart-card">
           <div class="chart-head">
             <h2 id="tituloLeche">🍼 Leche · últimos 7 días (ml)</h2>
-            <button class="zoom-reset hidden" data-key="leche" title="Restablecer zoom">⟲</button>
+            <div class="chart-actions">
+              <div class="chart-type-toggle" data-chart="leche">
+                <button type="button" class="type-btn active" data-type="bar" title="Ver en barras">📊</button>
+                <button type="button" class="type-btn" data-type="line" title="Ver en línea">📈</button>
+              </div>
+              <button class="zoom-reset" data-key="leche" title="Restablecer zoom">⟲</button>
+            </div>
           </div>
           <div class="chart-wrap"><canvas id="chartLeche"></canvas></div>
         </div>
+
         <div class="card chart-card">
           <div class="chart-head">
             <h2 id="tituloVitaminas">💊 Vitaminas · últimos 7 días (gotas)</h2>
-            <button class="zoom-reset hidden" data-key="vitaminas" title="Restablecer zoom">⟲</button>
+            <div class="chart-actions">
+              <div class="chart-type-toggle" data-chart="vitaminas">
+                <button type="button" class="type-btn active" data-type="bar" title="Ver en barras">📊</button>
+                <button type="button" class="type-btn" data-type="line" title="Ver en línea">📈</button>
+              </div>
+              <button class="zoom-reset" data-key="vitaminas" title="Restablecer zoom">⟲</button>
+            </div>
           </div>
           <div class="chart-wrap"><canvas id="chartVitaminas"></canvas></div>
         </div>
+
         <div class="card chart-card">
           <div class="chart-head">
             <h2 id="tituloPanales">🧷 Pañales · últimos 7 días</h2>
-            <button class="zoom-reset hidden" data-key="panales" title="Restablecer zoom">⟲</button>
+            <div class="chart-actions">
+              <div class="chart-type-toggle" data-chart="panales">
+                <button type="button" class="type-btn active" data-type="bar" title="Ver en barras">📊</button>
+                <button type="button" class="type-btn" data-type="line" title="Ver en línea">📈</button>
+              </div>
+              <button class="zoom-reset" data-key="panales" title="Restablecer zoom">⟲</button>
+            </div>
           </div>
           <div class="chart-wrap"><canvas id="chartPanales"></canvas></div>
         </div>
+
         <div class="card chart-card">
           <div class="chart-head">
             <h2 id="tituloSueno">😴 Sueño · últimos 7 días (horas)</h2>
-            <button class="zoom-reset hidden" data-key="sueno" title="Restablecer zoom">⟲</button>
+            <div class="chart-actions">
+              <div class="chart-type-toggle" data-chart="sueno">
+                <button type="button" class="type-btn active" data-type="bar" title="Ver en barras">📊</button>
+                <button type="button" class="type-btn" data-type="line" title="Ver en línea">📈</button>
+              </div>
+              <button class="zoom-reset" data-key="sueno" title="Restablecer zoom">⟲</button>
+            </div>
           </div>
           <div class="chart-wrap"><canvas id="chartSueno"></canvas></div>
         </div>
@@ -165,22 +260,40 @@
           <div id="tablaLeche" class="table-wrap"></div>
         </div>
 
-        <!-- Fórmula / lata (bajo el historial) -->
+        <!-- Tarros / Latas de fórmula: Cálculo automático histórico -->
         <div class="card goal-card" id="lataCard">
-          <div class="goal-row">
+          <h2>🥫 Tarros de Fórmula (Cálculo acumulado)</h2>
+          <div class="dash-grid">
+            <div class="card dash-card" style="padding:10px;">
+              <span class="stat-label">Tarros abiertos</span>
+              <span class="stat-value" id="tarrosAbiertosVal">0</span>
+            </div>
+            <div class="card dash-card" style="padding:10px;">
+              <span class="stat-label">Fórmula total consumida</span>
+              <span class="stat-value stat-value-sm" id="formulaTotalTxt">0 g</span>
+            </div>
+          </div>
+          <div class="goal-row" style="margin-top:10px;">
             <div>
-              <span class="stat-label">Fórmula hoy (30 ml ≈ 4,3 g)</span>
-              <span class="stat-value"><span id="lecheGramosHoy">0</span> g</span>
+              <span class="stat-label">Tarro actual en uso</span>
+              <span class="stat-value stat-value-sm" id="tarroActualTxt">800 g restantes</span>
             </div>
             <div class="goal-input-wrap">
-              <label for="lataInput" class="stat-label">Tamaño lata (g)</label>
+              <label for="lataInput" class="stat-label">Tamaño del tarro (g)</label>
               <input type="number" id="lataInput" step="any" inputmode="decimal" value="800">
             </div>
           </div>
+          <div class="progress-track" style="margin-top:6px;"><div class="progress-fill" id="tarroProgress" style="width:0%"></div></div>
           <p class="goal-status" id="lataStatus"></p>
-          <label class="stat-label" for="lataAbiertaInput">Lata abierta el (fecha y hora)</label>
-          <input type="datetime-local" id="lataAbiertaInput">
-          <button type="button" id="abrirLataBtn" class="btn-secondary">🥫 Abrir lata nueva</button>
+          
+          <details style="margin-top:8px;">
+            <summary style="font-size:0.8rem; color:var(--muted); cursor:pointer;">Apertura manual / fecha de inicio</summary>
+            <div style="margin-top:8px; display:flex; flex-direction:column; gap:8px;">
+              <label class="stat-label" for="lataAbiertaInput">Último tarro abierto el</label>
+              <input type="datetime-local" id="lataAbiertaInput">
+              <button type="button" id="abrirLataBtn" class="btn-secondary">🥫 Registrar apertura de tarro nuevo</button>
+            </div>
+          </details>
         </div>
       </section>
 
@@ -238,46 +351,6 @@
           <h2>Historial rápido</h2>
           <div id="tablaVitaminas" class="table-wrap"></div>
         </div>
-      </section>
-
-      <!-- ========== PESTAÑA: PASTILLAS ========== -->
-      <section id="tab-pastillas" class="tab">
-        <div class="card">
-          <h2 id="pastHoyTitulo">Hoy — marca lo que tomó</h2>
-          <div class="past-fh">
-            <label>Fecha
-              <input type="date" id="pastFecha">
-            </label>
-            <label>Hora
-              <input type="time" id="pastHora">
-            </label>
-          </div>
-          <div id="pastHoy" class="pill-list"></div>
-        </div>
-
-        <div class="card table-card">
-          <h2>Historial</h2>
-          <div id="tablaPastillas" class="table-wrap"></div>
-        </div>
-
-        <details class="card">
-          <summary>Mis pastillas</summary>
-          <form id="formPastillas" class="form-card">
-            <div class="form-grid">
-              <label>Nombre
-                <input type="text" id="pastNombre" maxlength="60" placeholder="Nombre de la pastilla" required>
-              </label>
-              <label>Horario
-                <select id="pastHorario">
-                  <option value="am">AM</option>
-                  <option value="pm">PM</option>
-                </select>
-              </label>
-            </div>
-            <button type="submit" class="btn-primary">＋ Agregar a mi lista</button>
-            <div id="pastLista" class="table-wrap past-lista"></div>
-          </form>
-        </details>
       </section>
 
       <!-- ========== PESTAÑA 4: PAÑALES ========== -->
@@ -356,12 +429,12 @@
         </div>
       </section>
 
-      <!-- ========== PESTAÑA: INFO DEL BEBÉ ========== -->
+      <!-- ========== PESTAÑA 6: INFO DEL BEBÉ ========== -->
       <section id="tab-info" class="tab">
         <div class="card">
           <div class="photo-row">
             <div class="avatar avatar-lg" id="infoAvatarWrap">
-              <img id="infoFotoPreview" alt="" class="hidden">
+              <img id="infoFotoPreview" alt="Foto de perfil del bebé" class="hidden">
               <span id="infoAvatarFallback">👶</span>
             </div>
             <input type="file" id="infoFoto" accept="image/*" class="hidden">
@@ -416,9 +489,28 @@
             <button type="button" class="btn-secondary" id="verPadreBtn">👨 Padre</button>
           </div>
         </div>
+
+        <!-- Preguntas frecuentes (FAQ) -->
+        <details class="card faq-card">
+          <summary>Preguntas Frecuentes (FAQ)</summary>
+          <div class="faq-list">
+            <div class="faq-item">
+              <strong>¿Cómo vinculo al otro padre?</strong>
+              <p>Copia o comparte el código único de 6 caracteres desde Configuración. El otro padre debe iniciar sesión y elegir "Unirme con el código".</p>
+            </div>
+            <div class="faq-item">
+              <strong>¿Cómo se calculan los tarros de leche?</strong>
+              <p>La app suma todos los ml ingeridos desde la primera toma registrada. Con la proporción de 4,3 g cada 30 ml, calcula los gramos de fórmula y los tarros abiertos.</p>
+            </div>
+            <div class="faq-item">
+              <strong>¿Cómo funciona el sueño que cruza medianoche?</strong>
+              <p>Si una siesta cruza las 00:00 h, la app divide de forma automática los tramos para asignar las horas correspondientes a cada día.</p>
+            </div>
+          </div>
+        </details>
       </section>
 
-      <!-- ========== PESTAÑA: BITÁCORA ========== -->
+      <!-- ========== PESTAÑA 7: BITÁCORA ========== -->
       <section id="tab-bitacora" class="tab">
         <form id="formBitacora" class="card form-card">
           <h2>Nueva anotación</h2>
@@ -440,62 +532,7 @@
         </div>
       </section>
 
-      <!-- ========== PESTAÑA: CONTROLES MÉDICOS ========== -->
-      <section id="tab-controles" class="tab">
-        <form id="formControles" class="card form-card">
-          <h2>Control médico</h2>
-          <label class="field-label">Control
-            <select id="ctrlControl"></select>
-          </label>
-          <label class="field-label">Profesional
-            <input type="text" id="ctrlProfesional" maxlength="80">
-          </label>
-          <div class="peso-talla-row">
-            <label class="field-label">Fecha
-              <input type="date" id="ctrlFecha">
-            </label>
-            <label class="field-label">Edad
-              <input type="text" id="ctrlEdad" maxlength="30" placeholder="Ej: 2 meses">
-            </label>
-          </div>
-          <div class="peso-talla-row">
-            <label class="field-label">Peso (kg)
-              <input type="number" id="ctrlPeso" step="any" inputmode="decimal">
-            </label>
-            <label class="field-label">Talla (cm)
-              <input type="number" id="ctrlTalla" step="any" inputmode="decimal">
-            </label>
-          </div>
-          <label class="field-label">Perímetro craneal (cm)
-            <input type="number" id="ctrlPerimetro" step="any" inputmode="decimal">
-          </label>
-          <label class="field-label">Diagnóstico nutricional
-            <input type="text" id="ctrlDxNutri" maxlength="120">
-          </label>
-          <label class="field-label">Diagnóstico
-            <textarea id="ctrlDx" rows="2" maxlength="500"></textarea>
-          </label>
-          <div class="field-label">Tipo de alimentación
-            <div class="check-row check-wrap">
-              <label class="check-pill"><input type="checkbox" class="ctrl-alim" value="LME"> LME</label>
-              <label class="check-pill"><input type="checkbox" class="ctrl-alim" value="LMP"> LMP</label>
-              <label class="check-pill"><input type="checkbox" class="ctrl-alim" value="FP"> FP</label>
-              <label class="check-pill"><input type="checkbox" class="ctrl-alim" value="FE"> FE</label>
-            </div>
-          </div>
-          <label class="field-label">Indicaciones
-            <textarea id="ctrlIndicaciones" rows="2" maxlength="500"></textarea>
-          </label>
-          <button type="submit" class="btn-primary" id="ctrlSubmit">Guardar control</button>
-        </form>
-
-        <div class="card table-card">
-          <h2>Controles guardados</h2>
-          <div id="ctrlLista"></div>
-        </div>
-      </section>
-
-      <!-- ========== PESTAÑA: JUEGOS ========== -->
+      <!-- ========== PESTAÑA 8: JUEGOS ========== -->
       <section id="tab-juegos" class="tab">
         <form id="formJuegos" class="card form-card">
           <h2>Registrar juego</h2>
@@ -530,57 +567,6 @@
         </div>
       </section>
 
-      <!-- ========== PESTAÑA: LISTA DEL SÚPER ========== -->
-      <section id="tab-super" class="tab">
-        <div class="card">
-          <h2>Lista del súper</h2>
-          <div id="superListaHoy" class="pill-list"></div>
-          <form id="formSuperQuick" class="super-quick">
-            <input type="text" id="superQuickNombre" maxlength="60" placeholder="Agregar producto y marcarlo">
-            <button type="submit" class="btn-secondary">➕</button>
-          </form>
-          <p class="stat-label" id="superContador"></p>
-
-          <label class="field-label">Monto total (opcional)
-            <input type="number" id="superMonto" step="any" inputmode="decimal" placeholder="0">
-          </label>
-
-          <div class="field-label">Foto de la boleta (opcional)
-            <input type="file" id="superFoto" accept="image/*" capture="environment" class="hidden">
-            <div class="photo-row">
-              <button type="button" class="btn-secondary" id="superFotoBtn">📷 Elegir foto…</button>
-              <div class="album-item hidden" id="superFotoWrap">
-                <img id="superFotoPreview" alt="">
-                <button type="button" class="album-del" id="superFotoQuitar">✕</button>
-              </div>
-            </div>
-          </div>
-
-          <button type="button" class="btn-primary" id="superFinalizarBtn">🛒 Compra Finalizada</button>
-        </div>
-
-        <div class="card table-card">
-          <h2>Historial</h2>
-          <div id="tablaSuper"></div>
-        </div>
-
-        <details class="card">
-          <summary>Mis productos</summary>
-          <form id="formSuper" class="form-card">
-            <div class="form-grid">
-              <label>Nombre
-                <input type="text" id="superNombre" maxlength="60" placeholder="Nombre del producto" required>
-              </label>
-              <label>Categoría (opcional)
-                <input type="text" id="superCategoria" maxlength="40" placeholder="Ej: Lácteos">
-              </label>
-            </div>
-            <button type="submit" class="btn-primary">＋ Agregar a mi lista</button>
-            <div id="superLista" class="table-wrap past-lista"></div>
-          </form>
-        </details>
-      </section>
-
     </main>
 
     <!-- ========== BARRA DE PESTAÑAS (se arma en JS según el orden guardado) ========== -->
@@ -599,6 +585,10 @@
         <div class="codigo-box">
           <span id="cfgCodigo" class="codigo-txt">——————</span>
           <button type="button" id="copiarCodigo" class="btn-secondary">Copiar</button>
+        </div>
+        <div class="share-row" style="display:flex; gap:8px; margin-top:4px;">
+          <button type="button" id="compartirCodigoBtn" class="btn-secondary" style="flex:1;">📲 Compartir</button>
+          <button type="button" id="whatsappCodigoBtn" class="btn-secondary" style="flex:1;">💬 WhatsApp</button>
         </div>
       </div>
 
@@ -629,7 +619,7 @@
       <div class="field-label">Foto del bebé
         <div class="photo-row">
           <div class="avatar avatar-lg" id="cfgAvatarWrap">
-            <img id="cfgFotoPreview" alt="" class="hidden">
+            <img id="cfgFotoPreview" alt="Vista previa de foto del bebé" class="hidden">
             <span id="cfgAvatarFallback">👶</span>
           </div>
           <input type="file" id="cfgFoto" accept="image/*" class="hidden">

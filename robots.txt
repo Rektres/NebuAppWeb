@@ -1,0 +1,5 @@
+# robots.txt para Rutinas del Bebé (NebuAppWeb)
+User-agent: *
+Allow: /
+
+Sitemap: https://rektres.github.io/NebuAppWeb/sitemap.xml
