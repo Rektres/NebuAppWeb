@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#0d0d0d">
+  <meta name="theme-color" content="#080914">
   
   <title>Rutinas del Bebé | Registro Colaborativo y Estadísticas</title>
   <meta name="description" content="App web colaborativa para padres: registra y sincroniza tomas de leche, pañales, vitaminas y sueño de tu bebé en tiempo real con estadísticas interactivas.">
@@ -81,6 +81,7 @@
   <div id="authScreen" class="auth-screen hidden">
     <div class="auth-card">
       <div class="auth-logo">🍼</div>
+      <span class="eyebrow-badge" style="margin-bottom:12px;">★ Acceso Seguro</span>
       <h1 id="authTitle">Iniciar sesión</h1>
       <form id="authForm">
         <input type="email" id="authEmail" placeholder="Correo electrónico" required autocomplete="email">
@@ -100,6 +101,7 @@
   <div id="linkScreen" class="auth-screen hidden">
     <div class="auth-card">
       <div class="auth-logo">👶</div>
+      <span class="eyebrow-badge" style="margin-bottom:12px;">★ Vinculación Familiar</span>
       <h1 id="linkTitle">Vincula a tu bebé</h1>
       <p class="link-sub">¿Quién eres?</p>
       <div class="rol-row">
@@ -146,6 +148,7 @@
 
       <!-- ========== PESTAÑA 1: ESTADÍSTICAS ========== -->
       <section id="tab-stats" class="tab active">
+        <span class="eyebrow-badge">★ Panel Analítico</span>
         <div class="card seg-card">
           <div class="seg">
             <button class="seg-btn" data-range="1d">1 día</button>
@@ -215,6 +218,7 @@
 
       <!-- ========== PESTAÑA 2: TOMAS DE LECHE ========== -->
       <section id="tab-leche" class="tab">
+        <span class="eyebrow-badge">★ Nutrición y Fórmula</span>
         <div class="dash-grid">
           <div class="card dash-card">
             <span class="stat-label">Última toma hace</span>
@@ -264,11 +268,11 @@
         <div class="card goal-card" id="lataCard">
           <h2>🥫 Tarros de Fórmula (Cálculo acumulado)</h2>
           <div class="dash-grid">
-            <div class="card dash-card" style="padding:10px;">
+            <div class="card dash-card" style="padding:12px;">
               <span class="stat-label">Tarros abiertos</span>
               <span class="stat-value" id="tarrosAbiertosVal">0</span>
             </div>
-            <div class="card dash-card" style="padding:10px;">
+            <div class="card dash-card" style="padding:12px;">
               <span class="stat-label">Fórmula total consumida</span>
               <span class="stat-value stat-value-sm" id="formulaTotalTxt">0 g</span>
             </div>
@@ -287,8 +291,8 @@
           <p class="goal-status" id="lataStatus"></p>
           
           <details style="margin-top:8px;">
-            <summary style="font-size:0.8rem; color:var(--muted); cursor:pointer;">Apertura manual / fecha de inicio</summary>
-            <div style="margin-top:8px; display:flex; flex-direction:column; gap:8px;">
+            <summary style="font-size:0.82rem; color:var(--muted); cursor:pointer;">Apertura manual / fecha de inicio</summary>
+            <div style="margin-top:10px; display:flex; flex-direction:column; gap:10px;">
               <label class="stat-label" for="lataAbiertaInput">Último tarro abierto el</label>
               <input type="datetime-local" id="lataAbiertaInput">
               <button type="button" id="abrirLataBtn" class="btn-secondary">🥫 Registrar apertura de tarro nuevo</button>
@@ -299,6 +303,7 @@
 
       <!-- ========== PESTAÑA 3: VITAMINAS ========== -->
       <section id="tab-vitaminas" class="tab">
+        <span class="eyebrow-badge">★ Salud y Suplementos</span>
         <div class="card">
           <h2 id="vitHoyTitulo">Hoy — marca qué vitaminas tomó</h2>
           <div class="past-fh">
@@ -355,6 +360,7 @@
 
       <!-- ========== PESTAÑA 4: PAÑALES ========== -->
       <section id="tab-panales" class="tab">
+        <span class="eyebrow-badge">★ Control de Cambios</span>
         <div class="dash-grid">
           <div class="card dash-card">
             <span class="stat-label">Último cambio hace</span>
@@ -387,6 +393,7 @@
 
       <!-- ========== PESTAÑA 5: SUEÑO ========== -->
       <section id="tab-sueno" class="tab">
+        <span class="eyebrow-badge">★ Descanso y Siestas</span>
         <div class="dash-grid">
           <div class="card dash-card">
             <span class="stat-label">Despierto hace</span>
@@ -401,7 +408,7 @@
         <div class="card" id="siestaCard">
           <button type="button" id="btnDormir" class="btn-primary">😴 Se durmió ahora</button>
           <div id="siestaAbierta" class="hidden">
-            <p class="siesta-info">😴 Durmiendo desde <strong id="siestaDesde">—</strong> · lleva <strong id="siestaLleva">—</strong></p>
+            <p class="siesta-info"><span class="live-dot"></span>😴 Durmiendo desde <strong id="siestaDesde">—</strong> · lleva <strong id="siestaLleva">—</strong></p>
             <button type="button" id="btnDespertar" class="btn-primary">🌅 Despertó</button>
           </div>
         </div>
@@ -431,6 +438,7 @@
 
       <!-- ========== PESTAÑA 6: INFO DEL BEBÉ ========== -->
       <section id="tab-info" class="tab">
+        <span class="eyebrow-badge">★ Ficha Clínica del Bebé</span>
         <div class="card">
           <div class="photo-row">
             <div class="avatar avatar-lg" id="infoAvatarWrap">
@@ -512,6 +520,7 @@
 
       <!-- ========== PESTAÑA 7: BITÁCORA ========== -->
       <section id="tab-bitacora" class="tab">
+        <span class="eyebrow-badge">★ Hitos del Desarrollo</span>
         <form id="formBitacora" class="card form-card">
           <h2>Nueva anotación</h2>
           <label class="field-label">Título
@@ -534,6 +543,7 @@
 
       <!-- ========== PESTAÑA 8: JUEGOS ========== -->
       <section id="tab-juegos" class="tab">
+        <span class="eyebrow-badge">★ Estimulación Temprana</span>
         <form id="formJuegos" class="card form-card">
           <h2>Registrar juego</h2>
           <label class="field-label">Nombre del juego

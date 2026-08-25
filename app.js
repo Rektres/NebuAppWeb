@@ -769,7 +769,12 @@ function renderCharts() {
 
   const dias = obtenerDiasRango(statsRange);
   const labels = dias.map((d) => d.label);
-  const s = SERIES[document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'];
+  const s = {
+    azul: cssVar('--brand-primary') || '#3987e5',
+    ambar: cssVar('--brand-accent') || '#fbbf24',
+    violeta: cssVar('--brand-secondary') || '#7c3aed',
+    verde: cssVar('--brand-accent') || '#10b981',
+  };
   const surface = cssVar('--surface');
 
   // 1. Leche
