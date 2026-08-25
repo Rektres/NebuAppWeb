@@ -231,24 +231,24 @@ function tablaHTML(headers, grupos, filaFn, subtotalFn, subtotalMesFn) {
       // Mes actual: se muestran directamente sus semanas
       for (const sem of grupoMes.semanas) {
         const semAbierta = sem.actual;
-        html += `<tr class="week-row week-toggle${semAbierta ? ' abierto' : ''}" data-week="${sem.key}"><td colspan="${cols}"><span class="caret">${semAbierta ? '▾' : '▸'}</span> <strong>${sem.label}</strong></td></tr>`;
+        html += `<tr class="week-row week-toggle${semAbierta ? ' abierto' : ''}" data-week="${sem.key}"><td colspan="${cols}"><div class="row-header-wrap"><span><span class="caret">${semAbierta ? '▾' : '▸'}</span> <strong>${sem.label}</strong></span></div></td></tr>`;
         for (const [key, rows] of sem.dias) {
           const diaAbierto = semAbierta && key === hoy;
-          const subtotal = subtotalFn ? `<span style="float:right">${subtotalFn(rows)}</span>` : '';
-          html += `<tr class="day-row day-toggle w-${sem.key}${semAbierta ? '' : ' hidden'}${diaAbierto ? ' abierto' : ''}" data-day="${key}"><td colspan="${cols}"><span class="caret">${diaAbierto ? '▾' : '▸'}</span> ${fmtDayLabel(key)}${subtotal}</td></tr>`;
+          const subtotal = subtotalFn ? `<span class="subtotal-badge">${subtotalFn(rows)}</span>` : '';
+          html += `<tr class="day-row day-toggle w-${sem.key}${semAbierta ? '' : ' hidden'}${diaAbierto ? ' abierto' : ''}" data-day="${key}"><td colspan="${cols}"><div class="row-header-wrap"><span><span class="caret">${diaAbierto ? '▾' : '▸'}</span> ${fmtDayLabel(key)}</span>${subtotal}</div></td></tr>`;
           html += rows.map(filaFn).map((tr) => tr.replace('<tr>', `<tr class="drow d-${key} w-${sem.key}${diaAbierto ? '' : ' hidden'}">`)).join('');
         }
       }
     } else {
       // Mes completado: colapsado en un renglón mensual
       const todasFilas = grupoMes.semanas.flatMap((s) => s.dias.flatMap(([, rows]) => rows));
-      const subtotalMes = subtotalMesFn ? `<span style="float:right">${subtotalMesFn(todasFilas)}</span>` : '';
-      html += `<tr class="month-row month-toggle" data-month="${grupoMes.mes}"><td colspan="${cols}"><span class="caret">▸</span> <strong>${fmtMesLabel(grupoMes.mes)}</strong>${subtotalMes}</td></tr>`;
+      const subtotalMes = subtotalMesFn ? `<span class="subtotal-badge">${subtotalMesFn(todasFilas)}</span>` : '';
+      html += `<tr class="month-row month-toggle" data-month="${grupoMes.mes}"><td colspan="${cols}"><div class="row-header-wrap"><span><span class="caret">▸</span> <strong>${fmtMesLabel(grupoMes.mes)}</strong></span>${subtotalMes}</div></td></tr>`;
       for (const sem of grupoMes.semanas) {
-        html += `<tr class="week-row week-toggle m-${grupoMes.mes} hidden" data-week="${sem.key}"><td colspan="${cols}"><span class="caret">▸</span> ${sem.label}</td></tr>`;
+        html += `<tr class="week-row week-toggle m-${grupoMes.mes} hidden" data-week="${sem.key}"><td colspan="${cols}"><div class="row-header-wrap"><span><span class="caret">▸</span> ${sem.label}</span></div></td></tr>`;
         for (const [key, rows] of sem.dias) {
-          const subtotal = subtotalFn ? `<span style="float:right">${subtotalFn(rows)}</span>` : '';
-          html += `<tr class="day-row day-toggle m-${grupoMes.mes} w-${sem.key} hidden" data-day="${key}"><td colspan="${cols}"><span class="caret">▸</span> ${fmtDayLabel(key)}${subtotal}</td></tr>`;
+          const subtotal = subtotalFn ? `<span class="subtotal-badge">${subtotalFn(rows)}</span>` : '';
+          html += `<tr class="day-row day-toggle m-${grupoMes.mes} w-${sem.key} hidden" data-day="${key}"><td colspan="${cols}"><div class="row-header-wrap"><span><span class="caret">▸</span> ${fmtDayLabel(key)}</span>${subtotal}</div></td></tr>`;
           html += rows.map(filaFn).map((tr) => tr.replace('<tr>', `<tr class="drow d-${key} m-${grupoMes.mes} w-${sem.key} hidden">`)).join('');
         }
       }
@@ -585,7 +585,13 @@ function pintarSiestaActiva(siesta) {
   abierta.classList.remove('hidden');
   const ini = new Date(siesta.inicio);
   $('siestaDesde').textContent = `${fmtTime(ini)} (${ini.toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' })})`;
-  const tick = () => { $('siestaLleva').textContent = fmtDur(Math.max(0, (Date.now() - ini) / 60000)); };
+  const tick = () => {
+    const dur = fmtDur(Math.max(0, (Date.now() - ini) / 60000));
+    $('siestaLleva').textContent = dur;
+    if ($('despiertoHaceLabel') && $('despiertoHaceLabel').textContent.includes('Dormido')) {
+      $('despiertoHace').textContent = dur;
+    }
+  };
   tick();
   siestaTimer = setInterval(tick, 30000);
 }
@@ -596,12 +602,25 @@ function renderSueno() {
   pintarSiestaActiva(siestaActiva);
 
   const cerradas = rows.filter((r) => r.fin);
-  if (!cerradas.length) {
+  if (siestaActiva) {
+    const ini = new Date(siestaActiva.inicio);
+    $('despiertoHaceLabel').innerHTML = '<span class="live-dot"></span>Dormido hace';
+    $('despiertoHace').textContent = fmtDur(Math.max(0, (Date.now() - ini) / 60000));
+    $('despiertoHace').style.color = 'var(--brand-accent)';
+  } else if (!cerradas.length) {
+    $('despiertoHaceLabel').textContent = 'Despierto hace';
     $('despiertoHace').textContent = '—';
-    $('ultimoSueno').textContent = 'Sin registros';
+    $('despiertoHace').style.color = '';
   } else {
     const ultFin = new Date(cerradas[0].fin);
+    $('despiertoHaceLabel').textContent = 'Despierto hace';
     $('despiertoHace').textContent = fmtDur(Math.max(0, (Date.now() - ultFin) / 60000));
+    $('despiertoHace').style.color = '';
+  }
+
+  if (!cerradas.length) {
+    $('ultimoSueno').textContent = siestaActiva ? 'En curso' : 'Sin registros';
+  } else {
     const ult = cerradas[0];
     $('ultimoSueno').textContent = `${fmtTime(new Date(ult.inicio))} - ${fmtTime(new Date(ult.fin))} · ${fmtDur(duracionMin(ult))}`;
   }
@@ -610,7 +629,7 @@ function renderSueno() {
     ['Inicio', 'Fin', 'Duración'],
     groupByDay(rows, 'inicio'),
     (r) => {
-      const finTxt = r.fin ? fmtTime(new Date(r.fin)) : '<span style="color:var(--accent)">Durmiendo…</span>';
+      const finTxt = r.fin ? fmtTime(new Date(r.fin)) : '<span style="color:var(--brand-accent); font-weight:700;"><span class="live-dot"></span>Durmiendo…</span>';
       const durTxt = r.fin ? fmtDur(duracionMin(r)) : '—';
       return `<tr><td>${fmtTime(new Date(r.inicio))}</td><td>${finTxt}</td><td>${durTxt}</td>${accionesTd('sueno', r.id)}</tr>`;
     },
