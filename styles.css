@@ -1092,7 +1092,19 @@ tr.month-row td {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
-.auth-logo { font-size: 3.2rem; margin-bottom: 8px; }
+.auth-logo { margin-bottom: 8px; display: flex; align-items: center; justify-content: center; }
+.auth-logo-img {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--brand-accent);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--brand-accent) 35%, transparent);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.auth-logo-img:hover {
+  transform: scale(1.05);
+}
 .auth-card h1 {
   font-family: var(--shell-display);
   font-size: 1.35rem;

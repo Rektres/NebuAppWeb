@@ -660,10 +660,14 @@ function obtenerDiasRango(range) {
   const dias = [];
   for (let i = numDias - 1; i >= 0; i--) {
     const d = new Date(Date.now() - i * 86400000);
+    const mesCorto = d.toLocaleDateString('es', { month: 'short' }).replace('.', '');
     const label = numDias === 1
       ? 'Hoy'
-      : d.toLocaleDateString('es', { weekday: numDias <= 7 ? 'short' : undefined, day: 'numeric', month: numDias > 7 ? 'short' : undefined });
-    dias.push({ key: dayKey(d), label });
+      : numDias <= 7
+        ? d.toLocaleDateString('es', { weekday: 'short', day: 'numeric' })
+        : `${d.getDate()} ${mesCorto}`;
+    const fullDate = d.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
+    dias.push({ key: dayKey(d), label, fullDate });
   }
   return dias;
 }
@@ -746,6 +750,12 @@ const LINEA = { tension: 0.32, borderWidth: 2.5, pointRadius: 4, pointHoverRadiu
 
 function baseChartOpts(extraTooltip = {}, esHorario = false) {
   const muted = cssVar('--muted'), grid = cssVar('--grid');
+  
+  let maxTicks = undefined;
+  if (esHorario) maxTicks = 8;
+  else if (statsRange === '30d') maxTicks = 6;
+  else if (statsRange === '14d') maxTicks = 7;
+
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -773,9 +783,10 @@ function baseChartOpts(extraTooltip = {}, esHorario = false) {
         ticks: {
           color: muted,
           font: { size: 11 },
-          autoSkip: esHorario,
-          maxTicksLimit: esHorario ? 8 : undefined,
+          autoSkip: true,
+          maxTicksLimit: maxTicks,
           maxRotation: 0,
+          minRotation: 0,
         },
       },
       y: {
@@ -992,7 +1003,12 @@ function renderChartsDias(s, surface) {
         ...(typeLeche === 'bar' ? BAR : LINEA),
       }],
     },
-    options: baseChartOpts({ callbacks: { label: (c) => ` ${c.parsed.y} ml` } }),
+    options: baseChartOpts({
+      callbacks: {
+        title: (items) => dias[items[0].dataIndex]?.fullDate || items[0].label,
+        label: (c) => ` ${c.parsed.y} ml`,
+      },
+    }),
   });
 
   // 2. Vitaminas
@@ -1010,14 +1026,23 @@ function renderChartsDias(s, surface) {
         ...(typeVit === 'bar' ? BAR : LINEA),
       }],
     },
-    options: baseChartOpts({ callbacks: { label: (c) => ` ${c.parsed.y} gotas` } }),
+    options: baseChartOpts({
+      callbacks: {
+        title: (items) => dias[items[0].dataIndex]?.fullDate || items[0].label,
+        label: (c) => ` ${c.parsed.y} gotas`,
+      },
+    }),
   });
 
   // 3. Pañales
   const heces = sumarPorDia(cache.panales, 'fecha_hora', (r) => (r.heces ? 1 : 0));
   const orina = sumarPorDia(cache.panales, 'fecha_hora', (r) => (r.orina ? 1 : 0));
   const typePan = chartTypes.panales || 'bar';
-  const optsPan = baseChartOpts();
+  const optsPan = baseChartOpts({
+    callbacks: {
+      title: (items) => dias[items[0].dataIndex]?.fullDate || items[0].label,
+    },
+  });
   optsPan.plugins.legend = {
     display: true,
     position: 'top',
@@ -1068,7 +1093,12 @@ function renderChartsDias(s, surface) {
         ...(typeSueno === 'bar' ? BAR : LINEA),
       }],
     },
-    options: baseChartOpts({ callbacks: { label: (c) => ` ${fmtDur(c.parsed.y * 60)}` } }),
+    options: baseChartOpts({
+      callbacks: {
+        title: (items) => dias[items[0].dataIndex]?.fullDate || items[0].label,
+        label: (c) => ` ${fmtDur(c.parsed.y * 60)}`,
+      },
+    }),
   });
 }
 
