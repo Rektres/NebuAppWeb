@@ -1,0 +1,23 @@
+{
+  "name": "NebuApp - Rutinas del Bebé",
+  "short_name": "NebuApp",
+  "description": "Registro colaborativo de rutinas de bebé, tomas de leche, pañales, vitaminas y sueño con estadísticas.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#080914",
+  "theme_color": "#080914",
+  "icons": [
+    {
+      "src": "apple-touch-icon-180x180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
