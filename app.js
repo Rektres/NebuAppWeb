@@ -677,10 +677,74 @@ function sumarPorDia(rows, campoFecha, valorFn) {
   return tot;
 }
 
+// Agregaciones horarias para modo 1 día (Hoy · 24 horas)
+function sumarLechePorHoraHoy(rows) {
+  const hoy = dayKey(new Date());
+  const horas = new Array(24).fill(0);
+  for (const r of rows || []) {
+    const d = new Date(r.fecha_hora);
+    if (dayKey(d) === hoy) {
+      const h = d.getHours();
+      horas[h] += r.cantidad_ml;
+    }
+  }
+  return horas;
+}
+
+function sumarVitaminasPorHoraHoy(rows) {
+  const hoy = dayKey(new Date());
+  const horas = new Array(24).fill(0);
+  for (const r of rows || []) {
+    const d = new Date(r.fecha_hora);
+    if (dayKey(d) === hoy) {
+      const h = d.getHours();
+      horas[h] += r.gotas;
+    }
+  }
+  return horas;
+}
+
+function sumarPanalesPorHoraHoy(rows) {
+  const hoy = dayKey(new Date());
+  const orina = new Array(24).fill(0);
+  const heces = new Array(24).fill(0);
+  for (const r of rows || []) {
+    const d = new Date(r.fecha_hora);
+    if (dayKey(d) === hoy) {
+      const h = d.getHours();
+      if (r.orina) orina[h] += 1;
+      if (r.heces) heces[h] += 1;
+    }
+  }
+  return { orina, heces };
+}
+
+function calcularSuenoPorHoraHoy(rows) {
+  const hoy = dayKey(new Date());
+  const minsPorHora = new Array(24).fill(0);
+  for (const r of rows || []) {
+    if (!r.inicio) continue;
+    const ini = new Date(r.inicio);
+    const fin = r.fin ? new Date(r.fin) : new Date();
+    if (fin <= ini) continue;
+
+    for (let h = 0; h < 24; h++) {
+      const slotIni = new Date(`${hoy}T${pad2(h)}:00:00`).getTime();
+      const slotFin = slotIni + 3600000;
+      const iniOverlap = Math.max(ini.getTime(), slotIni);
+      const finOverlap = Math.min(fin.getTime(), slotFin);
+      if (finOverlap > iniOverlap) {
+        minsPorHora[h] += (finOverlap - iniOverlap) / 60000;
+      }
+    }
+  }
+  return minsPorHora.map((m) => Math.round((m / 60) * 10) / 10);
+}
+
 const BAR = { maxBarThickness: 32, borderRadius: 5, categoryPercentage: 0.72, barPercentage: 0.9 };
 const LINEA = { tension: 0.32, borderWidth: 2.5, pointRadius: 4, pointHoverRadius: 6, fill: false };
 
-function baseChartOpts(extraTooltip = {}) {
+function baseChartOpts(extraTooltip = {}, esHorario = false) {
   const muted = cssVar('--muted'), grid = cssVar('--grid');
   return {
     responsive: true,
@@ -703,7 +767,17 @@ function baseChartOpts(extraTooltip = {}) {
       },
     },
     scales: {
-      x: { grid: { display: false }, border: { display: false }, ticks: { color: muted, font: { size: 11 } } },
+      x: {
+        grid: { display: false },
+        border: { display: false },
+        ticks: {
+          color: muted,
+          font: { size: 11 },
+          autoSkip: esHorario,
+          maxTicksLimit: esHorario ? 8 : undefined,
+          maxRotation: 0,
+        },
+      },
       y: {
         beginAtZero: true,
         grid: { color: grid },
@@ -725,7 +799,7 @@ function actualizarStatsUI() {
   }
 
   const rangeLabels = {
-    '1d': 'hoy',
+    '1d': 'hoy por horas',
     '7d': 'últimos 7 días',
     '14d': 'últimos 14 días',
     '30d': 'últimos 30 días',
@@ -767,8 +841,6 @@ function renderCharts() {
   Object.values(charts).forEach((c) => c.destroy());
   actualizarStatsUI();
 
-  const dias = obtenerDiasRango(statsRange);
-  const labels = dias.map((d) => d.label);
   const s = {
     azul: cssVar('--brand-primary') || '#3987e5',
     ambar: cssVar('--brand-accent') || '#fbbf24',
@@ -776,6 +848,134 @@ function renderCharts() {
     verde: cssVar('--brand-accent') || '#10b981',
   };
   const surface = cssVar('--surface');
+
+  if (statsRange === '1d') {
+    renderChartsHorario(s, surface);
+  } else {
+    renderChartsDias(s, surface);
+  }
+
+  statsDirty = false;
+}
+
+function renderChartsHorario(s, surface) {
+  const horasLabels = Array.from({ length: 24 }, (_, i) => `${pad2(i)}:00`);
+
+  // 1. Leche por hora hoy
+  const lecheHoras = sumarLechePorHoraHoy(cache.tomas);
+  const typeLeche = chartTypes.leche || 'bar';
+  charts.leche = new Chart($('chartLeche'), {
+    type: typeLeche,
+    data: {
+      labels: horasLabels,
+      datasets: [{
+        label: 'Leche (ml)',
+        data: lecheHoras,
+        backgroundColor: s.azul,
+        borderColor: s.azul,
+        ...(typeLeche === 'bar' ? BAR : LINEA),
+      }],
+    },
+    options: baseChartOpts({
+      callbacks: {
+        title: (items) => `Hoy a las ${items[0].label} h`,
+        label: (c) => ` ${c.parsed.y} ml`,
+      },
+    }, true),
+  });
+
+  // 2. Vitaminas por hora hoy
+  const vitHoras = sumarVitaminasPorHoraHoy(cache.vitaminas);
+  const typeVit = chartTypes.vitaminas || 'bar';
+  charts.vitaminas = new Chart($('chartVitaminas'), {
+    type: typeVit,
+    data: {
+      labels: horasLabels,
+      datasets: [{
+        label: 'Vitaminas (gotas)',
+        data: vitHoras,
+        backgroundColor: s.ambar,
+        borderColor: s.ambar,
+        ...(typeVit === 'bar' ? BAR : LINEA),
+      }],
+    },
+    options: baseChartOpts({
+      callbacks: {
+        title: (items) => `Hoy a las ${items[0].label} h`,
+        label: (c) => ` ${c.parsed.y} gotas`,
+      },
+    }, true),
+  });
+
+  // 3. Pañales por hora hoy
+  const panHoras = sumarPanalesPorHoraHoy(cache.panales);
+  const typePan = chartTypes.panales || 'bar';
+  const optsPan = baseChartOpts({
+    callbacks: {
+      title: (items) => `Hoy a las ${items[0].label} h`,
+    },
+  }, true);
+  optsPan.plugins.legend = {
+    display: true,
+    position: 'top',
+    labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 7, boxHeight: 7, color: cssVar('--text-2'), font: { size: 11 } },
+  };
+
+  if (typePan === 'bar') {
+    optsPan.scales.x.stacked = true;
+    optsPan.scales.y.stacked = true;
+    charts.panales = new Chart($('chartPanales'), {
+      type: 'bar',
+      data: {
+        labels: horasLabels,
+        datasets: [
+          { label: 'Orina', data: panHoras.orina, backgroundColor: s.azul, borderColor: surface, borderWidth: 2, ...BAR, borderRadius: 3 },
+          { label: 'Heces', data: panHoras.heces, backgroundColor: s.ambar, borderColor: surface, borderWidth: 2, ...BAR, borderRadius: 3 },
+        ],
+      },
+      options: optsPan,
+    });
+  } else {
+    charts.panales = new Chart($('chartPanales'), {
+      type: 'line',
+      data: {
+        labels: horasLabels,
+        datasets: [
+          { label: 'Orina', data: panHoras.orina, borderColor: s.azul, backgroundColor: s.azul, ...LINEA },
+          { label: 'Heces', data: panHoras.heces, borderColor: s.ambar, backgroundColor: s.ambar, ...LINEA },
+        ],
+      },
+      options: optsPan,
+    });
+  }
+
+  // 4. Sueño por hora hoy
+  const suenoHoras = calcularSuenoPorHoraHoy(cache.sueno);
+  const typeSueno = chartTypes.sueno || 'bar';
+  charts.sueno = new Chart($('chartSueno'), {
+    type: typeSueno,
+    data: {
+      labels: horasLabels,
+      datasets: [{
+        label: 'Sueño (horas)',
+        data: suenoHoras,
+        backgroundColor: s.violeta,
+        borderColor: s.violeta,
+        ...(typeSueno === 'bar' ? BAR : LINEA),
+      }],
+    },
+    options: baseChartOpts({
+      callbacks: {
+        title: (items) => `Hoy a las ${items[0].label} h`,
+        label: (c) => ` ${fmtDur(c.parsed.y * 60)} dormidas`,
+      },
+    }, true),
+  });
+}
+
+function renderChartsDias(s, surface) {
+  const dias = obtenerDiasRango(statsRange);
+  const labels = dias.map((d) => d.label);
 
   // 1. Leche
   const leche = sumarPorDia(cache.tomas, 'fecha_hora', (r) => r.cantidad_ml);
@@ -870,8 +1070,6 @@ function renderCharts() {
     },
     options: baseChartOpts({ callbacks: { label: (c) => ` ${fmtDur(c.parsed.y * 60)}` } }),
   });
-
-  statsDirty = false;
 }
 
 // ---------- Tabs ----------
