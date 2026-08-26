@@ -551,13 +551,16 @@ function renderPanales() {
 
 // ---------- Sueño ----------
 function duracionMin(r) {
-  if (!r.inicio || !r.fin) return 0;
-  return Math.max(0, (new Date(r.fin) - new Date(r.inicio)) / 60000);
+  if (!r.inicio) return 0;
+  const ini = new Date(r.inicio);
+  const fin = r.fin ? new Date(r.fin) : new Date();
+  return Math.max(0, (fin - ini) / 60000);
 }
 
 function tramosPorDia(r) {
-  if (!r.inicio || !r.fin) return [];
-  const ini = new Date(r.inicio), fin = new Date(r.fin);
+  if (!r.inicio) return [];
+  const ini = new Date(r.inicio);
+  const fin = r.fin ? new Date(r.fin) : new Date();
   if (fin <= ini) return [];
   const tramos = [];
   let cur = new Date(ini);
@@ -566,10 +569,33 @@ function tramosPorDia(r) {
     const midNext = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1, 0, 0, 0);
     const finTramo = fin < midNext ? fin : midNext;
     const mins = (finTramo - cur) / 60000;
-    if (mins > 0) tramos.push({ key: dStr, mins });
+    if (mins > 0) {
+      tramos.push({
+        key: dStr,
+        mins,
+        inicioTramo: new Date(cur),
+        finTramo: new Date(finTramo),
+        esInicio: cur.getTime() === ini.getTime(),
+        esFin: r.fin ? finTramo.getTime() === fin.getTime() : false,
+        esActiva: !r.fin && finTramo.getTime() === fin.getTime(),
+        original: r,
+      });
+    }
     cur = finTramo;
   }
   return tramos;
+}
+
+function agruparSuenoPorDia(rows) {
+  const grupos = new Map();
+  for (const r of rows) {
+    const tramos = tramosPorDia(r);
+    for (const t of tramos) {
+      if (!grupos.has(t.key)) grupos.set(t.key, []);
+      grupos.get(t.key).push(t);
+    }
+  }
+  return grupos;
 }
 
 let siestaTimer = null;
@@ -625,16 +651,26 @@ function renderSueno() {
     $('ultimoSueno').textContent = `${fmtTime(new Date(ult.inicio))} - ${fmtTime(new Date(ult.fin))} · ${fmtDur(duracionMin(ult))}`;
   }
 
+  const gruposSueno = agruparSuenoPorDia(rows);
+
   $('tablaSueno').innerHTML = tablaHTML(
     ['Inicio', 'Fin', 'Duración'],
-    groupByDay(rows, 'inicio'),
-    (r) => {
-      const finTxt = r.fin ? fmtTime(new Date(r.fin)) : '<span style="color:var(--brand-accent); font-weight:700;"><span class="live-dot"></span>Durmiendo…</span>';
-      const durTxt = r.fin ? fmtDur(duracionMin(r)) : '—';
-      return `<tr><td>${fmtTime(new Date(r.inicio))}</td><td>${finTxt}</td><td>${durTxt}</td>${accionesTd('sueno', r.id)}</tr>`;
+    gruposSueno,
+    (t) => {
+      const iniTxt = t.esInicio ? fmtTime(t.inicioTramo) : '00:00 🌅';
+      let finTxt = '';
+      if (t.esActiva) {
+        finTxt = '<span style="color:var(--brand-accent); font-weight:700;"><span class="live-dot"></span>Durmiendo…</span>';
+      } else if (!t.esFin) {
+        finTxt = '24:00 🌙';
+      } else {
+        finTxt = fmtTime(t.finTramo);
+      }
+      const durTxt = fmtDur(t.mins);
+      return `<tr><td>${iniTxt}</td><td>${finTxt}</td><td>${durTxt}</td>${accionesTd('sueno', t.original.id)}</tr>`;
     },
-    (rs) => fmtDur(rs.reduce((s, r) => s + duracionMin(r), 0)),
-    (rs) => fmtDur(rs.reduce((s, r) => s + duracionMin(r), 0))
+    (tramosDia) => fmtDur(tramosDia.reduce((s, t) => s + t.mins, 0)),
+    (tramosMes) => fmtDur(tramosMes.reduce((s, t) => s + t.mins, 0))
   );
 }
 
