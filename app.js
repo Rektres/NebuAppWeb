@@ -1847,6 +1847,8 @@ $('cfgGuardar').addEventListener('click', async () => {
 // ---------- Recarga de Datos y Auto-Refresh ----------
 let lastRefreshTime = Date.now();
 let autoRefreshTimer = null;
+let bgWorker = null;
+let realtimeChannel = null;
 
 async function recargarDatos(mostrarAviso = false) {
   if (!appStarted || !bebe?.id) return;
@@ -1866,17 +1868,62 @@ async function recargarDatos(mostrarAviso = false) {
 }
 
 function iniciarAutoRefresh() {
-  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  detenerAutoRefresh();
   lastRefreshTime = Date.now();
-  // Recarga automática cada 15 minutos (15 * 60 * 1000 = 900.000 ms)
+
+  // 1. Temporizador estándar cada 15 minutos (900.000 ms) incondicional
   autoRefreshTimer = setInterval(() => {
-    if (appStarted && bebe?.id && !document.hidden) {
+    if (appStarted && bebe?.id) {
       recargarDatos(false);
     }
   }, 15 * 60 * 1000);
+
+  // 2. Web Worker Heartbeat en segundo plano (para evitar que el navegador suspenda el temporizador al cambiar de pestaña/pantalla)
+  try {
+    const workerBlob = new Blob([
+      `setInterval(function() { postMessage('tick'); }, 15 * 60 * 1000);`
+    ], { type: 'application/javascript' });
+    bgWorker = new Worker(URL.createObjectURL(workerBlob));
+    bgWorker.onmessage = () => {
+      if (appStarted && bebe?.id) {
+        recargarDatos(false);
+      }
+    };
+  } catch (e) {
+    console.warn('Web Worker en segundo plano no disponible:', e);
+  }
+
+  // 3. Suscripción Supabase Realtime para sincronización instantánea adicional
+  try {
+    if (bebe?.id) {
+      realtimeChannel = db
+        .channel(`realtime_bebe_${bebe.id}`)
+        .on('postgres_changes', { event: '*', schema: 'public', filter: `bebe_id=eq.${bebe.id}` }, () => {
+          recargarDatos(false);
+        })
+        .subscribe();
+    }
+  } catch (e) {
+    console.warn('Supabase Realtime no disponible:', e);
+  }
 }
 
-// Al regresar a la pestaña o app si han transcurrido 15 minutos o más
+function detenerAutoRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+  if (bgWorker) {
+    bgWorker.terminate();
+    bgWorker = null;
+  }
+  if (realtimeChannel) {
+    db.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+}
+
+// Al regresar a la pestaña o desbloquear pantalla si han transcurrido 15 minutos o más
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && appStarted && bebe?.id) {
     if (Date.now() - lastRefreshTime >= 15 * 60 * 1000) {
@@ -2035,10 +2082,7 @@ function iniciarApp(b, rol) {
 
 function showAuth() {
   appStarted = false;
-  if (autoRefreshTimer) {
-    clearInterval(autoRefreshTimer);
-    autoRefreshTimer = null;
-  }
+  detenerAutoRefresh();
   bebe = null; miRol = null; usuario = null;
   $('app').classList.add('hidden');
   $('linkScreen').classList.add('hidden');
