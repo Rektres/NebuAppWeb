@@ -1844,8 +1844,49 @@ $('cfgGuardar').addEventListener('click', async () => {
   if (ok) $('settingsModal').classList.add('hidden');
 });
 
+// ---------- Recarga de Datos y Auto-Refresh ----------
+let lastRefreshTime = Date.now();
+let autoRefreshTimer = null;
+
+async function recargarDatos(mostrarAviso = false) {
+  if (!appStarted || !bebe?.id) return;
+  if (mostrarAviso) toast('Recargando…');
+  try {
+    const { data: b } = await db.from('bebes').select('*').eq('id', bebe.id).maybeSingle();
+    if (b) {
+      bebe = b;
+      aplicarBebe();
+    }
+    await loadAll();
+    renderTab(currentTab);
+    lastRefreshTime = Date.now();
+  } catch (err) {
+    console.error('Error al actualizar datos:', err);
+  }
+}
+
+function iniciarAutoRefresh() {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  lastRefreshTime = Date.now();
+  // Recarga automática cada 15 minutos (15 * 60 * 1000 = 900.000 ms)
+  autoRefreshTimer = setInterval(() => {
+    if (appStarted && bebe?.id && !document.hidden) {
+      recargarDatos(false);
+    }
+  }, 15 * 60 * 1000);
+}
+
+// Al regresar a la pestaña o app si han transcurrido 15 minutos o más
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && appStarted && bebe?.id) {
+    if (Date.now() - lastRefreshTime >= 15 * 60 * 1000) {
+      recargarDatos(false);
+    }
+  }
+});
+
 $('logoutBtn').addEventListener('click', () => db.auth.signOut());
-$('reloadBtn').addEventListener('click', () => { toast('Recargando…'); loadAll().then(() => renderTab(currentTab)); });
+$('reloadBtn').addEventListener('click', () => recargarDatos(true));
 
 // ---------- Temas y Paletas ----------
 function applyTheme(theme) {
@@ -1988,11 +2029,16 @@ function iniciarApp(b, rol) {
   setNowDefaults();
   activarTab(localStorage.getItem('tab') || 'stats');
   renderLecheResumen();
+  iniciarAutoRefresh();
   loadAll().then(() => renderTab(currentTab));
 }
 
 function showAuth() {
   appStarted = false;
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
   bebe = null; miRol = null; usuario = null;
   $('app').classList.add('hidden');
   $('linkScreen').classList.add('hidden');
