@@ -5,11 +5,11 @@
    ============================================================ */
 
 const DEFAULT_WSP_CONFIG = {
-  enabled: false,
+  enabled: true,
   apiUrl: 'https://rektressserver.tailda85b3.ts.net:8443',
   apiKey: 'NebuAppWspKey_2026_Secure!',
   instance: 'nebuapp',
-  target: '', // Número telefónico (ej: 569XXXXXXXX) o ID de grupo familiar (ej: 1203630...@g.us)
+  target: '56944830378, 56950192577',
   notifyTomas: true,
   notifyPanales: true,
   notifyVitaminas: true,
@@ -39,7 +39,17 @@ function getWhatsAppConfig(bebe = null) {
     }
   }
 
-  return { ...DEFAULT_WSP_CONFIG, ...bebeCfg, ...localCfg };
+  const merged = { ...DEFAULT_WSP_CONFIG, ...bebeCfg, ...localCfg };
+
+  // Auto-reparar y sanear destinos si estaban guardados con formato erróneo o pegados
+  if (merged.target) {
+    const parsed = typeof normalizarDestinatarios === 'function' ? normalizarDestinatarios(merged.target) : [];
+    if (parsed.length > 0) {
+      merged.target = parsed.join(', ');
+    }
+  }
+
+  return merged;
 }
 
 /**
