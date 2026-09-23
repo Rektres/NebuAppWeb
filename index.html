@@ -670,6 +670,60 @@
         <div id="ordenTabsUI" class="orden-lista"></div>
       </div>
 
+      <!-- ==================== NOTIFICACIONES WHATSAPP ==================== -->
+      <div class="field-label" style="border-top:1px solid var(--border); padding-top:16px; margin-top:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span>💬 Notificaciones de WhatsApp</span>
+          <label class="check-pill" style="flex:none; padding:6px 12px; margin:0;">
+            <input type="checkbox" id="cfgWspEnabled"> <span style="font-size:0.82rem;">Activar</span>
+          </label>
+        </div>
+        <span class="form-hint" style="margin-top:2px;">Envía alertas automáticas de tomas, pañales, vitaminas y sueño a tu WhatsApp o grupo familiar.</span>
+      </div>
+
+      <div id="cfgWspPanel" class="hidden" style="display:flex; flex-direction:column; gap:12px;">
+        <!-- Estado de vinculación y botón QR -->
+        <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.85rem; font-weight:700;">Estado del Gateway:</span>
+            <span id="cfgWspStatusBadge" style="font-size:0.75rem; font-weight:700; padding:3px 8px; border-radius:8px; background:rgba(255,255,255,0.08); color:var(--text-2);">Consultando…</span>
+          </div>
+          <button type="button" id="cfgWspQrBtn" class="btn-secondary" style="font-size:0.82rem; padding:8px 12px; width:100%;">📷 Vincular con WhatsApp (Ver QR)</button>
+          
+          <!-- Contenedor desplegable del código QR -->
+          <div id="cfgWspQrContainer" class="hidden" style="text-align:center; padding:10px 0; background:rgba(0,0,0,0.25); border-radius:12px; margin-top:4px;">
+            <p style="font-size:0.8rem; color:var(--text-2); margin-bottom:8px;">Abre WhatsApp en tu teléfono → <strong>Dispositivos vinculados</strong> → <strong>Vincular un dispositivo</strong> y escanea:</p>
+            <div id="cfgWspQrImgWrap" style="display:flex; justify-content:center; margin:8px 0;">
+              <img id="cfgWspQrImg" alt="Código QR de WhatsApp" style="width:200px; height:200px; border-radius:12px; background:#fff; padding:6px; box-shadow:0 4px 16px rgba(0,0,0,0.3);" class="hidden">
+              <span id="cfgWspQrLoading" style="font-size:0.85rem; color:var(--muted); padding:40px 0;">Cargando código QR…</span>
+            </div>
+            <div id="cfgWspPairingWrap" class="hidden" style="margin-top:6px; font-size:0.82rem;">
+              Código de emparejamiento: <strong id="cfgWspPairingCode" style="letter-spacing:0.1em; color:var(--brand-accent); font-size:1.05rem;"></strong>
+            </div>
+            <button type="button" id="cfgWspQrRefresh" class="btn-secondary" style="margin-top:8px; font-size:0.75rem; padding:6px 12px;">🔄 Actualizar QR</button>
+          </div>
+        </div>
+
+        <label class="field-label">Destinatario (Teléfono o Grupo)
+          <input type="text" id="cfgWspTarget" placeholder="Ej: 56912345678 o 1203630...@g.us">
+          <span class="form-hint">Para teléfono: código de país + número (ej. 569...). Para grupo: ID terminado en @g.us.</span>
+        </label>
+
+        <div class="field-label">Eventos a notificar automáticamente
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <label class="check-pill" style="padding:8px 10px; font-size:0.85rem;"><input type="checkbox" id="cfgWspTomas" checked> 🍼 Tomas</label>
+            <label class="check-pill" style="padding:8px 10px; font-size:0.85rem;"><input type="checkbox" id="cfgWspPanales" checked> 🧷 Pañales</label>
+            <label class="check-pill" style="padding:8px 10px; font-size:0.85rem;"><input type="checkbox" id="cfgWspVitaminas" checked> 💊 Vitaminas</label>
+            <label class="check-pill" style="padding:8px 10px; font-size:0.85rem;"><input type="checkbox" id="cfgWspSueno" checked> 😴 Sueño</label>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px; margin-top:2px;">
+          <button type="button" id="cfgWspTestBtn" class="btn-secondary" style="flex:1;">📲 Probar envío de WhatsApp</button>
+        </div>
+        <p id="cfgWspTestResult" class="form-hint hidden" style="text-align:center; font-weight:600;"></p>
+      </div>
+
       <button id="cfgGuardar" class="btn-primary">Guardar</button>
       <button id="logoutBtn" class="btn-danger">Cerrar sesión</button>
     </div>
@@ -724,6 +778,7 @@
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
   <script src="config.js"></script>
+  <script src="whatsapp.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -195,6 +195,9 @@ async function insertar(tabla, valores) {
   await loadData(tabla);
   statsDirty = true;
   toast('Registro guardado ✓');
+  if (typeof window.enviarNotificacionWhatsApp === 'function') {
+    window.enviarNotificacionWhatsApp(tabla, valores, { bebe, miRol });
+  }
   return true;
 }
 
@@ -509,6 +512,13 @@ document.addEventListener('click', async (e) => {
 
   if (!yaTomada) {
     await db.from('vitaminas_tipos_log').upsert({ bebe_id: bebe.id, vitamina_id: vitId, fecha, hora, gotas }, { onConflict: 'vitamina_id,fecha' });
+    if (typeof window.enviarNotificacionWhatsApp === 'function') {
+      window.enviarNotificacionWhatsApp('vitaminas_tipos', {
+        nombre: v?.nombre || 'Vitamina',
+        gotas,
+        hora,
+      }, { bebe, miRol });
+    }
   } else {
     await db.from('vitaminas_tipos_log').delete().eq('vitamina_id', vitId).eq('fecha', fecha);
   }
@@ -683,12 +693,16 @@ $('btnDormir').addEventListener('click', async () => {
 $('btnDespertar').addEventListener('click', async () => {
   const siesta = (cache.sueno || []).find((r) => !r.fin);
   if (!siesta) return;
-  const { error } = await db.from('sueno').update({ fin: new Date().toISOString() }).eq('id', siesta.id);
+  const fin = new Date().toISOString();
+  const { error } = await db.from('sueno').update({ fin }).eq('id', siesta.id);
   if (error) { toast(`Error: ${error.message}`, true); return; }
   await loadData('sueno');
   statsDirty = true;
   toast('Siesta registrada ✓');
   renderSueno();
+  if (typeof window.enviarNotificacionWhatsApp === 'function') {
+    window.enviarNotificacionWhatsApp('sueno_fin', { inicio: siesta.inicio, fin }, { bebe, miRol });
+  }
 });
 
 // ---------- Gráficos y Estadísticas (Chart.js + Zoom) ----------
@@ -1766,6 +1780,22 @@ $('settingsBtn').addEventListener('click', () => {
 
   document.querySelectorAll('.swatch').forEach((s) => s.classList.toggle('selected', s.dataset.palette === (bebe.paleta || 'celeste')));
   renderOrdenTabsUI();
+
+  // Cargar configuración de WhatsApp
+  const wspCfg = typeof getWhatsAppConfig === 'function' ? getWhatsAppConfig(bebe) : {};
+  if ($('cfgWspEnabled')) {
+    $('cfgWspEnabled').checked = !!wspCfg.enabled;
+    $('cfgWspPanel').classList.toggle('hidden', !wspCfg.enabled);
+    $('cfgWspTarget').value = wspCfg.target || '';
+    $('cfgWspTomas').checked = wspCfg.notifyTomas !== false;
+    $('cfgWspPanales').checked = wspCfg.notifyPanales !== false;
+    $('cfgWspVitaminas').checked = wspCfg.notifyVitaminas !== false;
+    $('cfgWspSueno').checked = wspCfg.notifySueno !== false;
+    $('cfgWspTestResult')?.classList.add('hidden');
+    $('cfgWspQrContainer')?.classList.add('hidden');
+    actualizarBadgeEstadoWhatsApp();
+  }
+
   $('settingsModal').classList.remove('hidden');
 });
 
@@ -1840,8 +1870,127 @@ $('cfgGuardar').addEventListener('click', async () => {
     const { error: eRol } = await db.from('miembros').update({ rol: nuevoRol }).eq('user_id', usuario.id);
     if (!eRol) miRol = nuevoRol;
   }
+
+  // Guardar configuración de WhatsApp
+  if ($('cfgWspEnabled')) {
+    const wspPatch = {
+      enabled: $('cfgWspEnabled').checked,
+      target: $('cfgWspTarget').value.trim(),
+      notifyTomas: $('cfgWspTomas').checked,
+      notifyPanales: $('cfgWspPanales').checked,
+      notifyVitaminas: $('cfgWspVitaminas').checked,
+      notifySueno: $('cfgWspSueno').checked,
+    };
+    if (typeof saveWhatsAppConfig === 'function') {
+      await saveWhatsAppConfig(wspPatch, bebe?.id, db);
+    }
+  }
+
   const ok = await actualizarBebe(patch);
   if (ok) $('settingsModal').classList.add('hidden');
+});
+
+// ---------- Controladores Interactivos de WhatsApp Gateway ----------
+async function actualizarBadgeEstadoWhatsApp() {
+  const badge = $('cfgWspStatusBadge');
+  if (!badge || typeof getWhatsAppConnectionState !== 'function') return;
+  badge.textContent = 'Consultando…';
+  badge.style.background = 'rgba(255,255,255,0.08)';
+  badge.style.color = 'var(--text-2)';
+
+  const res = await getWhatsAppConnectionState();
+  if (res.state === 'open') {
+    badge.textContent = '🟢 Conectado';
+    badge.style.background = 'rgba(25, 158, 112, 0.2)';
+    badge.style.color = '#199e70';
+    if ($('cfgWspQrBtn')) $('cfgWspQrBtn').textContent = '✅ WhatsApp Vinculado';
+  } else if (res.state === 'connecting') {
+    badge.textContent = '🟡 Esperando vinculación';
+    badge.style.background = 'rgba(201, 133, 0, 0.2)';
+    badge.style.color = '#fbbf24';
+    if ($('cfgWspQrBtn')) $('cfgWspQrBtn').textContent = '📷 Vincular con WhatsApp (Ver QR)';
+  } else {
+    badge.textContent = '🔴 Desconectado';
+    badge.style.background = 'rgba(239, 68, 68, 0.2)';
+    badge.style.color = '#ef4444';
+    if ($('cfgWspQrBtn')) $('cfgWspQrBtn').textContent = '📷 Vincular con WhatsApp (Ver QR)';
+  }
+}
+
+$('cfgWspEnabled')?.addEventListener('change', (e) => {
+  $('cfgWspPanel')?.classList.toggle('hidden', !e.target.checked);
+  if (e.target.checked) actualizarBadgeEstadoWhatsApp();
+});
+
+$('cfgWspQrBtn')?.addEventListener('click', () => {
+  const cont = $('cfgWspQrContainer');
+  if (!cont) return;
+  const isHidden = cont.classList.contains('hidden');
+  if (isHidden) {
+    cont.classList.remove('hidden');
+    cargarCodigoQRWhatsApp();
+  } else {
+    cont.classList.add('hidden');
+  }
+});
+
+$('cfgWspQrRefresh')?.addEventListener('click', () => {
+  cargarCodigoQRWhatsApp();
+});
+
+async function cargarCodigoQRWhatsApp() {
+  const img = $('cfgWspQrImg');
+  const loading = $('cfgWspQrLoading');
+  const pairingWrap = $('cfgWspPairingWrap');
+  const pairingCode = $('cfgWspPairingCode');
+  if (!img || !loading) return;
+
+  img.classList.add('hidden');
+  loading.classList.remove('hidden');
+  loading.textContent = 'Generando código QR…';
+
+  const res = await getWhatsAppQR();
+  loading.classList.add('hidden');
+
+  if (res.ok && res.base64) {
+    img.src = res.base64;
+    img.classList.remove('hidden');
+    if (res.pairingCode && pairingWrap && pairingCode) {
+      pairingCode.textContent = res.pairingCode;
+      pairingWrap.classList.remove('hidden');
+    } else if (pairingWrap) {
+      pairingWrap.classList.add('hidden');
+    }
+  } else {
+    loading.textContent = res.error ? `Error: ${res.error}` : 'No se pudo obtener el QR. Intenta actualizar.';
+    loading.classList.remove('hidden');
+  }
+  actualizarBadgeEstadoWhatsApp();
+}
+
+$('cfgWspTestBtn')?.addEventListener('click', async () => {
+  const btn = $('cfgWspTestBtn');
+  const resEl = $('cfgWspTestResult');
+  const target = $('cfgWspTarget').value.trim();
+
+  if (!target) {
+    resEl.textContent = '⚠️ Ingresa primero un número de teléfono o ID de grupo.';
+    resEl.style.color = '#fbbf24';
+    resEl.classList.remove('hidden');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Enviando prueba…';
+  resEl.classList.add('hidden');
+
+  const res = await probarConexionWhatsApp(target);
+  btn.disabled = false;
+  btn.textContent = '📲 Probar envío de WhatsApp';
+
+  resEl.textContent = res.message;
+  resEl.style.color = res.ok ? '#199e70' : '#ef4444';
+  resEl.classList.remove('hidden');
 });
 
 // ---------- Recarga de Datos y Auto-Refresh ----------
