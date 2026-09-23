@@ -1799,8 +1799,16 @@ $('settingsBtn').addEventListener('click', () => {
   $('settingsModal').classList.remove('hidden');
 });
 
-$('settingsClose').addEventListener('click', () => $('settingsModal').classList.add('hidden'));
-$('settingsModal').addEventListener('click', (e) => { if (e.target === $('settingsModal')) $('settingsModal').classList.add('hidden'); });
+$('settingsClose').addEventListener('click', () => {
+  $('settingsModal').classList.add('hidden');
+  if (typeof detenerPollingWhatsApp === 'function') detenerPollingWhatsApp();
+});
+$('settingsModal').addEventListener('click', (e) => {
+  if (e.target === $('settingsModal')) {
+    $('settingsModal').classList.add('hidden');
+    if (typeof detenerPollingWhatsApp === 'function') detenerPollingWhatsApp();
+  }
+});
 
 $('copiarCodigo').addEventListener('click', async () => {
   if (!bebe?.codigo) return;
@@ -1891,35 +1899,51 @@ $('cfgGuardar').addEventListener('click', async () => {
 });
 
 // ---------- Controladores Interactivos de WhatsApp Gateway ----------
+let wspQrInterval = null;
+let wspStatusInterval = null;
+
+function detenerPollingWhatsApp() {
+  if (wspQrInterval) { clearInterval(wspQrInterval); wspQrInterval = null; }
+  if (wspStatusInterval) { clearInterval(wspStatusInterval); wspStatusInterval = null; }
+}
+
 async function actualizarBadgeEstadoWhatsApp() {
   const badge = $('cfgWspStatusBadge');
-  if (!badge || typeof getWhatsAppConnectionState !== 'function') return;
-  badge.textContent = 'Consultando…';
-  badge.style.background = 'rgba(255,255,255,0.08)';
-  badge.style.color = 'var(--text-2)';
+  if (!badge || typeof getWhatsAppConnectionState !== 'function') return 'error';
 
   const res = await getWhatsAppConnectionState();
-  if (res.state === 'open') {
+  const state = res.state || 'close';
+
+  if (state === 'open') {
     badge.textContent = '🟢 Conectado';
     badge.style.background = 'rgba(25, 158, 112, 0.2)';
     badge.style.color = '#199e70';
     if ($('cfgWspQrBtn')) $('cfgWspQrBtn').textContent = '✅ WhatsApp Vinculado';
-  } else if (res.state === 'connecting') {
+    $('cfgWspSuccessWrap')?.classList.remove('hidden');
+    $('cfgWspScanInstructions')?.classList.add('hidden');
+    detenerPollingWhatsApp();
+  } else if (state === 'connecting') {
     badge.textContent = '🟡 Esperando vinculación';
     badge.style.background = 'rgba(201, 133, 0, 0.2)';
     badge.style.color = '#fbbf24';
     if ($('cfgWspQrBtn')) $('cfgWspQrBtn').textContent = '📷 Vincular con WhatsApp (Ver QR)';
+    $('cfgWspSuccessWrap')?.classList.add('hidden');
+    $('cfgWspScanInstructions')?.classList.remove('hidden');
   } else {
     badge.textContent = '🔴 Desconectado';
     badge.style.background = 'rgba(239, 68, 68, 0.2)';
     badge.style.color = '#ef4444';
     if ($('cfgWspQrBtn')) $('cfgWspQrBtn').textContent = '📷 Vincular con WhatsApp (Ver QR)';
+    $('cfgWspSuccessWrap')?.classList.add('hidden');
+    $('cfgWspScanInstructions')?.classList.remove('hidden');
   }
+  return state;
 }
 
 $('cfgWspEnabled')?.addEventListener('change', (e) => {
   $('cfgWspPanel')?.classList.toggle('hidden', !e.target.checked);
   if (e.target.checked) actualizarBadgeEstadoWhatsApp();
+  else detenerPollingWhatsApp();
 });
 
 $('cfgWspQrBtn')?.addEventListener('click', () => {
@@ -1928,15 +1952,45 @@ $('cfgWspQrBtn')?.addEventListener('click', () => {
   const isHidden = cont.classList.contains('hidden');
   if (isHidden) {
     cont.classList.remove('hidden');
-    cargarCodigoQRWhatsApp();
+    iniciarSesionQRWhatsApp();
   } else {
     cont.classList.add('hidden');
+    detenerPollingWhatsApp();
   }
 });
 
 $('cfgWspQrRefresh')?.addEventListener('click', () => {
   cargarCodigoQRWhatsApp();
 });
+
+async function iniciarSesionQRWhatsApp() {
+  detenerPollingWhatsApp();
+  await cargarCodigoQRWhatsApp();
+
+  // Renueva el QR automáticamente cada 18 segundos para que nunca caduque en pantalla
+  wspQrInterval = setInterval(async () => {
+    const cont = $('cfgWspQrContainer');
+    if (!cont || cont.classList.contains('hidden')) {
+      detenerPollingWhatsApp();
+      return;
+    }
+    await cargarCodigoQRWhatsApp();
+  }, 18000);
+
+  // Consulta el estado cada 3 segundos para detectar el momento exacto en que se empareja
+  wspStatusInterval = setInterval(async () => {
+    const cont = $('cfgWspQrContainer');
+    if (!cont || cont.classList.contains('hidden')) {
+      detenerPollingWhatsApp();
+      return;
+    }
+    const state = await actualizarBadgeEstadoWhatsApp();
+    if (state === 'open') {
+      detenerPollingWhatsApp();
+      toast('¡WhatsApp vinculado exitosamente! ✓');
+    }
+  }, 3000);
+}
 
 async function cargarCodigoQRWhatsApp() {
   const img = $('cfgWspQrImg');
@@ -1945,9 +1999,9 @@ async function cargarCodigoQRWhatsApp() {
   const pairingCode = $('cfgWspPairingCode');
   if (!img || !loading) return;
 
-  img.classList.add('hidden');
-  loading.classList.remove('hidden');
-  loading.textContent = 'Generando código QR…';
+  // Si ya está conectado, no pide nuevo QR
+  const estado = await actualizarBadgeEstadoWhatsApp();
+  if (estado === 'open') return;
 
   const res = await getWhatsAppQR();
   loading.classList.add('hidden');
@@ -1962,10 +2016,9 @@ async function cargarCodigoQRWhatsApp() {
       pairingWrap.classList.add('hidden');
     }
   } else {
-    loading.textContent = res.error ? `Error: ${res.error}` : 'No se pudo obtener el QR. Intenta actualizar.';
+    loading.textContent = res.error ? `Error: ${res.error}` : 'Renovando código QR…';
     loading.classList.remove('hidden');
   }
-  actualizarBadgeEstadoWhatsApp();
 }
 
 $('cfgWspTestBtn')?.addEventListener('click', async () => {
