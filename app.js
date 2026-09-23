@@ -1793,6 +1793,7 @@ $('settingsBtn').addEventListener('click', () => {
     $('cfgWspSueno').checked = wspCfg.notifySueno !== false;
     $('cfgWspTestResult')?.classList.add('hidden');
     $('cfgWspQrContainer')?.classList.add('hidden');
+    $('cfgWspGroupsBox')?.classList.add('hidden');
     actualizarBadgeEstadoWhatsApp();
   }
 
@@ -1801,11 +1802,13 @@ $('settingsBtn').addEventListener('click', () => {
 
 $('settingsClose').addEventListener('click', () => {
   $('settingsModal').classList.add('hidden');
+  $('cfgWspGroupsBox')?.classList.add('hidden');
   if (typeof detenerPollingWhatsApp === 'function') detenerPollingWhatsApp();
 });
 $('settingsModal').addEventListener('click', (e) => {
   if (e.target === $('settingsModal')) {
     $('settingsModal').classList.add('hidden');
+    $('cfgWspGroupsBox')?.classList.add('hidden');
     if (typeof detenerPollingWhatsApp === 'function') detenerPollingWhatsApp();
   }
 });
@@ -2021,13 +2024,70 @@ async function cargarCodigoQRWhatsApp() {
   }
 }
 
+$('cfgWspLoadGroupsBtn')?.addEventListener('click', async () => {
+  const box = $('cfgWspGroupsBox');
+  const list = $('cfgWspGroupsList');
+  if (!box || !list) return;
+
+  if (!box.classList.contains('hidden')) {
+    box.classList.add('hidden');
+    return;
+  }
+
+  box.classList.remove('hidden');
+  list.innerHTML = '<span style="color:var(--muted); padding:6px 0;">Consultando grupos de tu WhatsApp…</span>';
+
+  if (typeof getWhatsAppGroups !== 'function') {
+    list.innerHTML = '<span style="color:#ef4444;">Función no disponible.</span>';
+    return;
+  }
+
+  const res = await getWhatsAppGroups();
+  if (!res.ok || !res.groups || res.groups.length === 0) {
+    list.innerHTML = `<span style="color:var(--muted); padding:4px 0;">No se encontraron grupos o WhatsApp aún no está conectado. (${res.error || '0 grupos'})</span>`;
+    return;
+  }
+
+  list.innerHTML = '';
+  res.groups.forEach((g) => {
+    const item = document.createElement('div');
+    item.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-radius:8px; background:rgba(255,255,255,0.06); cursor:pointer; gap:8px;';
+    item.innerHTML = `
+      <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:210px;">
+        <strong style="color:var(--text); font-size:0.8rem;">${escapeHtml(g.subject)}</strong>
+        <div style="font-size:0.68rem; color:var(--muted); font-family:monospace;">${g.id}</div>
+      </div>
+      <button type="button" class="btn-secondary" style="font-size:0.7rem; padding:3px 8px; flex-shrink:0;">+ Añadir</button>
+    `;
+
+    item.addEventListener('click', () => {
+      const input = $('cfgWspTarget');
+      if (!input) return;
+      const current = input.value.trim();
+      const existing = typeof normalizarDestinatarios === 'function' ? normalizarDestinatarios(current) : [];
+      if (existing.includes(g.id)) {
+        toast(`El grupo "${g.subject}" ya está en la lista.`);
+        return;
+      }
+      input.value = current ? `${current}, ${g.id}` : g.id;
+      toast(`Grupo "${g.subject}" añadido ✓`);
+    });
+
+    list.appendChild(item);
+  });
+});
+
+$('cfgWspCloseGroupsBtn')?.addEventListener('click', () => {
+  $('cfgWspGroupsBox')?.classList.add('hidden');
+});
+
 $('cfgWspTestBtn')?.addEventListener('click', async () => {
   const btn = $('cfgWspTestBtn');
   const resEl = $('cfgWspTestResult');
   const target = $('cfgWspTarget').value.trim();
 
   if (!target) {
-    resEl.textContent = '⚠️ Ingresa primero un número de teléfono o ID de grupo.';
+    resEl.textContent = '⚠️ Ingresa primero al menos un número de teléfono o ID de grupo.';
     resEl.style.color = '#fbbf24';
     resEl.classList.remove('hidden');
     return;

@@ -66,9 +66,9 @@ async function saveWhatsAppConfig(cfg, bebeId = null, dbClient = null) {
 }
 
 /**
- * Limpia y normaliza el destinatario (número personal con código país o JID de grupo familiar).
+ * Limpia y normaliza un único destinatario (número personal con código país o JID de grupo familiar).
  */
-function normalizarDestinatario(target) {
+function normalizarDestinatarioIndividual(target) {
   if (!target) return '';
   const trimmed = String(target).trim();
   if (trimmed.includes('@g.us') || trimmed.includes('@s.whatsapp.net')) {
@@ -77,6 +77,66 @@ function normalizarDestinatario(target) {
   // Limpia espacios, guiones, paréntesis y signo más
   const cleaned = trimmed.replace(/[^\d]/g, '');
   return cleaned;
+}
+
+/**
+ * Normaliza múltiples destinatarios separados por comas, punto y coma o saltos de línea.
+ * Retorna un arreglo de destinatarios únicos válidos (números y grupos).
+ */
+function normalizarDestinatarios(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return Array.from(new Set(raw.map(normalizarDestinatarioIndividual).filter(Boolean)));
+  }
+  const parts = String(raw).split(/[\n,;]+/);
+  const normalized = parts.map(normalizarDestinatarioIndividual).filter(Boolean);
+  return Array.from(new Set(normalized));
+}
+
+/**
+ * Helper retrocompatible para obtener el primer destinatario válido.
+ */
+function normalizarDestinatario(target) {
+  const list = normalizarDestinatarios(target);
+  return list.length > 0 ? list[0] : '';
+}
+
+/**
+ * Obtiene la lista de grupos de WhatsApp disponibles en la cuenta conectada.
+ */
+async function getWhatsAppGroups(config = null) {
+  const cfg = config || getWhatsAppConfig();
+  const controller = new AbortController();
+  const tId = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const url = `${cfg.apiUrl.replace(/\/+$/, '')}/group/fetchAllGroups/${encodeURIComponent(cfg.instance)}?getParticipants=false`;
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'apikey': cfg.apiKey,
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(tId);
+
+    if (!res.ok) {
+      return { ok: false, error: `HTTP ${res.status}: ${res.statusText}`, groups: [] };
+    }
+    const data = await res.json();
+    const groups = Array.isArray(data) ? data.map(g => ({
+      id: g.id,
+      subject: g.subject || 'Sin nombre',
+      pictureUrl: g.pictureUrl || null,
+      size: g.size || 0,
+    })) : [];
+
+    return { ok: true, groups };
+  } catch (err) {
+    clearTimeout(tId);
+    return { ok: false, error: err.message, groups: [] };
+  }
 }
 
 /**
@@ -268,14 +328,15 @@ function construirMensajeWhatsApp(tipo, datos, contexto = {}) {
 
 /**
  * Envío asíncrono y desacoplado (Fire-and-forget) a la API de WhatsApp.
+ * Soporta múltiples destinatarios (números personales y grupos de WhatsApp en simultáneo).
  * Nunca bloquea ni lanza excepciones hacia la interfaz de usuario.
  */
 function enviarNotificacionWhatsApp(tipo, datos, contexto = {}) {
   const cfg = getWhatsAppConfig(contexto.bebe);
   if (!cfg.enabled) return;
 
-  const target = normalizarDestinatario(cfg.target);
-  if (!target) return;
+  const targets = normalizarDestinatarios(cfg.target);
+  if (targets.length === 0) return;
 
   // Filtrado de eventos según preferencias
   if (tipo === 'tomas' && !cfg.notifyTomas) return;
@@ -286,57 +347,14 @@ function enviarNotificacionWhatsApp(tipo, datos, contexto = {}) {
   const mensaje = construirMensajeWhatsApp(tipo, datos, contexto);
   if (!mensaje) return;
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 6000);
-
   const endpoint = `${cfg.apiUrl.replace(/\/+$/, '')}/message/sendText/${encodeURIComponent(cfg.instance)}`;
 
-  fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': cfg.apiKey,
-    },
-    body: JSON.stringify({
-      number: target,
-      text: mensaje,
-    }),
-    signal: controller.signal,
-  })
-    .then((res) => {
-      if (!res.ok) {
-        console.warn(`[WhatsApp Gateway] Error al enviar mensaje (${res.status}):`, res.statusText);
-      } else {
-        console.log(`[WhatsApp Gateway] Notificación '${tipo}' enviada con éxito.`);
-      }
-    })
-    .catch((err) => {
-      console.warn('[WhatsApp Gateway] Fallo no bloqueante al enviar:', err.message);
-    })
-    .finally(() => {
-      clearTimeout(timeoutId);
-    });
-}
+  // Enviar a todos los destinatarios en paralelo
+  targets.forEach((target) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-/**
- * Función interactiva para enviar un mensaje de prueba desde la interfaz.
- */
-async function probarConexionWhatsApp(targetCustom = null, configCustom = null) {
-  const cfg = { ...getWhatsAppConfig(), ...(configCustom || {}) };
-  const target = normalizarDestinatario(targetCustom || cfg.target);
-
-  if (!target) {
-    return { ok: false, message: 'Ingresa un número telefónico o ID de grupo de WhatsApp.' };
-  }
-
-  const endpoint = `${cfg.apiUrl.replace(/\/+$/, '')}/message/sendText/${encodeURIComponent(cfg.instance)}`;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-  const textoPrueba = construirMensajeWhatsApp('prueba', {}, {});
-
-  try {
-    const res = await fetch(endpoint, {
+    fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -344,22 +362,89 @@ async function probarConexionWhatsApp(targetCustom = null, configCustom = null) 
       },
       body: JSON.stringify({
         number: target,
-        text: textoPrueba,
+        text: mensaje,
       }),
       signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
+    })
+      .then((res) => {
+        if (!res.ok) {
+          console.warn(`[WhatsApp Gateway] Error al enviar a ${target} (${res.status}):`, res.statusText);
+        } else {
+          console.log(`[WhatsApp Gateway] Notificación '${tipo}' enviada con éxito a ${target}.`);
+        }
+      })
+      .catch((err) => {
+        console.warn(`[WhatsApp Gateway] Fallo no bloqueante al enviar a ${target}:`, err.message);
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+      });
+  });
+}
 
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const errMsg = json?.response?.message || json?.message || `HTTP ${res.status}`;
-      return { ok: false, message: `Error del servidor: ${Array.isArray(errMsg) ? errMsg.join(', ') : errMsg}` };
+/**
+ * Función interactiva para enviar un mensaje de prueba a uno o varios destinatarios.
+ */
+async function probarConexionWhatsApp(targetCustom = null, configCustom = null) {
+  const cfg = { ...getWhatsAppConfig(), ...(configCustom || {}) };
+  const targets = normalizarDestinatarios(targetCustom || cfg.target);
+
+  if (targets.length === 0) {
+    return { ok: false, message: 'Ingresa al menos un número telefónico o ID de grupo de WhatsApp.' };
+  }
+
+  const endpoint = `${cfg.apiUrl.replace(/\/+$/, '')}/message/sendText/${encodeURIComponent(cfg.instance)}`;
+  const textoPrueba = construirMensajeWhatsApp('prueba', {}, {});
+
+  const promises = targets.map(async (target) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': cfg.apiKey,
+        },
+        body: JSON.stringify({
+          number: target,
+          text: textoPrueba,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const errMsg = json?.response?.message || json?.message || `HTTP ${res.status}`;
+        return { target, ok: false, error: Array.isArray(errMsg) ? errMsg.join(', ') : errMsg };
+      }
+      return { target, ok: true };
+    } catch (err) {
+      clearTimeout(timeoutId);
+      return { target, ok: false, error: err.message };
     }
+  });
 
-    return { ok: true, message: '¡Mensaje de prueba enviado con éxito!' };
-  } catch (err) {
-    clearTimeout(timeoutId);
-    return { ok: false, message: `Error de conexión: ${err.message}` };
+  const results = await Promise.all(promises);
+  const exitosos = results.filter(r => r.ok).length;
+  const fallidos = results.filter(r => !r.ok);
+
+  if (exitosos === targets.length) {
+    const plural = targets.length === 1 ? 'destinatario' : `${targets.length} destinatarios`;
+    return { ok: true, message: `¡Mensaje de prueba enviado con éxito a ${plural}! ✓`, results };
+  } else if (exitosos > 0) {
+    return {
+      ok: true,
+      message: `Enviado a ${exitosos}/${targets.length} destinatarios. (Fallaron: ${fallidos.map(f => f.target).join(', ')})`,
+      results,
+    };
+  } else {
+    return {
+      ok: false,
+      message: `Fallaron los envíos (${fallidos.map(f => `${f.target}: ${f.error}`).join('; ')})`,
+      results,
+    };
   }
 }
 
@@ -368,5 +453,8 @@ window.getWhatsAppConfig = getWhatsAppConfig;
 window.saveWhatsAppConfig = saveWhatsAppConfig;
 window.getWhatsAppConnectionState = getWhatsAppConnectionState;
 window.getWhatsAppQR = getWhatsAppQR;
+window.getWhatsAppGroups = getWhatsAppGroups;
+window.normalizarDestinatario = normalizarDestinatario;
+window.normalizarDestinatarios = normalizarDestinatarios;
 window.enviarNotificacionWhatsApp = enviarNotificacionWhatsApp;
 window.probarConexionWhatsApp = probarConexionWhatsApp;
