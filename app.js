@@ -1795,6 +1795,7 @@ $('settingsBtn').addEventListener('click', () => {
     $('cfgWspQrContainer')?.classList.add('hidden');
     $('cfgWspGroupsBox')?.classList.add('hidden');
     actualizarBadgeEstadoWhatsApp();
+    actualizarPreviewDestinatarios();
   }
 
   $('settingsModal').classList.remove('hidden');
@@ -2070,6 +2071,7 @@ $('cfgWspLoadGroupsBtn')?.addEventListener('click', async () => {
         return;
       }
       input.value = current ? `${current}, ${g.id}` : g.id;
+      actualizarPreviewDestinatarios();
       toast(`Grupo "${g.subject}" añadido ✓`);
     });
 
@@ -2080,6 +2082,40 @@ $('cfgWspLoadGroupsBtn')?.addEventListener('click', async () => {
 $('cfgWspCloseGroupsBtn')?.addEventListener('click', () => {
   $('cfgWspGroupsBox')?.classList.add('hidden');
 });
+
+function actualizarPreviewDestinatarios() {
+  const input = $('cfgWspTarget');
+  const preview = $('cfgWspTargetPreview');
+  const chips = $('cfgWspTargetChips');
+  if (!input || !preview || !chips) return;
+
+  const val = input.value.trim();
+  if (!val) {
+    preview.classList.add('hidden');
+    chips.innerHTML = '';
+    return;
+  }
+
+  const targets = typeof normalizarDestinatarios === 'function' ? normalizarDestinatarios(val) : [];
+  if (targets.length === 0) {
+    preview.classList.remove('hidden');
+    chips.innerHTML = '<span style="color:#ef4444; font-size:0.72rem;">⚠️ Ningún número o grupo válido detectado</span>';
+    return;
+  }
+
+  preview.classList.remove('hidden');
+  chips.innerHTML = '';
+  targets.forEach((t) => {
+    const chip = document.createElement('span');
+    chip.style.cssText = 'background:rgba(25, 158, 112, 0.2); border:1px solid #199e70; color:#199e70; padding:2px 6px; border-radius:6px; font-size:0.72rem; font-weight:600; display:inline-flex; align-items:center; gap:2px;';
+    const isGroup = t.includes('@g.us');
+    chip.textContent = isGroup ? `👥 Grupo (${t.split('@')[0].slice(-6)})` : `📱 +${t}`;
+    chips.appendChild(chip);
+  });
+}
+
+$('cfgWspTarget')?.addEventListener('input', actualizarPreviewDestinatarios);
+$('cfgWspTarget')?.addEventListener('change', actualizarPreviewDestinatarios);
 
 $('cfgWspTestBtn')?.addEventListener('click', async () => {
   const btn = $('cfgWspTestBtn');

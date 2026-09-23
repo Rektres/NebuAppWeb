@@ -66,31 +66,72 @@ async function saveWhatsAppConfig(cfg, bebeId = null, dbClient = null) {
 }
 
 /**
- * Limpia y normaliza un único destinatario (número personal con código país o JID de grupo familiar).
+ * Limpia y normaliza un número de teléfono individual.
+ * Si tiene 9 dígitos y empieza en 9 (formato celular chileno), antepone el prefijo país 56.
  */
-function normalizarDestinatarioIndividual(target) {
-  if (!target) return '';
-  const trimmed = String(target).trim();
-  if (trimmed.includes('@g.us') || trimmed.includes('@s.whatsapp.net')) {
-    return trimmed;
+function limpiarNumeroTelefono(num) {
+  let d = String(num).replace(/[^\d]/g, '');
+  if (d.length === 9 && d.startsWith('9')) {
+    d = '56' + d;
   }
-  // Limpia espacios, guiones, paréntesis y signo más
-  const cleaned = trimmed.replace(/[^\d]/g, '');
-  return cleaned;
+  return d;
 }
 
 /**
- * Normaliza múltiples destinatarios separados por comas, punto y coma o saltos de línea.
+ * Normaliza y extrae de forma ultra-robusta múltiples destinatarios.
+ * Maneja números separados por coma, punto y coma, salto de línea, espacios, guiones, barras,
+ * prefijos internacionales (+), números de 9 dígitos chilenos y números concatenados accidentalmente.
  * Retorna un arreglo de destinatarios únicos válidos (números y grupos).
  */
 function normalizarDestinatarios(raw) {
   if (!raw) return [];
-  if (Array.isArray(raw)) {
-    return Array.from(new Set(raw.map(normalizarDestinatarioIndividual).filter(Boolean)));
+  if (Array.isArray(raw)) raw = raw.join('\n');
+
+  // Separar primero por saltos de línea, comas, punto y coma, pipes o slashes
+  const tokens = String(raw).split(/[\n\r,;|/]+/);
+  const result = [];
+
+  for (let token of tokens) {
+    token = token.trim();
+    if (!token) continue;
+
+    // 1. JID de grupo de WhatsApp (@g.us) o de usuario (@s.whatsapp.net)
+    if (token.includes('@g.us') || token.includes('@s.whatsapp.net')) {
+      const match = token.match(/([a-zA-Z0-9.\-_]+@(g\.us|s\.whatsapp\.net))/);
+      if (match) result.push(match[1]);
+      continue;
+    }
+
+    // 2. Si contiene múltiples '+' (ej: +56944830378 +56950192577)
+    if (token.includes('+')) {
+      const subTokens = token.split(/(?=\+)/).filter(Boolean);
+      for (const st of subTokens) {
+        const cleaned = st.replace(/[^\d]/g, '');
+        if (cleaned.length >= 8 && cleaned.length <= 15) {
+          result.push(limpiarNumeroTelefono(cleaned));
+        }
+      }
+      continue;
+    }
+
+    // 3. Detectar patrones de celulares chilenos (569XXXXXXXX o 9XXXXXXXX)
+    // Resuelve casos donde se ingresaron con espacios o sin separación: '56944830378 56950192577' o '5694483037856950192577'
+    const matchesChilean = token.match(/(?:56)?9\d{8}/g);
+    if (matchesChilean && matchesChilean.length > 0) {
+      for (const m of matchesChilean) {
+        result.push(limpiarNumeroTelefono(m));
+      }
+      continue;
+    }
+
+    // 4. Caso numérico genérico (8 a 15 dígitos según norma internacional E.164)
+    const digitsOnly = token.replace(/[^\d]/g, '');
+    if (digitsOnly.length >= 8 && digitsOnly.length <= 15) {
+      result.push(limpiarNumeroTelefono(digitsOnly));
+    }
   }
-  const parts = String(raw).split(/[\n,;]+/);
-  const normalized = parts.map(normalizarDestinatarioIndividual).filter(Boolean);
-  return Array.from(new Set(normalized));
+
+  return Array.from(new Set(result.filter(Boolean)));
 }
 
 /**
@@ -352,7 +393,7 @@ function enviarNotificacionWhatsApp(tipo, datos, contexto = {}) {
   // Enviar a todos los destinatarios en paralelo
   targets.forEach((target) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     fetch(endpoint, {
       method: 'POST',
@@ -398,7 +439,7 @@ async function probarConexionWhatsApp(targetCustom = null, configCustom = null) 
 
   const promises = targets.map(async (target) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -422,7 +463,9 @@ async function probarConexionWhatsApp(targetCustom = null, configCustom = null) 
       return { target, ok: true };
     } catch (err) {
       clearTimeout(timeoutId);
-      return { target, ok: false, error: err.message };
+      const isAbort = err.name === 'AbortError' || err.message?.includes('aborted');
+      const msg = isAbort ? 'Tiempo de espera agotado (timeout)' : err.message;
+      return { target, ok: false, error: msg };
     }
   });
 
