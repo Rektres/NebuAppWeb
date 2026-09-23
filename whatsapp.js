@@ -14,10 +14,16 @@ const DEFAULT_WSP_CONFIG = {
   notifyPanales: true,
   notifyVitaminas: true,
   notifySueno: true,
+  notifyAlertaHambre: true,
+  notifyAlertaVitaminas: true,
+  notifyAlertaFecas: true,
+  notifyAlertaSueno: true,
 };
 
 /**
  * Obtiene la configuración actual de WhatsApp combinando localStorage y datos sincronizados del bebé.
+ * La configuración compartida en Supabase (bebe.whatsapp_config) tiene máxima prioridad para que
+ * cualquier ajuste realizado por mamá o papá sea compartido inmediatamente entre ambos.
  */
 function getWhatsAppConfig(bebe = null) {
   let localCfg = {};
@@ -39,7 +45,11 @@ function getWhatsAppConfig(bebe = null) {
     }
   }
 
-  const merged = { ...DEFAULT_WSP_CONFIG, ...bebeCfg, ...localCfg };
+  const hasBebeCfg = bebeCfg && typeof bebeCfg === 'object' && Object.keys(bebeCfg).length > 0;
+  // Si existe en Supabase, prevalece para ambos padres; sino usa almacenamiento local y defaults
+  const merged = hasBebeCfg
+    ? { ...DEFAULT_WSP_CONFIG, ...localCfg, ...bebeCfg }
+    : { ...DEFAULT_WSP_CONFIG, ...localCfg };
 
   // Auto-reparar y sanear destinos si estaban guardados con formato erróneo o pegados
   if (merged.target) {
@@ -366,6 +376,41 @@ function construirMensajeWhatsApp(tipo, datos, contexto = {}) {
       return construirMensajeWhatsApp('sueno_fin', datos, contexto);
     }
 
+    case 'alerta_hambre': {
+      const { hora } = fmtFechaHora(datos.ultimaFecha);
+      const tiempoTxt = fmtMinutos(datos.minutosTranscurridos || 120);
+      return `⚠️ *Alerta de Rutina: Hora de Comer*\n` +
+             `👶 *Bebé:* ${bebeNombre}\n` +
+             `🍼 *Última toma:* hace ${tiempoTxt} (a las ${hora})\n` +
+             `📢 *Aviso:* Han transcurrido más de 2 horas desde su última toma de leche.`;
+    }
+
+    case 'alerta_vitaminas': {
+      return `⚠️ *Alerta de Rutina: Vitaminas Pendientes*\n` +
+             `👶 *Bebé:* ${bebeNombre}\n` +
+             `💊 *Estado:* Aún no se han administrado sus vitaminas de hoy.\n` +
+             `⏰ *Hora actual:* ${datos.horaActual || 'Pasadas las 19:00 hrs'}\n` +
+             `📢 *Recordatorio:* Recuerda suministrar y marcar sus vitaminas diarias.`;
+    }
+
+    case 'alerta_fecas': {
+      const { fecha } = fmtFechaHora(datos.ultimaFecha);
+      const dias = datos.diasTranscurridos || 3;
+      return `🚨 *Alerta Pediátrica: Pañal sin Deposición*\n` +
+             `👶 *Bebé:* ${bebeNombre}\n` +
+             `💩 *Última deposición:* hace ${dias} días (${fecha})\n` +
+             `📢 *Atención:* Han transcurrido más de 3 días sin registrar deposición. Considera evaluar masajes en su pancita o consultar con su pediatra.`;
+    }
+
+    case 'alerta_sueno': {
+      const { hora } = fmtFechaHora(datos.despertarFecha);
+      const tiempoTxt = fmtMinutos(datos.minutosDespierto || 180);
+      return `⚠️ *Alerta de Rutina: Ventana de Sueño Superada*\n` +
+             `👶 *Bebé:* ${bebeNombre}\n` +
+             `☀️ *Despierto desde:* hace ${tiempoTxt} (despertó a las ${hora})\n` +
+             `📢 *Aviso:* Lleva más de 3 horas despierto. Es probable que esté sobrecansado y necesite iniciar su siesta.`;
+    }
+
     case 'prueba': {
       return `✅ *NebuAppWeb*: Prueba de conexión exitosa con WhatsApp.\n` +
              `🚀 Gateway activo en *rektressserver* vía Evolution API v2.\n` +
@@ -394,6 +439,10 @@ function enviarNotificacionWhatsApp(tipo, datos, contexto = {}) {
   if (tipo === 'panales' && !cfg.notifyPanales) return;
   if ((tipo === 'vitaminas' || tipo === 'vitaminas_tipos') && !cfg.notifyVitaminas) return;
   if ((tipo === 'sueno' || tipo === 'sueno_inicio' || tipo === 'sueno_fin') && !cfg.notifySueno) return;
+  if (tipo === 'alerta_hambre' && !cfg.notifyAlertaHambre) return;
+  if (tipo === 'alerta_vitaminas' && !cfg.notifyAlertaVitaminas) return;
+  if (tipo === 'alerta_fecas' && !cfg.notifyAlertaFecas) return;
+  if (tipo === 'alerta_sueno' && !cfg.notifyAlertaSueno) return;
 
   const mensaje = construirMensajeWhatsApp(tipo, datos, contexto);
   if (!mensaje) return;
@@ -501,6 +550,204 @@ async function probarConexionWhatsApp(targetCustom = null, configCustom = null) 
   }
 }
 
+/**
+ * Cooldown para evitar saturación de mensajes:
+ * hambre: 2h (120m) | vitaminas: 12h (720m) | fecas: 24h (1440m) | sueno: 2h (120m)
+ */
+const ALERT_COOLDOWNS = {
+  alerta_hambre: 120 * 60 * 1000,
+  alerta_vitaminas: 720 * 60 * 1000,
+  alerta_fecas: 1440 * 60 * 1000,
+  alerta_sueno: 120 * 60 * 1000,
+};
+
+/**
+ * Evalúa las 4 reglas proactivas de rutina pediátrica a partir del estado actual de datos en caché:
+ * 1. Toma de leche: más de 2 horas sin comer (>120 min).
+ * 2. Vitaminas diarias: pasadas las 19:00 hrs sin vitaminas hoy.
+ * 3. Fecas: más de 3 días (72 hrs) sin registrar deposiciones.
+ * 4. Sueño: más de 3 horas despierto (>180 min).
+ */
+function evaluarAlertasRutina(cache = {}) {
+  const now = new Date();
+  const res = {
+    hambre: { activa: false, minsTranscurridos: 0, ultimaFecha: null, mensaje: 'Al día' },
+    vitaminas: { activa: false, tomadaHoy: false, horaActual: '', mensaje: 'Al día' },
+    fecas: { activa: false, diasTranscurridos: 0, ultimaFecha: null, mensaje: 'Normal' },
+    sueno: { activa: false, durmiendo: false, minsDespierto: 0, despertarFecha: null, mensaje: 'Normal' },
+    conteoActivas: 0,
+  };
+
+  // 1. Alimentación (más de 2 horas sin comer)
+  const tomas = Array.isArray(cache.tomas) ? cache.tomas : [];
+  if (tomas.length > 0) {
+    const tomasOrdenadas = [...tomas].sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora));
+    const ultimaToma = tomasOrdenadas[0];
+    const diffMs = now - new Date(ultimaToma.fecha_hora);
+    const mins = Math.max(0, Math.floor(diffMs / 60000));
+    res.hambre.minsTranscurridos = mins;
+    res.hambre.ultimaFecha = ultimaToma.fecha_hora;
+    if (mins >= 120) {
+      res.hambre.activa = true;
+      res.hambre.mensaje = `Lleva ${fmtMinutos(mins)} sin comer (> 2 horas)`;
+    } else {
+      res.hambre.mensaje = `Última toma hace ${fmtMinutos(mins)}`;
+    }
+  } else {
+    res.hambre.mensaje = 'Sin tomas registradas';
+  }
+
+  // 2. Vitaminas (pasadas las 19:00 hrs sin registrar hoy)
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const todayKey = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  const horaActual = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+  res.vitaminas.horaActual = horaActual;
+
+  const vitsSimple = Array.isArray(cache.vitaminas) ? cache.vitaminas : [];
+  const vitsLog = Array.isArray(cache.vitaminas_tipos_log) ? cache.vitaminas_tipos_log : [];
+  const tieneVitSimpleHoy = vitsSimple.some((r) => r.fecha_hora && r.fecha_hora.startsWith(todayKey));
+  const tieneVitLogHoy = vitsLog.some((r) => r.fecha === todayKey && r.tomada);
+  const tomadaHoy = tieneVitSimpleHoy || tieneVitLogHoy;
+  res.vitaminas.tomadaHoy = tomadaHoy;
+
+  if (tomadaHoy) {
+    res.vitaminas.mensaje = 'Vitaminas administradas hoy ✓';
+  } else {
+    if (now.getHours() >= 19) {
+      res.vitaminas.activa = true;
+      res.vitaminas.mensaje = `Pendiente pasada las 19:00 hrs (${horaActual})`;
+    } else {
+      res.vitaminas.mensaje = 'Pendiente para hoy (antes de las 19:00)';
+    }
+  }
+
+  // 3. Fecas (más de 3 días sin deposiciones)
+  const panales = Array.isArray(cache.panales) ? cache.panales : [];
+  const panalesConHeces = panales.filter((p) => p.heces).sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora));
+  if (panalesConHeces.length > 0) {
+    const ultimoHeces = panalesConHeces[0];
+    const diffMs = now - new Date(ultimoHeces.fecha_hora);
+    const dias = Math.floor(diffMs / (24 * 3600 * 1000));
+    const horas = Math.floor(diffMs / 3600000);
+    res.fecas.diasTranscurridos = dias;
+    res.fecas.ultimaFecha = ultimoHeces.fecha_hora;
+    if (dias >= 3) {
+      res.fecas.activa = true;
+      res.fecas.mensaje = `Lleva ${dias} días sin deposición (> 3 días)`;
+    } else {
+      res.fecas.mensaje = `Última deposición hace ${dias > 0 ? `${dias}d ` : ''}${horas % 24}h`;
+    }
+  } else if (panales.length > 0) {
+    res.fecas.mensaje = 'Sin registros de fecas';
+  }
+
+  // 4. Sueño (más de 3 horas despierto)
+  const suenos = Array.isArray(cache.sueno) ? cache.sueno : [];
+  const siestaActiva = suenos.find((s) => !s.fin);
+  if (siestaActiva) {
+    res.sueno.durmiendo = true;
+    res.sueno.activa = false;
+    res.sueno.mensaje = 'Durmiendo actualmente 💤';
+  } else {
+    const suenosCompletos = suenos.filter((s) => s.fin).sort((a, b) => new Date(b.fin) - new Date(a.fin));
+    if (suenosCompletos.length > 0) {
+      const ultimoSueno = suenosCompletos[0];
+      const diffMs = now - new Date(ultimoSueno.fin);
+      const minsDespierto = Math.max(0, Math.floor(diffMs / 60000));
+      res.sueno.minsDespierto = minsDespierto;
+      res.sueno.despertarFecha = ultimoSueno.fin;
+      if (minsDespierto >= 180) {
+        res.sueno.activa = true;
+        res.sueno.mensaje = `Lleva ${fmtMinutos(minsDespierto)} despierto (> 3 horas)`;
+      } else {
+        res.sueno.mensaje = `Despierto hace ${fmtMinutos(minsDespierto)}`;
+      }
+    } else {
+      res.sueno.mensaje = 'Sin registro de siestas recientes';
+    }
+  }
+
+  res.conteoActivas = (res.hambre.activa ? 1 : 0) +
+                      (res.vitaminas.activa ? 1 : 0) +
+                      (res.fecas.activa ? 1 : 0) +
+                      (res.sueno.activa ? 1 : 0);
+
+  return res;
+}
+
+/**
+ * Supervisa las alertas y despacha a WhatsApp respetando el cooldown anti-spam.
+ */
+function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
+  const alertas = evaluarAlertasRutina(cache);
+  let rawLast = {};
+  try {
+    rawLast = JSON.parse(localStorage.getItem('nebu_alert_timestamps') || '{}');
+  } catch {}
+
+  const now = Date.now();
+  let enviadas = 0;
+
+  // 1. Hambre
+  if (alertas.hambre.activa) {
+    const ultimo = rawLast.alerta_hambre || 0;
+    if (now - ultimo > ALERT_COOLDOWNS.alerta_hambre) {
+      enviarNotificacionWhatsApp('alerta_hambre', {
+        minutosTranscurridos: alertas.hambre.minsTranscurridos,
+        ultimaFecha: alertas.hambre.ultimaFecha,
+      }, contexto);
+      rawLast.alerta_hambre = now;
+      enviadas++;
+    }
+  }
+
+  // 2. Vitaminas
+  if (alertas.vitaminas.activa) {
+    const ultimo = rawLast.alerta_vitaminas || 0;
+    if (now - ultimo > ALERT_COOLDOWNS.alerta_vitaminas) {
+      enviarNotificacionWhatsApp('alerta_vitaminas', {
+        horaActual: alertas.vitaminas.horaActual,
+      }, contexto);
+      rawLast.alerta_vitaminas = now;
+      enviadas++;
+    }
+  }
+
+  // 3. Fecas
+  if (alertas.fecas.activa) {
+    const ultimo = rawLast.alerta_fecas || 0;
+    if (now - ultimo > ALERT_COOLDOWNS.alerta_fecas) {
+      enviarNotificacionWhatsApp('alerta_fecas', {
+        diasTranscurridos: alertas.fecas.diasTranscurridos,
+        ultimaFecha: alertas.fecas.ultimaFecha,
+      }, contexto);
+      rawLast.alerta_fecas = now;
+      enviadas++;
+    }
+  }
+
+  // 4. Sueño
+  if (alertas.sueno.activa) {
+    const ultimo = rawLast.alerta_sueno || 0;
+    if (now - ultimo > ALERT_COOLDOWNS.alerta_sueno) {
+      enviarNotificacionWhatsApp('alerta_sueno', {
+        minutosDespierto: alertas.sueno.minsDespierto,
+        despertarFecha: alertas.sueno.despertarFecha,
+      }, contexto);
+      rawLast.alerta_sueno = now;
+      enviadas++;
+    }
+  }
+
+  if (enviadas > 0) {
+    try {
+      localStorage.setItem('nebu_alert_timestamps', JSON.stringify(rawLast));
+    } catch {}
+  }
+
+  return { alertas, enviadas };
+}
+
 // Exportar globalmente para el cliente web
 window.getWhatsAppConfig = getWhatsAppConfig;
 window.saveWhatsAppConfig = saveWhatsAppConfig;
@@ -511,3 +758,6 @@ window.normalizarDestinatario = normalizarDestinatario;
 window.normalizarDestinatarios = normalizarDestinatarios;
 window.enviarNotificacionWhatsApp = enviarNotificacionWhatsApp;
 window.probarConexionWhatsApp = probarConexionWhatsApp;
+window.evaluarAlertasRutina = evaluarAlertasRutina;
+window.verificarYDespacharAlertasWhatsApp = verificarYDespacharAlertasWhatsApp;
+window.ALERT_COOLDOWNS = ALERT_COOLDOWNS;

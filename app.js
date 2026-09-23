@@ -198,6 +198,9 @@ async function insertar(tabla, valores) {
   if (typeof window.enviarNotificacionWhatsApp === 'function') {
     window.enviarNotificacionWhatsApp(tabla, valores, { bebe, miRol });
   }
+  if (typeof actualizarAlertasYBadge === 'function') {
+    actualizarAlertasYBadge();
+  }
   return true;
 }
 
@@ -207,6 +210,9 @@ async function eliminar(tabla, id) {
   if (error) { toast(`Error al eliminar: ${error.message}`, true); return; }
   await loadData(tabla);
   statsDirty = true;
+  if (typeof actualizarAlertasYBadge === 'function') {
+    actualizarAlertasYBadge();
+  }
   renderTab(currentTab);
 }
 
@@ -703,6 +709,9 @@ $('btnDespertar').addEventListener('click', async () => {
   if (typeof window.enviarNotificacionWhatsApp === 'function') {
     window.enviarNotificacionWhatsApp('sueno_fin', { inicio: siesta.inicio, fin }, { bebe, miRol });
   }
+  if (typeof actualizarAlertasYBadge === 'function') {
+    actualizarAlertasYBadge();
+  }
 });
 
 // ---------- Gráficos y Estadísticas (Chart.js + Zoom) ----------
@@ -1174,6 +1183,7 @@ function renderChartsDias(s, surface) {
 // ---------- Tabs ----------
 const TABS = {
   stats: { icon: '📊', label: 'Stats' },
+  alertas: { icon: '🚨', label: 'Alertas' },
   leche: { icon: '🍼', label: 'Leche' },
   vitaminas: { icon: '💊', label: 'Vitaminas' },
   panales: { icon: '🧷', label: 'Pañales' },
@@ -1183,7 +1193,7 @@ const TABS = {
   juegos: { icon: '🧸', label: 'Juegos' },
 };
 
-const ORDEN_DEFAULT = ['stats', 'leche', 'vitaminas', 'panales', 'sueno', 'info', 'bitacora', 'juegos'];
+const ORDEN_DEFAULT = ['stats', 'alertas', 'leche', 'vitaminas', 'panales', 'sueno', 'info', 'bitacora', 'juegos'];
 
 function leerOrdenTabs() {
   try {
@@ -1203,19 +1213,138 @@ function renderTabbar() {
   const mas = orden.slice(4);
 
   let html = barra
-    .map((k) => `<button class="tab-btn${k === currentTab ? ' active' : ''}" data-tab="${k}"><span>${TABS[k].icon}</span>${TABS[k].label}</button>`)
+    .map((k) => {
+      const isAlerta = k === 'alertas' && window.conteoAlertasActivas > 0;
+      const badge = isAlerta ? `<span class="tab-badge" style="position:absolute; top:2px; right:6px; background:#ef4444; color:#fff; border-radius:10px; font-size:0.65rem; padding:1px 5px; font-weight:800; line-height:1.2;">${window.conteoAlertasActivas}</span>` : '';
+      return `<button class="tab-btn${k === currentTab ? ' active' : ''}" data-tab="${k}" style="position:relative;"><span>${TABS[k].icon}</span>${TABS[k].label}${badge}</button>`;
+    })
     .join('');
 
   if (mas.length) {
     const enMas = mas.includes(currentTab);
     const iconoActivo = enMas ? TABS[currentTab].icon : '⋯';
     const labelActivo = enMas ? TABS[currentTab].label : 'Más';
-    html += `<button class="tab-btn${enMas ? ' active' : ''}" id="tabMasBtn" aria-haspopup="true"><span>${iconoActivo}</span>${labelActivo}</button>`;
+    const hayAlertasEnMas = mas.includes('alertas') && window.conteoAlertasActivas > 0;
+    const badgeMas = hayAlertasEnMas ? `<span class="tab-badge" style="position:absolute; top:2px; right:6px; background:#ef4444; color:#fff; border-radius:10px; font-size:0.65rem; padding:1px 5px; font-weight:800; line-height:1.2;">!</span>` : '';
+    html += `<button class="tab-btn${enMas ? ' active' : ''}" id="tabMasBtn" aria-haspopup="true" style="position:relative;"><span>${iconoActivo}</span>${labelActivo}${badgeMas}</button>`;
     html += `<div class="tab-menu hidden" id="tabMenu">${mas
-      .map((k) => `<button class="tab-btn tab-menu-item${k === currentTab ? ' active' : ''}" data-tab="${k}"><span>${TABS[k].icon}</span>${TABS[k].label}</button>`)
+      .map((k) => {
+        const isAlerta = k === 'alertas' && window.conteoAlertasActivas > 0;
+        const badge = isAlerta ? `<span class="tab-badge" style="margin-left:auto; background:#ef4444; color:#fff; border-radius:10px; font-size:0.65rem; padding:1px 5px; font-weight:800;">${window.conteoAlertasActivas}</span>` : '';
+        return `<button class="tab-btn tab-menu-item${k === currentTab ? ' active' : ''}" data-tab="${k}" style="display:flex; align-items:center; gap:6px;"><span>${TABS[k].icon}</span>${TABS[k].label}${badge}</button>`;
+      })
       .join('')}</div>`;
   }
   $('tabbar').innerHTML = html;
+}
+
+function renderAlertas() {
+  if (typeof evaluarAlertasRutina !== 'function') return;
+  const res = evaluarAlertasRutina(cache);
+  window.conteoAlertasActivas = res.conteoActivas;
+
+  const globalBadge = $('alertasBadgeGlobal');
+  if (globalBadge) {
+    if (res.conteoActivas === 0) {
+      globalBadge.textContent = '🟢 Todo al día';
+      globalBadge.style.background = 'rgba(25, 158, 112, 0.2)';
+      globalBadge.style.color = '#199e70';
+    } else {
+      globalBadge.textContent = `🚨 ${res.conteoActivas} alerta${res.conteoActivas > 1 ? 's' : ''} activa${res.conteoActivas > 1 ? 's' : ''}`;
+      globalBadge.style.background = 'rgba(239, 68, 68, 0.2)';
+      globalBadge.style.color = '#ef4444';
+    }
+  }
+
+  // 1. Hambre
+  const cardHambre = $('cardAlertaHambre');
+  const txtHambre = $('txtAlertaHambre');
+  const badgeHambre = $('badgeAlertaHambre');
+  if (cardHambre && txtHambre && badgeHambre) {
+    txtHambre.textContent = res.hambre.mensaje;
+    if (res.hambre.activa) {
+      cardHambre.style.borderLeftColor = '#ef4444';
+      badgeHambre.textContent = '⚠️ Alerta';
+      badgeHambre.style.background = 'rgba(239, 68, 68, 0.2)';
+      badgeHambre.style.color = '#ef4444';
+    } else {
+      cardHambre.style.borderLeftColor = '#199e70';
+      badgeHambre.textContent = 'Normal';
+      badgeHambre.style.background = 'rgba(25, 158, 112, 0.15)';
+      badgeHambre.style.color = '#199e70';
+    }
+  }
+
+  // 2. Vitaminas
+  const cardVits = $('cardAlertaVitaminas');
+  const txtVits = $('txtAlertaVitaminas');
+  const badgeVits = $('badgeAlertaVitaminas');
+  if (cardVits && txtVits && badgeVits) {
+    txtVits.textContent = res.vitaminas.mensaje;
+    if (res.vitaminas.activa) {
+      cardVits.style.borderLeftColor = '#ef4444';
+      badgeVits.textContent = '⚠️ Alerta';
+      badgeVits.style.background = 'rgba(239, 68, 68, 0.2)';
+      badgeVits.style.color = '#ef4444';
+    } else {
+      cardVits.style.borderLeftColor = '#199e70';
+      badgeVits.textContent = res.vitaminas.tomadaHoy ? 'Al día ✓' : 'Pendiente';
+      badgeVits.style.background = 'rgba(25, 158, 112, 0.15)';
+      badgeVits.style.color = '#199e70';
+    }
+  }
+
+  // 3. Fecas
+  const cardFecas = $('cardAlertaFecas');
+  const txtFecas = $('txtAlertaFecas');
+  const badgeFecas = $('badgeAlertaFecas');
+  if (cardFecas && txtFecas && badgeFecas) {
+    txtFecas.textContent = res.fecas.mensaje;
+    if (res.fecas.activa) {
+      cardFecas.style.borderLeftColor = '#ef4444';
+      badgeFecas.textContent = '🚨 Alerta';
+      badgeFecas.style.background = 'rgba(239, 68, 68, 0.2)';
+      badgeFecas.style.color = '#ef4444';
+    } else {
+      cardFecas.style.borderLeftColor = '#199e70';
+      badgeFecas.textContent = 'Normal';
+      badgeFecas.style.background = 'rgba(25, 158, 112, 0.15)';
+      badgeFecas.style.color = '#199e70';
+    }
+  }
+
+  // 4. Sueño
+  const cardSueno = $('cardAlertaSueno');
+  const txtSueno = $('txtAlertaSueno');
+  const badgeSueno = $('badgeAlertaSueno');
+  if (cardSueno && txtSueno && badgeSueno) {
+    txtSueno.textContent = res.sueno.mensaje;
+    if (res.sueno.activa) {
+      cardSueno.style.borderLeftColor = '#ef4444';
+      badgeSueno.textContent = '⚠️ Alerta';
+      badgeSueno.style.background = 'rgba(239, 68, 68, 0.2)';
+      badgeSueno.style.color = '#ef4444';
+    } else {
+      cardSueno.style.borderLeftColor = '#199e70';
+      badgeSueno.textContent = res.sueno.durmiendo ? 'Durmiendo' : 'Normal';
+      badgeSueno.style.background = 'rgba(25, 158, 112, 0.15)';
+      badgeSueno.style.color = '#199e70';
+    }
+  }
+}
+
+function actualizarAlertasYBadge() {
+  if (typeof evaluarAlertasRutina === 'function') {
+    const res = evaluarAlertasRutina(cache);
+    window.conteoAlertasActivas = res.conteoActivas;
+  }
+  renderTabbar();
+  if (currentTab === 'alertas') {
+    renderAlertas();
+  }
+  if (typeof verificarYDespacharAlertasWhatsApp === 'function' && bebe) {
+    verificarYDespacharAlertasWhatsApp(cache, { bebe, miRol });
+  }
 }
 
 function renderTab(tab) {
@@ -1228,6 +1357,7 @@ function renderTab(tab) {
   document.title = `${tabName} | Rutinas del Bebé`;
 
   if (tab === 'stats') { if (statsDirty) renderCharts(); }
+  else if (tab === 'alertas') renderAlertas();
   else if (tab === 'leche') renderLeche();
   else if (tab === 'vitaminas') renderVitaminas();
   else if (tab === 'panales') renderPanales();
@@ -1586,6 +1716,9 @@ $('editGuardar').addEventListener('click', async () => {
   statsDirty = true;
   $('editModal').classList.add('hidden');
   toast('Registro actualizado ✓');
+  if (typeof actualizarAlertasYBadge === 'function') {
+    actualizarAlertasYBadge();
+  }
   renderTab(currentTab);
 });
 
@@ -1698,9 +1831,17 @@ $('parentGuardar').addEventListener('click', async () => {
 
 // ---------- Configuración y Sincronización del Bebé ----------
 async function actualizarBebe(patch) {
-  const { data, error } = await db.from('bebes').update(patch).eq('id', bebe.id).select().single();
+  let { data, error } = await db.from('bebes').update(patch).eq('id', bebe.id).select().single();
+  if (error && error.message && error.message.includes('whatsapp_config')) {
+    const fallbackPatch = { ...patch };
+    delete fallbackPatch.whatsapp_config;
+    const res = await db.from('bebes').update(fallbackPatch).eq('id', bebe.id).select().single();
+    data = res.data;
+    error = res.error;
+  }
   if (error) { toast(`Error: ${error.message}`, true); return false; }
   bebe = data;
+  if (patch.whatsapp_config) bebe.whatsapp_config = patch.whatsapp_config;
   aplicarBebe();
   toast('Guardado ✓');
   return true;
@@ -1791,6 +1932,10 @@ $('settingsBtn').addEventListener('click', () => {
     $('cfgWspPanales').checked = wspCfg.notifyPanales !== false;
     $('cfgWspVitaminas').checked = wspCfg.notifyVitaminas !== false;
     $('cfgWspSueno').checked = wspCfg.notifySueno !== false;
+    if ($('cfgWspAlertHambre')) $('cfgWspAlertHambre').checked = wspCfg.notifyAlertaHambre !== false;
+    if ($('cfgWspAlertVits')) $('cfgWspAlertVits').checked = wspCfg.notifyAlertaVitaminas !== false;
+    if ($('cfgWspAlertFecas')) $('cfgWspAlertFecas').checked = wspCfg.notifyAlertaFecas !== false;
+    if ($('cfgWspAlertSueno')) $('cfgWspAlertSueno').checked = wspCfg.notifyAlertaSueno !== false;
     $('cfgWspTestResult')?.classList.add('hidden');
     $('cfgWspQrContainer')?.classList.add('hidden');
     $('cfgWspGroupsBox')?.classList.add('hidden');
@@ -1892,7 +2037,12 @@ $('cfgGuardar').addEventListener('click', async () => {
       notifyPanales: $('cfgWspPanales').checked,
       notifyVitaminas: $('cfgWspVitaminas').checked,
       notifySueno: $('cfgWspSueno').checked,
+      notifyAlertaHambre: $('cfgWspAlertHambre') ? $('cfgWspAlertHambre').checked : true,
+      notifyAlertaVitaminas: $('cfgWspAlertVits') ? $('cfgWspAlertVits').checked : true,
+      notifyAlertaFecas: $('cfgWspAlertFecas') ? $('cfgWspAlertFecas').checked : true,
+      notifyAlertaSueno: $('cfgWspAlertSueno') ? $('cfgWspAlertSueno').checked : true,
     };
+    patch.whatsapp_config = wspPatch;
     if (typeof saveWhatsAppConfig === 'function') {
       await saveWhatsAppConfig(wspPatch, bebe?.id, db);
     }
@@ -2158,6 +2308,9 @@ async function recargarDatos(mostrarAviso = false) {
       aplicarBebe();
     }
     await loadAll();
+    if (typeof actualizarAlertasYBadge === 'function') {
+      actualizarAlertasYBadge();
+    }
     renderTab(currentTab);
     lastRefreshTime = Date.now();
   } catch (err) {
@@ -2375,7 +2528,12 @@ function iniciarApp(b, rol) {
   activarTab(localStorage.getItem('tab') || 'stats');
   renderLecheResumen();
   iniciarAutoRefresh();
-  loadAll().then(() => renderTab(currentTab));
+  loadAll().then(() => {
+    if (typeof actualizarAlertasYBadge === 'function') {
+      actualizarAlertasYBadge();
+    }
+    renderTab(currentTab);
+  });
 }
 
 function showAuth() {
