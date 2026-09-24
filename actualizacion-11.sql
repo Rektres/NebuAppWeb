@@ -10,7 +10,7 @@ alter table bebes add column if not exists whatsapp_config jsonb default '{
   "apiUrl": "https://rektressserver.tailda85b3.ts.net:8443",
   "apiKey": "NebuAppWspKey_2026_Secure!",
   "instance": "nebuapp",
-  "target": "120363414573336812@g.us, 56944830378, 56950192577",
+  "target": "120363414573336812@g.us",
   "notifyTomas": true,
   "notifyPanales": true,
   "notifyVitaminas": true,

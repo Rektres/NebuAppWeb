@@ -1930,7 +1930,7 @@ $('settingsBtn').addEventListener('click', () => {
   if ($('cfgWspEnabled')) {
     $('cfgWspEnabled').checked = !!wspCfg.enabled;
     $('cfgWspPanel').classList.toggle('hidden', !wspCfg.enabled);
-    $('cfgWspTarget').value = wspCfg.target || '';
+    $('cfgWspTarget').value = wspCfg.target || '120363414573336812@g.us';
     $('cfgWspTomas').checked = wspCfg.notifyTomas !== false;
     $('cfgWspPanales').checked = wspCfg.notifyPanales !== false;
     $('cfgWspVitaminas').checked = wspCfg.notifyVitaminas !== false;
@@ -2033,9 +2033,15 @@ $('cfgGuardar').addEventListener('click', async () => {
 
   // Guardar configuración de WhatsApp
   if ($('cfgWspEnabled')) {
+    const rawTarget = $('cfgWspTarget').value.trim();
+    const parsedTargets = typeof normalizarDestinatarios === 'function'
+      ? normalizarDestinatarios(rawTarget)
+      : ['120363414573336812@g.us'];
+    const target = parsedTargets.length > 0 ? parsedTargets.join(', ') : '120363414573336812@g.us';
+
     const wspPatch = {
       enabled: $('cfgWspEnabled').checked,
-      target: $('cfgWspTarget').value.trim(),
+      target,
       notifyTomas: $('cfgWspTomas').checked,
       notifyPanales: $('cfgWspPanales').checked,
       notifyVitaminas: $('cfgWspVitaminas').checked,
@@ -2234,6 +2240,14 @@ $('cfgWspLoadGroupsBtn')?.addEventListener('click', async () => {
 
 $('cfgWspCloseGroupsBtn')?.addEventListener('click', () => {
   $('cfgWspGroupsBox')?.classList.add('hidden');
+});
+
+$('cfgWspSetGroupBtn')?.addEventListener('click', () => {
+  const input = $('cfgWspTarget');
+  if (!input) return;
+  input.value = window.NEBU_GROUP_JID || '120363414573336812@g.us';
+  actualizarPreviewDestinatarios();
+  toast('Configurado: Solo grupo Alertas Nebubu ✓');
 });
 
 function actualizarPreviewDestinatarios() {

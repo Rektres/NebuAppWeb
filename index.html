@@ -790,12 +790,15 @@
         </div>
 
         <div>
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-            <label class="field-label" style="margin-bottom:0;" for="cfgWspTarget">Destinatarios (Teléfonos y/o Grupos)</label>
-            <button type="button" id="cfgWspLoadGroupsBtn" class="btn-secondary" style="font-size:0.75rem; padding:4px 8px;">👥 Mis Grupos</button>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:6px;">
+            <label class="field-label" style="margin-bottom:0;" for="cfgWspTarget">Destinatario (Grupo / Teléfonos)</label>
+            <div style="display:flex; gap:6px;">
+              <button type="button" id="cfgWspSetGroupBtn" class="btn-secondary" style="font-size:0.75rem; padding:4px 8px; background:rgba(25, 158, 112, 0.15); border-color:#199e70; color:#199e70;" title="Dejar solo el grupo Alertas Nebubu">🎯 Solo Grupo</button>
+              <button type="button" id="cfgWspLoadGroupsBtn" class="btn-secondary" style="font-size:0.75rem; padding:4px 8px;">👥 Mis Grupos</button>
+            </div>
           </div>
-          <textarea id="cfgWspTarget" rows="2" placeholder="Ej: 56911111111, 56922222222, 1203630...@g.us" style="width:100%; border-radius:10px; padding:8px 10px; font-size:0.85rem; font-family:inherit; background:var(--surface); color:var(--text); border:1px solid var(--border); box-sizing:border-box; resize:vertical;"></textarea>
-          <span class="form-hint" style="margin-top:2px;">Ingresa uno o varios números personales y/o IDs de grupo separados por coma, espacio o salto de línea. Se enviará a todos en simultáneo.</span>
+          <textarea id="cfgWspTarget" rows="2" placeholder="120363414573336812@g.us (Alertas Nebubu)" style="width:100%; border-radius:10px; padding:8px 10px; font-size:0.85rem; font-family:inherit; background:var(--surface); color:var(--text); border:1px solid var(--border); box-sizing:border-box; resize:vertical;"></textarea>
+          <span class="form-hint" style="margin-top:2px;">Configurado por defecto para el grupo <strong>Alertas Nebubu</strong>.</span>
 
           <!-- Vista previa en tiempo real de destinatarios reconocidos -->
           <div id="cfgWspTargetPreview" class="hidden" style="margin-top:6px; font-size:0.75rem; color:var(--text-2); display:flex; flex-wrap:wrap; gap:4px; align-items:center;">
@@ -892,8 +895,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
-  <script src="config.js?v=2.5.2"></script>
-  <script src="whatsapp.js?v=2.5.2"></script>
-  <script src="app.js?v=2.5.2"></script>
+  <script src="config.js?v=2.5.3"></script>
+  <script src="whatsapp.js?v=2.5.3"></script>
+  <script src="app.js?v=2.5.3"></script>
 </body>
 </html>

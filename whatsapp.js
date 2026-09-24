@@ -4,12 +4,14 @@
    Envío de notificaciones colaborativas en tiempo real (No bloqueante)
    ============================================================ */
 
+const NEBU_GROUP_JID = '120363414573336812@g.us';
+
 const DEFAULT_WSP_CONFIG = {
   enabled: true,
   apiUrl: 'https://rektressserver.tailda85b3.ts.net:8443',
   apiKey: 'NebuAppWspKey_2026_Secure!',
   instance: 'nebuapp',
-  target: '120363414573336812@g.us, 56944830378, 56950192577',
+  target: NEBU_GROUP_JID,
   notifyTomas: true,
   notifyPanales: true,
   notifyVitaminas: true,
@@ -51,13 +53,9 @@ function getWhatsAppConfig(bebe = null) {
     ? { ...DEFAULT_WSP_CONFIG, ...localCfg, ...bebeCfg }
     : { ...DEFAULT_WSP_CONFIG, ...localCfg };
 
-  // Auto-reparar y sanear destinos si estaban guardados con formato erróneo o pegados
-  if (merged.target) {
-    const parsed = typeof normalizarDestinatarios === 'function' ? normalizarDestinatarios(merged.target) : [];
-    if (parsed.length > 0) {
-      merged.target = parsed.join(', ');
-    }
-  }
+  // Asegurar que siempre exista al menos el grupo como destino
+  const parsed = typeof normalizarDestinatarios === 'function' ? normalizarDestinatarios(merged.target) : [NEBU_GROUP_JID];
+  merged.target = parsed.length > 0 ? parsed.join(', ') : NEBU_GROUP_JID;
 
   return merged;
 }
@@ -104,63 +102,84 @@ function limpiarNumeroTelefono(num) {
  * Retorna un arreglo de destinatarios únicos válidos (números y grupos).
  */
 function normalizarDestinatarios(raw) {
-  if (!raw) return [];
+  if (!raw) return [NEBU_GROUP_JID];
   if (Array.isArray(raw)) raw = raw.join('\n');
 
-  // Separar primero por saltos de línea, comas, punto y coma, pipes o slashes
-  const tokens = String(raw).split(/[\n\r,;|/]+/);
+  let text = String(raw).trim();
+  if (!text) return [NEBU_GROUP_JID];
+
+  // 1. Detectar enlaces de invitación de WhatsApp en cualquier parte del texto
+  const inviteRegex = /https?:\/\/chat\.whatsapp\.com\/([a-zA-Z0-9_-]+)/gi;
+  let inviteMatch;
+  while ((inviteMatch = inviteRegex.exec(text)) !== null) {
+    const code = inviteMatch[1];
+    if (code === 'LWYU1T9wGW72wEwlcfSPDy') {
+      text = text.replace(inviteMatch[0], NEBU_GROUP_JID);
+    }
+  }
+
+  // 2. Detectar nombres de grupo como "Alertas Nebubu", "Alertas Nebu", "👥 Alertas Nebubu"
+  text = text.replace(/(?:👥\s*)?Alertas\s+Nebu(?:bu)?/gi, NEBU_GROUP_JID);
+
+  // 3. Separar por comas, punto y coma, saltos de línea o pipes (NO separar por barra '/' para no romper URLs)
+  const tokens = text.split(/[\n\r,;|]+/);
   const result = [];
 
   for (let token of tokens) {
     token = token.trim();
     if (!token) continue;
 
-    // 1. Enlaces de invitación de grupos de WhatsApp (https://chat.whatsapp.com/CODE)
-    if (token.includes('chat.whatsapp.com/')) {
-      const match = token.match(/chat\.whatsapp\.com\/([a-zA-Z0-9_-]+)/);
+    // A. JID de grupo (@g.us) o de usuario (@s.whatsapp.net)
+    if (token.includes('@g.us') || token.includes('@s.whatsapp.net')) {
+      const match = token.match(/([a-zA-Z0-9.\-_]+@(g\.us|s\.whatsapp\.net))/);
       if (match) {
-        const code = match[1];
-        if (code === 'LWYU1T9wGW72wEwlcfSPDy') {
-          result.push('120363414573336812@g.us');
-          continue;
-        }
+        if (!result.includes(match[1])) result.push(match[1]);
+        continue;
       }
     }
 
-    // 2. JID de grupo de WhatsApp (@g.us) o de usuario (@s.whatsapp.net)
-    if (token.includes('@g.us') || token.includes('@s.whatsapp.net')) {
-      const match = token.match(/([a-zA-Z0-9.\-_]+@(g\.us|s\.whatsapp\.net))/);
-      if (match) result.push(match[1]);
+    // B. Números de 18 dígitos de grupo de WhatsApp ingresados sin '@g.us' (ej: 120363414573336812)
+    const groupNumMatch = token.match(/\b(120363\d{12})\b/);
+    if (groupNumMatch) {
+      const jid = `${groupNumMatch[1]}@g.us`;
+      if (!result.includes(jid)) result.push(jid);
       continue;
     }
 
-    // 2. Si contiene múltiples '+' (ej: +56944830378 +56950192577)
+    // C. Si contiene múltiples '+' (ej: +56944830378 +56950192577)
     if (token.includes('+')) {
       const subTokens = token.split(/(?=\+)/).filter(Boolean);
       for (const st of subTokens) {
         const cleaned = st.replace(/[^\d]/g, '');
         if (cleaned.length >= 8 && cleaned.length <= 15) {
-          result.push(limpiarNumeroTelefono(cleaned));
+          const num = limpiarNumeroTelefono(cleaned);
+          if (!result.includes(num)) result.push(num);
         }
       }
       continue;
     }
 
-    // 3. Detectar patrones de celulares chilenos (569XXXXXXXX o 9XXXXXXXX)
-    // Resuelve casos donde se ingresaron con espacios o sin separación: '56944830378 56950192577' o '5694483037856950192577'
+    // D. Detectar patrones de celulares chilenos (569XXXXXXXX o 9XXXXXXXX)
     const matchesChilean = token.match(/(?:56)?9\d{8}/g);
     if (matchesChilean && matchesChilean.length > 0) {
       for (const m of matchesChilean) {
-        result.push(limpiarNumeroTelefono(m));
+        const num = limpiarNumeroTelefono(m);
+        if (!result.includes(num)) result.push(num);
       }
       continue;
     }
 
-    // 4. Caso numérico genérico (8 a 15 dígitos según norma internacional E.164)
+    // E. Caso numérico genérico (8 a 15 dígitos según norma internacional E.164)
     const digitsOnly = token.replace(/[^\d]/g, '');
     if (digitsOnly.length >= 8 && digitsOnly.length <= 15) {
-      result.push(limpiarNumeroTelefono(digitsOnly));
+      const num = limpiarNumeroTelefono(digitsOnly);
+      if (!result.includes(num)) result.push(num);
     }
+  }
+
+  // Si tras la evaluación no queda ningún destinatario válido, usar por defecto el grupo Alertas Nebubu
+  if (result.length === 0) {
+    result.push(NEBU_GROUP_JID);
   }
 
   return Array.from(new Set(result.filter(Boolean)));
@@ -785,3 +804,4 @@ window.probarConexionWhatsApp = probarConexionWhatsApp;
 window.evaluarAlertasRutina = evaluarAlertasRutina;
 window.verificarYDespacharAlertasWhatsApp = verificarYDespacharAlertasWhatsApp;
 window.ALERT_COOLDOWNS = ALERT_COOLDOWNS;
+window.NEBU_GROUP_JID = NEBU_GROUP_JID;
