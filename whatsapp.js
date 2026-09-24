@@ -378,11 +378,11 @@ function construirMensajeWhatsApp(tipo, datos, contexto = {}) {
 
     case 'alerta_hambre': {
       const { hora } = fmtFechaHora(datos.ultimaFecha);
-      const tiempoTxt = fmtMinutos(datos.minutosTranscurridos || 120);
+      const tiempoTxt = fmtMinutos(datos.minutosTranscurridos || 150);
       return `⚠️ *Alerta de Rutina: Hora de Comer*\n` +
              `👶 *Bebé:* ${bebeNombre}\n` +
              `🍼 *Última toma:* hace ${tiempoTxt} (a las ${hora})\n` +
-             `📢 *Aviso:* Han transcurrido más de 2 horas desde su última toma de leche.`;
+             `📢 *Aviso:* Han transcurrido más de 2:30 horas desde su última toma de leche.`;
     }
 
     case 'alerta_vitaminas': {
@@ -404,11 +404,11 @@ function construirMensajeWhatsApp(tipo, datos, contexto = {}) {
 
     case 'alerta_sueno': {
       const { hora } = fmtFechaHora(datos.despertarFecha);
-      const tiempoTxt = fmtMinutos(datos.minutosDespierto || 180);
+      const tiempoTxt = fmtMinutos(datos.minutosDespierto || 100);
       return `⚠️ *Alerta de Rutina: Ventana de Sueño Superada*\n` +
              `👶 *Bebé:* ${bebeNombre}\n` +
              `☀️ *Despierto desde:* hace ${tiempoTxt} (despertó a las ${hora})\n` +
-             `📢 *Aviso:* Lleva más de 3 horas despierto. Es probable que esté sobrecansado y necesite iniciar su siesta.`;
+             `📢 *Aviso:* Lleva más de 1:40 horas despierto. Es probable que esté sobrecansado y necesite iniciar su siesta.`;
     }
 
     case 'prueba': {
@@ -552,21 +552,23 @@ async function probarConexionWhatsApp(targetCustom = null, configCustom = null) 
 
 /**
  * Cooldown para evitar saturación de mensajes:
- * hambre: 2h (120m) | vitaminas: 12h (720m) | fecas: 24h (1440m) | sueno: 2h (120m)
+/**
+ * Cooldown para evitar saturación de mensajes:
+ * hambre: 2.5h (150m) | vitaminas: 12h (720m) | fecas: 24h (1440m) | sueno: 1h 40m (100m)
  */
 const ALERT_COOLDOWNS = {
-  alerta_hambre: 120 * 60 * 1000,
+  alerta_hambre: 150 * 60 * 1000,
   alerta_vitaminas: 720 * 60 * 1000,
   alerta_fecas: 1440 * 60 * 1000,
-  alerta_sueno: 120 * 60 * 1000,
+  alerta_sueno: 100 * 60 * 1000,
 };
 
 /**
  * Evalúa las 4 reglas proactivas de rutina pediátrica a partir del estado actual de datos en caché:
- * 1. Toma de leche: más de 2 horas sin comer (>120 min).
- * 2. Vitaminas diarias: pasadas las 19:00 hrs sin vitaminas hoy.
+ * 1. Toma de leche: más de 2:30 horas sin comer (>150 min).
+ * 2. Vitaminas diarias: pasadas las 19:00 hrs sin vitaminas registradas hoy.
  * 3. Fecas: más de 3 días (72 hrs) sin registrar deposiciones.
- * 4. Sueño: más de 3 horas despierto (>180 min).
+ * 4. Sueño: más de 1:40 horas despierto (>100 min).
  */
 function evaluarAlertasRutina(cache = {}) {
   const now = new Date();
@@ -578,7 +580,7 @@ function evaluarAlertasRutina(cache = {}) {
     conteoActivas: 0,
   };
 
-  // 1. Alimentación (más de 2 horas sin comer)
+  // 1. Alimentación (más de 2:30 horas sin comer = 150 min)
   const tomas = Array.isArray(cache.tomas) ? cache.tomas : [];
   if (tomas.length > 0) {
     const tomasOrdenadas = [...tomas].sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora));
@@ -587,9 +589,9 @@ function evaluarAlertasRutina(cache = {}) {
     const mins = Math.max(0, Math.floor(diffMs / 60000));
     res.hambre.minsTranscurridos = mins;
     res.hambre.ultimaFecha = ultimaToma.fecha_hora;
-    if (mins >= 120) {
+    if (mins >= 150) {
       res.hambre.activa = true;
-      res.hambre.mensaje = `Lleva ${fmtMinutos(mins)} sin comer (> 2 horas)`;
+      res.hambre.mensaje = `Lleva ${fmtMinutos(mins)} sin comer (> 2:30 hrs)`;
     } else {
       res.hambre.mensaje = `Última toma hace ${fmtMinutos(mins)}`;
     }
@@ -599,24 +601,34 @@ function evaluarAlertasRutina(cache = {}) {
 
   // 2. Vitaminas (pasadas las 19:00 hrs sin registrar hoy)
   const pad2 = (n) => String(n).padStart(2, '0');
-  const todayKey = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  const toLocalDayKey = (d) => {
+    if (!d) return '';
+    const dt = (d instanceof Date) ? d : new Date(d);
+    if (isNaN(dt.getTime())) return '';
+    return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+  };
+  const todayKey = toLocalDayKey(now);
   const horaActual = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
   res.vitaminas.horaActual = horaActual;
 
   const vitsSimple = Array.isArray(cache.vitaminas) ? cache.vitaminas : [];
   const vitsLog = Array.isArray(cache.vitaminas_tipos_log) ? cache.vitaminas_tipos_log : [];
-  const tieneVitSimpleHoy = vitsSimple.some((r) => r.fecha_hora && r.fecha_hora.startsWith(todayKey));
-  const tieneVitLogHoy = vitsLog.some((r) => r.fecha === todayKey && r.tomada);
+  // Revisar si se registró en la tabla simple de vitaminas hoy (respetando zona horaria local del dispositivo)
+  const tieneVitSimpleHoy = vitsSimple.some((r) => r.fecha_hora && toLocalDayKey(r.fecha_hora) === todayKey);
+  // Revisar si existe registro en la tabla de checklist de vitaminas de hoy (cualquier fila para hoy indica que fue tomada)
+  const tieneVitLogHoy = vitsLog.some((r) => r.fecha === todayKey);
   const tomadaHoy = tieneVitSimpleHoy || tieneVitLogHoy;
   res.vitaminas.tomadaHoy = tomadaHoy;
 
   if (tomadaHoy) {
+    res.vitaminas.activa = false;
     res.vitaminas.mensaje = 'Vitaminas administradas hoy ✓';
   } else {
     if (now.getHours() >= 19) {
       res.vitaminas.activa = true;
       res.vitaminas.mensaje = `Pendiente pasada las 19:00 hrs (${horaActual})`;
     } else {
+      res.vitaminas.activa = false;
       res.vitaminas.mensaje = 'Pendiente para hoy (antes de las 19:00)';
     }
   }
@@ -641,7 +653,7 @@ function evaluarAlertasRutina(cache = {}) {
     res.fecas.mensaje = 'Sin registros de fecas';
   }
 
-  // 4. Sueño (más de 3 horas despierto)
+  // 4. Sueño (más de 1:40 horas despierto = 100 min)
   const suenos = Array.isArray(cache.sueno) ? cache.sueno : [];
   const siestaActiva = suenos.find((s) => !s.fin);
   if (siestaActiva) {
@@ -656,9 +668,9 @@ function evaluarAlertasRutina(cache = {}) {
       const minsDespierto = Math.max(0, Math.floor(diffMs / 60000));
       res.sueno.minsDespierto = minsDespierto;
       res.sueno.despertarFecha = ultimoSueno.fin;
-      if (minsDespierto >= 180) {
+      if (minsDespierto >= 100) {
         res.sueno.activa = true;
-        res.sueno.mensaje = `Lleva ${fmtMinutos(minsDespierto)} despierto (> 3 horas)`;
+        res.sueno.mensaje = `Lleva ${fmtMinutos(minsDespierto)} despierto (> 1:40 hrs)`;
       } else {
         res.sueno.mensaje = `Despierto hace ${fmtMinutos(minsDespierto)}`;
       }

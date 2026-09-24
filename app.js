@@ -531,6 +531,9 @@ document.addEventListener('click', async (e) => {
   await loadData('vitaminas_tipos_log');
   statsDirty = true;
   renderVitaminaTipos();
+  if (typeof actualizarAlertasYBadge === 'function') {
+    actualizarAlertasYBadge();
+  }
 });
 
 // ---------- Pañales ----------
