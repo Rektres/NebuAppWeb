@@ -300,6 +300,28 @@
               <span id="badgeAlertaPanal" style="font-size:0.75rem; font-weight:700; padding:3px 8px; border-radius:8px; background:rgba(25, 158, 112, 0.15); color:#199e70;">Normal</span>
             </div>
           </div>
+
+          <!-- Resumen e Informe Diario de las 23:00 hrs -->
+          <div class="card" id="cardInformeDiario" style="border-left:5px solid #3987e5; transition:border-color 0.3s ease;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+              <div>
+                <h3 style="margin:0 0 4px 0; font-size:0.95rem; font-weight:800;">📊 Informe Diario Automático (23:00 hrs)</h3>
+                <p id="txtInformeDiarioResumen" style="font-size:0.82rem; color:var(--text); margin:0 0 4px 0;">Calculando balance del día…</p>
+                <span id="subInformeDiario" style="font-size:0.75rem; color:var(--muted);">Consolidado de leche, pañales, sueño y vitaminas con comparativa al día anterior.</span>
+              </div>
+              <span id="badgeInformeDiario" style="font-size:0.75rem; font-weight:700; padding:3px 8px; border-radius:8px; background:rgba(57, 135, 229, 0.15); color:#3987e5;">Programado 23:00</span>
+            </div>
+
+            <!-- Caja de comparativa en vivo -->
+            <div id="boxInformeDiarioDetalle" style="background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px; font-size:0.8rem; line-height:1.5; margin:6px 0 10px 0;">
+              <strong style="color:var(--text); display:block; margin-bottom:4px;">📈 Comparativa con el día anterior:</strong>
+              <div id="compInformeDiarioTexto" style="color:var(--text-2);">Calculando comparativa…</div>
+            </div>
+
+            <button type="button" id="btnEnviarInformeWspManual" class="btn-secondary" style="font-size:0.8rem; padding:8px 12px; width:100%; display:flex; justify-content:center; align-items:center; gap:6px;">
+              <span>🚀</span> Enviar informe diario de hoy al grupo ahora
+            </button>
+          </div>
         </div>
 
         <!-- Módulo informativo de configuración y canales de alerta -->
@@ -846,6 +868,7 @@
             <label class="check-pill" style="padding:8px 10px; font-size:0.8rem;"><input type="checkbox" id="cfgWspAlertFecas" checked> 🚨 >3d sin feca</label>
             <label class="check-pill" style="padding:8px 10px; font-size:0.8rem;"><input type="checkbox" id="cfgWspAlertSueno" checked> ⚠️ >1:40h despierto</label>
             <label class="check-pill" style="padding:8px 10px; font-size:0.8rem;"><input type="checkbox" id="cfgWspAlertPanal" checked> 🧷 >4h sin pañal</label>
+            <label class="check-pill" style="padding:8px 10px; font-size:0.8rem;"><input type="checkbox" id="cfgWspInformeDiario" checked> 📊 Informe 23:00 hrs</label>
           </div>
         </div>
 
@@ -908,8 +931,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
-  <script src="config.js?v=2.5.6"></script>
-  <script src="whatsapp.js?v=2.5.6"></script>
-  <script src="app.js?v=2.5.6"></script>
+  <script src="config.js?v=2.5.7"></script>
+  <script src="whatsapp.js?v=2.5.7"></script>
+  <script src="app.js?v=2.5.7"></script>
 </body>
 </html>

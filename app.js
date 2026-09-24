@@ -1353,6 +1353,47 @@ function renderAlertas() {
       badgePanal.style.color = '#199e70';
     }
   }
+
+  // 6. Card del Informe Diario (23:00 hrs)
+  const cardInforme = $('cardInformeDiario');
+  const txtInforme = $('txtInformeDiarioResumen');
+  const badgeInforme = $('badgeInformeDiario');
+  const compTexto = $('compInformeDiarioTexto');
+
+  if (cardInforme && txtInforme && badgeInforme && typeof generarDatosInformeDiario === 'function') {
+    const info = generarDatosInformeDiario(cache, new Date());
+    const desgloseP = info.panalesHoy > 0
+      ? ` (${info.orinaHoy > 0 ? `${info.orinaHoy} pipí` : ''}${info.orinaHoy > 0 && info.hecesHoy > 0 ? ', ' : ''}${info.hecesHoy > 0 ? `${info.hecesHoy} caca` : ''})`
+      : '';
+    const palV = info.panalesHoy === 1 ? 'vez' : 'veces';
+
+    txtInforme.textContent = `🍼 ${info.lecheHoy} ml · 🧷 ${info.panalesHoy} ${palV}${desgloseP} · 😴 ${fmtDur(info.minsSuenoHoy)} · 💊 ${info.vitaminasTomadas ? 'Vitaminas ✓' : 'Vitaminas pendientes'}`;
+
+    if (compTexto) {
+      compTexto.innerHTML = `<div>${info.compLeche}</div><div style="margin-top:2px;">${info.compSueno}</div><div style="margin-top:2px;">${info.compPanales}</div>`;
+    }
+
+    // Comprobar si ya fue enviado hoy
+    const nowD = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const hoyK = `${nowD.getFullYear()}-${pad(nowD.getMonth() + 1)}-${pad(nowD.getDate())}`;
+    let rawTs = {};
+    try { rawTs = JSON.parse(localStorage.getItem('nebu_alert_timestamps') || '{}'); } catch {}
+    const wspCfg = typeof getWhatsAppConfig === 'function' ? getWhatsAppConfig(bebe) : {};
+    const enviado = rawTs.informe_diario === hoyK || wspCfg.ultimoInformeFecha === hoyK;
+
+    if (enviado) {
+      badgeInforme.textContent = 'Enviado hoy ✓';
+      badgeInforme.style.background = 'rgba(25, 158, 112, 0.2)';
+      badgeInforme.style.color = '#199e70';
+      cardInforme.style.borderLeftColor = '#199e70';
+    } else {
+      badgeInforme.textContent = 'Programado 23:00';
+      badgeInforme.style.background = 'rgba(57, 135, 229, 0.2)';
+      badgeInforme.style.color = '#3987e5';
+      cardInforme.style.borderLeftColor = '#3987e5';
+    }
+  }
 }
 
 function actualizarAlertasYBadge() {
@@ -1959,6 +2000,7 @@ $('settingsBtn').addEventListener('click', () => {
     if ($('cfgWspAlertFecas')) $('cfgWspAlertFecas').checked = wspCfg.notifyAlertaFecas !== false;
     if ($('cfgWspAlertSueno')) $('cfgWspAlertSueno').checked = wspCfg.notifyAlertaSueno !== false;
     if ($('cfgWspAlertPanal')) $('cfgWspAlertPanal').checked = wspCfg.notifyAlertaPanal !== false;
+    if ($('cfgWspInformeDiario')) $('cfgWspInformeDiario').checked = wspCfg.notifyInformeDiario !== false;
     $('cfgWspTestResult')?.classList.add('hidden');
     $('cfgWspQrContainer')?.classList.add('hidden');
     $('cfgWspGroupsBox')?.classList.add('hidden');
@@ -2071,6 +2113,7 @@ $('cfgGuardar').addEventListener('click', async () => {
       notifyAlertaFecas: $('cfgWspAlertFecas') ? $('cfgWspAlertFecas').checked : true,
       notifyAlertaSueno: $('cfgWspAlertSueno') ? $('cfgWspAlertSueno').checked : true,
       notifyAlertaPanal: $('cfgWspAlertPanal') ? $('cfgWspAlertPanal').checked : true,
+      notifyInformeDiario: $('cfgWspInformeDiario') ? $('cfgWspInformeDiario').checked : true,
     };
     patch.whatsapp_config = wspPatch;
     if (typeof saveWhatsAppConfig === 'function') {
@@ -2342,6 +2385,39 @@ $('cfgWspTestBtn')?.addEventListener('click', async () => {
   resEl.textContent = res.message;
   resEl.style.color = res.ok ? '#199e70' : '#ef4444';
   resEl.classList.remove('hidden');
+});
+
+$('btnEnviarInformeWspManual')?.addEventListener('click', async () => {
+  const btn = $('btnEnviarInformeWspManual');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<span>⏳</span> Enviando informe al grupo…';
+
+  try {
+    if (typeof enviarInformeDiarioManual === 'function') {
+      enviarInformeDiarioManual(cache, { bebe, miRol });
+      toast('¡Informe diario enviado al grupo de WhatsApp! ✓');
+
+      // Marcar como enviado localmente para hoy
+      const nowD = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const hoyK = `${nowD.getFullYear()}-${pad(nowD.getMonth() + 1)}-${pad(nowD.getDate())}`;
+      let rawTs = {};
+      try { rawTs = JSON.parse(localStorage.getItem('nebu_alert_timestamps') || '{}'); } catch {}
+      rawTs.informe_diario = hoyK;
+      try { localStorage.setItem('nebu_alert_timestamps', JSON.stringify(rawTs)); } catch {}
+
+      if (currentTab === 'alertas') renderAlertas();
+    }
+  } catch (err) {
+    toast(`Error al enviar informe: ${err.message}`, true);
+  } finally {
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }, 2000);
+  }
 });
 
 // ---------- Recarga de Datos y Auto-Refresh ----------

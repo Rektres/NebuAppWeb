@@ -3,3 +3,7 @@ config.js
 
 # Documentos locales y PDFs
 *.pdf
+
+# Python cache
+__pycache__/
+*.pyc

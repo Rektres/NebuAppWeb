@@ -21,6 +21,7 @@ const DEFAULT_WSP_CONFIG = {
   notifyAlertaFecas: true,
   notifyAlertaSueno: true,
   notifyAlertaPanal: true,
+  notifyInformeDiario: true,
 };
 
 /**
@@ -342,6 +343,211 @@ function fmtMinutos(mins) {
 }
 
 /**
+ * Calcula tramos de sueño por día calendario (respetando medianoche).
+ */
+function tramosSuenoPorDia(r) {
+  if (!r.inicio) return [];
+  const ini = new Date(r.inicio);
+  const fin = r.fin ? new Date(r.fin) : new Date();
+  if (fin <= ini) return [];
+  const tramos = [];
+  let cur = new Date(ini);
+  const pad = (n) => String(n).padStart(2, '0');
+  const dKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  while (cur < fin) {
+    const dStr = dKey(cur);
+    const midNext = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1, 0, 0, 0);
+    const finTramo = fin < midNext ? fin : midNext;
+    const mins = (finTramo - cur) / 60000;
+    if (mins > 0) {
+      tramos.push({ key: dStr, mins });
+    }
+    cur = finTramo;
+  }
+  return tramos;
+}
+
+/**
+ * Genera el balance del día y la comparativa exacta con el día anterior para el informe de las 23:00 hrs.
+ */
+function generarDatosInformeDiario(cache = {}, fechaRef = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const dKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  const refDate = (fechaRef instanceof Date) ? fechaRef : new Date(fechaRef);
+  const hoyKey = dKey(refDate);
+  const ayerDate = new Date(refDate.getTime() - 86400000);
+  const ayerKey = dKey(ayerDate);
+
+  // 1. Leche (ml)
+  const tomas = Array.isArray(cache.tomas) ? cache.tomas : [];
+  let lecheHoy = 0;
+  let lecheAyer = 0;
+  tomas.forEach((t) => {
+    if (!t.fecha_hora) return;
+    const k = dKey(new Date(t.fecha_hora));
+    const ml = Number(t.cantidad_ml) || 0;
+    if (k === hoyKey) lecheHoy += ml;
+    else if (k === ayerKey) lecheAyer += ml;
+  });
+  const diffLeche = lecheHoy - lecheAyer;
+
+  // 2. Pañales (veces)
+  const panales = Array.isArray(cache.panales) ? cache.panales : [];
+  let panalesHoy = 0;
+  let orinaHoy = 0;
+  let hecesHoy = 0;
+  let panalesAyer = 0;
+  panales.forEach((p) => {
+    if (!p.fecha_hora) return;
+    const k = dKey(new Date(p.fecha_hora));
+    if (k === hoyKey) {
+      panalesHoy++;
+      if (p.orina) orinaHoy++;
+      if (p.heces) hecesHoy++;
+    } else if (k === ayerKey) {
+      panalesAyer++;
+    }
+  });
+  const diffPanales = panalesHoy - panalesAyer;
+
+  // 3. Sueño (minutos y horas)
+  const suenos = Array.isArray(cache.sueno) ? cache.sueno : [];
+  let minsSuenoHoy = 0;
+  let minsSuenoAyer = 0;
+  suenos.forEach((s) => {
+    tramosSuenoPorDia(s).forEach((t) => {
+      if (t.key === hoyKey) minsSuenoHoy += t.mins;
+      else if (t.key === ayerKey) minsSuenoAyer += t.mins;
+    });
+  });
+  minsSuenoHoy = Math.round(minsSuenoHoy);
+  minsSuenoAyer = Math.round(minsSuenoAyer);
+  const diffSueno = minsSuenoHoy - minsSuenoAyer;
+
+  // 4. Vitaminas
+  const vitsSimple = Array.isArray(cache.vitaminas) ? cache.vitaminas : [];
+  const vitsLog = Array.isArray(cache.vitaminas_tipos_log) ? cache.vitaminas_tipos_log : [];
+  const tieneVitSimpleHoy = vitsSimple.some((r) => r.fecha_hora && dKey(new Date(r.fecha_hora)) === hoyKey);
+  const tieneVitLogHoy = vitsLog.some((r) => r.fecha === hoyKey);
+  const vitaminasTomadas = tieneVitSimpleHoy || tieneVitLogHoy;
+
+  let detalleVitaminas = '';
+  if (tieneVitLogHoy) {
+    const tipos = Array.isArray(cache.vitaminas_tipos) ? cache.vitaminas_tipos : [];
+    const logsHoy = vitsLog.filter((r) => r.fecha === hoyKey);
+    const nombres = logsHoy.map((l) => {
+      const tipo = tipos.find((t) => t.id === l.vitamina_id);
+      return tipo?.nombre || 'Vitamina';
+    });
+    if (nombres.length > 0) detalleVitaminas = ` (${nombres.join(', ')})`;
+  } else if (tieneVitSimpleHoy) {
+    const vHoy = vitsSimple.find((r) => r.fecha_hora && dKey(new Date(r.fecha_hora)) === hoyKey);
+    if (vHoy?.gotas) detalleVitaminas = ` (${vHoy.gotas} gotas)`;
+  }
+
+  // Comparativas exactas en lenguaje natural
+  let compLeche = '';
+  if (diffLeche > 0) {
+    compLeche = `🍼 Hoy tomó ${diffLeche} ml más que ayer`;
+  } else if (diffLeche < 0) {
+    compLeche = `🍼 Hoy tomó ${Math.abs(diffLeche)} ml menos que ayer`;
+  } else {
+    compLeche = `🍼 Hoy tomó la misma cantidad de leche que ayer (${lecheHoy} ml)`;
+  }
+
+  let compSueno = '';
+  if (diffSueno > 0) {
+    compSueno = `😴 Hoy durmió ${fmtMinutos(diffSueno)} más que ayer`;
+  } else if (diffSueno < 0) {
+    compSueno = `😴 Hoy durmió ${fmtMinutos(Math.abs(diffSueno))} menos que ayer`;
+  } else {
+    compSueno = `😴 Hoy durmió la misma cantidad de tiempo que ayer (${fmtMinutos(minsSuenoHoy)})`;
+  }
+
+  let compPanales = '';
+  const palPanalMas = diffPanales === 1 ? 'pañal más' : 'pañales más';
+  const palPanalMenos = Math.abs(diffPanales) === 1 ? 'pañal menos' : 'pañales menos';
+  if (diffPanales > 0) {
+    compPanales = `🧷 Hoy usó ${diffPanales} ${palPanalMas} que ayer`;
+  } else if (diffPanales < 0) {
+    compPanales = `🧷 Hoy usó ${Math.abs(diffPanales)} ${palPanalMenos} que ayer`;
+  } else {
+    compPanales = `🧷 Hoy usó la misma cantidad de pañales que ayer (${panalesHoy})`;
+  }
+
+  const opcionesFecha = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+  let fechaLegible = refDate.toLocaleDateString('es-CL', opcionesFecha);
+  fechaLegible = fechaLegible.charAt(0).toUpperCase() + fechaLegible.slice(1);
+
+  return {
+    hoyKey,
+    ayerKey,
+    fechaLegible,
+    lecheHoy,
+    lecheAyer,
+    diffLeche,
+    panalesHoy,
+    orinaHoy,
+    hecesHoy,
+    panalesAyer,
+    diffPanales,
+    minsSuenoHoy,
+    minsSuenoAyer,
+    diffSueno,
+    vitaminasTomadas,
+    detalleVitaminas,
+    compLeche,
+    compSueno,
+    compPanales,
+  };
+}
+
+/**
+ * Construye el mensaje completo del informe diario para WhatsApp.
+ */
+function construirMensajeInformeDiario(datos, contexto = {}) {
+  const bebeNombre = contexto.bebe?.nombre || 'Bebé';
+  const vitsTexto = datos.vitaminasTomadas
+    ? `Tomadas ✓${datos.detalleVitaminas}`
+    : 'No administradas ⚠️';
+
+  let desglosePanal = '';
+  if (datos.panalesHoy > 0) {
+    const partes = [];
+    if (datos.orinaHoy > 0) partes.push(`${datos.orinaHoy} pipí`);
+    if (datos.hecesHoy > 0) partes.push(`${datos.hecesHoy} caca`);
+    if (partes.length > 0) desglosePanal = ` (${partes.join(', ')})`;
+  }
+
+  const palVeces = datos.panalesHoy === 1 ? 'vez' : 'veces';
+
+  return `📊 *Informe Diario NebuApp*\n` +
+         `👶 *Bebé:* ${bebeNombre}\n` +
+         `📅 *Fecha:* ${datos.fechaLegible} (23:00 hrs)\n\n` +
+         `🍼 *Consumo de leche:* ${datos.lecheHoy} ml\n` +
+         `🧷 *Cambios de pañal:* ${datos.panalesHoy} ${palVeces}${desglosePanal}\n` +
+         `😴 *Horas de sueño:* ${fmtMinutos(datos.minsSuenoHoy)}\n` +
+         `💊 *Vitaminas:* ${vitsTexto}\n\n` +
+         `━━━━━━━━━━━━━━━━━━━━\n` +
+         `📈 *Comparativa con el día anterior:*\n` +
+         `${datos.compLeche}\n` +
+         `${datos.compSueno}\n` +
+         `${datos.compPanales}`;
+}
+
+/**
+ * Despacho manual inmediato del informe diario al grupo de WhatsApp.
+ */
+function enviarInformeDiarioManual(cache, contexto = {}) {
+  const now = new Date();
+  const datos = generarDatosInformeDiario(cache, now);
+  enviarNotificacionWhatsApp('informe_diario', datos, contexto);
+  return { ok: true, datos };
+}
+
+/**
  * Construye el texto enriquecido para el mensaje de WhatsApp.
  */
 function construirMensajeWhatsApp(tipo, datos, contexto = {}) {
@@ -477,6 +683,10 @@ function construirMensajeWhatsApp(tipo, datos, contexto = {}) {
              `📢 *Aviso:* Han transcurrido más de 4 horas sin registrar cambio de pañal. Revisa si necesita un cambio para proteger su piel y prevenir irritaciones.${reitNota}`;
     }
 
+    case 'informe_diario': {
+      return construirMensajeInformeDiario(datos, contexto);
+    }
+
     case 'prueba': {
       return `✅ *NebuAppWeb*: Prueba de conexión exitosa con WhatsApp.\n` +
              `🚀 Gateway activo en *rektressserver* vía Evolution API v2.\n` +
@@ -510,6 +720,7 @@ function enviarNotificacionWhatsApp(tipo, datos, contexto = {}) {
   if (tipo === 'alerta_fecas' && !cfg.notifyAlertaFecas) return;
   if (tipo === 'alerta_sueno' && !cfg.notifyAlertaSueno) return;
   if (tipo === 'alerta_panal' && !cfg.notifyAlertaPanal) return;
+  if (tipo === 'informe_diario' && cfg.notifyInformeDiario === false) return;
 
   // Requisito estricto: Las alertas y notificaciones se envían exclusivamente al grupo de WhatsApp y a nadie más
   targets = targets.filter((t) => t.endsWith('@g.us'));
@@ -885,6 +1096,30 @@ function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
     }
   });
 
+  // 6. Despacho automático del Informe Diario a las 23:00 hrs
+  const nowDate = new Date();
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const hoyDayKey = `${nowDate.getFullYear()}-${pad2(nowDate.getMonth() + 1)}-${pad2(nowDate.getDate())}`;
+  const cfg = getWhatsAppConfig(contexto.bebe);
+
+  if (nowDate.getHours() >= 23 && cfg.notifyInformeDiario !== false) {
+    const yaEnviadoLocal = rawLast.informe_diario === hoyDayKey;
+    const yaEnviadoRemoto = cfg.ultimoInformeFecha === hoyDayKey;
+
+    if (!yaEnviadoLocal && !yaEnviadoRemoto) {
+      const datosInforme = generarDatosInformeDiario(cache, nowDate);
+      enviarNotificacionWhatsApp('informe_diario', datosInforme, contexto);
+      rawLast.informe_diario = hoyDayKey;
+      enviadas++;
+
+      // Guardar fecha en config compartida para evitar reenvío duplicado desde el otro padre
+      cfg.ultimoInformeFecha = hoyDayKey;
+      if (contexto.bebe?.id && typeof saveWhatsAppConfig === 'function') {
+        saveWhatsAppConfig(cfg, contexto.bebe.id, contexto.dbClient || window.db);
+      }
+    }
+  }
+
   if (enviadas > 0) {
     try {
       localStorage.setItem('nebu_alert_timestamps', JSON.stringify(rawLast));
@@ -905,6 +1140,10 @@ window.normalizarDestinatarios = normalizarDestinatarios;
 window.enviarNotificacionWhatsApp = enviarNotificacionWhatsApp;
 window.probarConexionWhatsApp = probarConexionWhatsApp;
 window.evaluarAlertasRutina = evaluarAlertasRutina;
+window.generarDatosInformeDiario = generarDatosInformeDiario;
+window.construirMensajeInformeDiario = construirMensajeInformeDiario;
+window.enviarInformeDiarioManual = enviarInformeDiarioManual;
 window.verificarYDespacharAlertasWhatsApp = verificarYDespacharAlertasWhatsApp;
 window.ALERT_COOLDOWNS = ALERT_COOLDOWNS;
 window.NEBU_GROUP_JID = NEBU_GROUP_JID;
+
