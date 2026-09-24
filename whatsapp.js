@@ -423,45 +423,65 @@ function construirMensajeWhatsApp(tipo, datos, contexto = {}) {
     case 'alerta_hambre': {
       const { hora } = fmtFechaHora(datos.ultimaFecha);
       const tiempoTxt = fmtMinutos(datos.minutosTranscurridos || 150);
-      return `⚠️ *Alerta de Rutina: Hora de Comer*\n` +
+      const reitHeader = datos.reiteracion && datos.reiteracion > 1 ? ` (Recordatorio #${datos.reiteracion})` : '';
+      const reitNota = datos.reiteracion && datos.reiteracion > 1
+        ? `\n⏰ *Recordatorio:* Han pasado más de 15 minutos desde el aviso anterior y aún no se registra la toma de leche.`
+        : '';
+      return `⚠️ *Alerta de Rutina: Hora de Comer*${reitHeader}\n` +
              `👶 *Bebé:* ${bebeNombre}\n` +
-             `🍼 *Última toma:* hace ${tiempoTxt} (a las ${hora})\n` +
-             `📢 *Aviso:* Han transcurrido más de 2:30 horas desde su última toma de leche.`;
+             `🍼 *Última toma:* hace ${tiempoTxt}${hora ? ` (a las ${hora})` : ''}\n` +
+             `📢 *Aviso:* Han transcurrido más de 2:30 horas desde su última toma de leche.${reitNota}`;
     }
 
     case 'alerta_vitaminas': {
-      return `⚠️ *Alerta de Rutina: Vitaminas Pendientes*\n` +
+      const reitHeader = datos.reiteracion && datos.reiteracion > 1 ? ` (Recordatorio #${datos.reiteracion})` : '';
+      const reitNota = datos.reiteracion && datos.reiteracion > 1
+        ? `\n⏰ *Recordatorio:* Han pasado más de 15 minutos desde el aviso anterior y aún no se marcan sus vitaminas.`
+        : '';
+      return `⚠️ *Alerta de Rutina: Vitaminas Pendientes*${reitHeader}\n` +
              `👶 *Bebé:* ${bebeNombre}\n` +
              `💊 *Estado:* Aún no se han administrado sus vitaminas de hoy.\n` +
              `⏰ *Hora actual:* ${datos.horaActual || 'Pasadas las 19:00 hrs'}\n` +
-             `📢 *Recordatorio:* Recuerda suministrar y marcar sus vitaminas diarias.`;
+             `📢 *Recordatorio:* Recuerda suministrar y marcar sus vitaminas diarias.${reitNota}`;
     }
 
     case 'alerta_fecas': {
       const { fecha } = fmtFechaHora(datos.ultimaFecha);
       const dias = datos.diasTranscurridos || 3;
-      return `🚨 *Alerta Pediátrica: Pañal sin Deposición*\n` +
+      const reitHeader = datos.reiteracion && datos.reiteracion > 1 ? ` (Recordatorio #${datos.reiteracion})` : '';
+      const reitNota = datos.reiteracion && datos.reiteracion > 1
+        ? `\n⏰ *Recordatorio:* Han pasado más de 15 minutos desde el aviso previo y sigue sin registrarse deposición.`
+        : '';
+      return `🚨 *Alerta Pediátrica: Pañal sin Deposición*${reitHeader}\n` +
              `👶 *Bebé:* ${bebeNombre}\n` +
              `💩 *Última deposición:* hace ${dias} días (${fecha})\n` +
-             `📢 *Atención:* Han transcurrido más de 3 días sin registrar deposición. Considera evaluar masajes en su pancita o consultar con su pediatra.`;
+             `📢 *Atención:* Han transcurrido más de 3 días sin registrar deposición. Considera evaluar masajes en su pancita o consultar con su pediatra.${reitNota}`;
     }
 
     case 'alerta_sueno': {
       const { hora } = fmtFechaHora(datos.despertarFecha);
       const tiempoTxt = fmtMinutos(datos.minutosDespierto || 100);
-      return `⚠️ *Alerta de Rutina: Ventana de Sueño Superada*\n` +
+      const reitHeader = datos.reiteracion && datos.reiteracion > 1 ? ` (Recordatorio #${datos.reiteracion})` : '';
+      const reitNota = datos.reiteracion && datos.reiteracion > 1
+        ? `\n⏰ *Recordatorio:* Han pasado más de 15 minutos desde el aviso previo y el bebé aún no inicia su siesta.`
+        : '';
+      return `⚠️ *Alerta de Rutina: Ventana de Sueño Superada*${reitHeader}\n` +
              `👶 *Bebé:* ${bebeNombre}\n` +
              `☀️ *Despierto desde:* hace ${tiempoTxt} (despertó a las ${hora})\n` +
-             `📢 *Aviso:* Lleva más de 1:40 horas despierto. Es probable que esté sobrecansado y necesite iniciar su siesta.`;
+             `📢 *Aviso:* Lleva más de 1:40 horas despierto. Es probable que esté sobrecansado y necesite iniciar su siesta.${reitNota}`;
     }
 
     case 'alerta_panal': {
       const { hora } = fmtFechaHora(datos.ultimaFecha);
       const tiempoTxt = fmtMinutos(datos.minutosTranscurridos || 240);
-      return `🧷 *Alerta de Rutina: Cambio de Pañal Necesario*\n` +
+      const reitHeader = datos.reiteracion && datos.reiteracion > 1 ? ` (Recordatorio #${datos.reiteracion})` : '';
+      const reitNota = datos.reiteracion && datos.reiteracion > 1
+        ? `\n⏰ *Recordatorio:* Han pasado más de 15 minutos desde el aviso previo y sigue sin registrarse el cambio de pañal.`
+        : '';
+      return `🧷 *Alerta de Rutina: Cambio de Pañal Necesario*${reitHeader}\n` +
              `👶 *Bebé:* ${bebeNombre}\n` +
              `⏰ *Último cambio:* hace ${tiempoTxt}${hora ? ` (a las ${hora})` : ''}\n` +
-             `📢 *Aviso:* Han transcurrido más de 4 horas sin registrar cambio de pañal. Revisa si necesita un cambio para proteger su piel y prevenir irritaciones.`;
+             `📢 *Aviso:* Han transcurrido más de 4 horas sin registrar cambio de pañal. Revisa si necesita un cambio para proteger su piel y prevenir irritaciones.${reitNota}`;
     }
 
     case 'prueba': {
@@ -613,17 +633,17 @@ async function probarConexionWhatsApp(targetCustom = null, configCustom = null) 
 }
 
 /**
- * Cooldown para evitar saturación de mensajes:
-/**
- * Cooldown para evitar saturación de mensajes:
- * hambre: 2.5h (150m) | vitaminas: 12h (720m) | fecas: 24h (1440m) | sueno: 1h 40m (100m)
+ * Intervalo de reiteración de alertas no resueltas:
+ * Cada alerta activa se reitera cada 15 minutos (900.000 ms) hasta que los padres registren la gestión en la app.
  */
+const ALERT_RETRY_INTERVAL_MS = 15 * 60 * 1000;
+
 const ALERT_COOLDOWNS = {
-  alerta_hambre: 150 * 60 * 1000,
-  alerta_vitaminas: 720 * 60 * 1000,
-  alerta_fecas: 1440 * 60 * 1000,
-  alerta_sueno: 100 * 60 * 1000,
-  alerta_panal: 120 * 60 * 1000,
+  alerta_hambre: ALERT_RETRY_INTERVAL_MS,
+  alerta_vitaminas: ALERT_RETRY_INTERVAL_MS,
+  alerta_fecas: ALERT_RETRY_INTERVAL_MS,
+  alerta_sueno: ALERT_RETRY_INTERVAL_MS,
+  alerta_panal: ALERT_RETRY_INTERVAL_MS,
 };
 
 /**
@@ -784,69 +804,76 @@ function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
   const now = Date.now();
   let enviadas = 0;
 
-  // 1. Hambre
-  if (alertas.hambre.activa) {
-    const ultimo = rawLast.alerta_hambre || 0;
-    if (now - ultimo > ALERT_COOLDOWNS.alerta_hambre) {
-      enviarNotificacionWhatsApp('alerta_hambre', {
+  // Configuración de las 5 reglas proactivas
+  const reglas = [
+    {
+      key: 'alerta_hambre',
+      activa: alertas.hambre.activa,
+      datos: () => ({
         minutosTranscurridos: alertas.hambre.minsTranscurridos,
         ultimaFecha: alertas.hambre.ultimaFecha,
-      }, contexto);
-      rawLast.alerta_hambre = now;
-      enviadas++;
-    }
-  }
-
-  // 2. Vitaminas
-  if (alertas.vitaminas.activa) {
-    const ultimo = rawLast.alerta_vitaminas || 0;
-    if (now - ultimo > ALERT_COOLDOWNS.alerta_vitaminas) {
-      enviarNotificacionWhatsApp('alerta_vitaminas', {
+      }),
+    },
+    {
+      key: 'alerta_vitaminas',
+      activa: alertas.vitaminas.activa,
+      datos: () => ({
         horaActual: alertas.vitaminas.horaActual,
-      }, contexto);
-      rawLast.alerta_vitaminas = now;
-      enviadas++;
-    }
-  }
-
-  // 3. Fecas
-  if (alertas.fecas.activa) {
-    const ultimo = rawLast.alerta_fecas || 0;
-    if (now - ultimo > ALERT_COOLDOWNS.alerta_fecas) {
-      enviarNotificacionWhatsApp('alerta_fecas', {
+      }),
+    },
+    {
+      key: 'alerta_fecas',
+      activa: alertas.fecas.activa,
+      datos: () => ({
         diasTranscurridos: alertas.fecas.diasTranscurridos,
         ultimaFecha: alertas.fecas.ultimaFecha,
-      }, contexto);
-      rawLast.alerta_fecas = now;
-      enviadas++;
-    }
-  }
-
-  // 4. Sueño
-  if (alertas.sueno.activa) {
-    const ultimo = rawLast.alerta_sueno || 0;
-    if (now - ultimo > ALERT_COOLDOWNS.alerta_sueno) {
-      enviarNotificacionWhatsApp('alerta_sueno', {
+      }),
+    },
+    {
+      key: 'alerta_sueno',
+      activa: alertas.sueno.activa,
+      datos: () => ({
         minutosDespierto: alertas.sueno.minsDespierto,
         despertarFecha: alertas.sueno.despertarFecha,
-      }, contexto);
-      rawLast.alerta_sueno = now;
-      enviadas++;
-    }
-  }
-
-  // 5. Pañal (> 4 horas sin cambio)
-  if (alertas.panal.activa) {
-    const ultimo = rawLast.alerta_panal || 0;
-    if (now - ultimo > ALERT_COOLDOWNS.alerta_panal) {
-      enviarNotificacionWhatsApp('alerta_panal', {
+      }),
+    },
+    {
+      key: 'alerta_panal',
+      activa: alertas.panal.activa,
+      datos: () => ({
         minutosTranscurridos: alertas.panal.minsTranscurridos,
         ultimaFecha: alertas.panal.ultimaFecha,
-      }, contexto);
-      rawLast.alerta_panal = now;
-      enviadas++;
+      }),
+    },
+  ];
+
+  reglas.forEach(({ key, activa, datos }) => {
+    if (activa) {
+      const ultimo = rawLast[key] || 0;
+      const count = rawLast[`${key}_count`] || 0;
+      const cooldown = ALERT_COOLDOWNS[key] || ALERT_RETRY_INTERVAL_MS;
+
+      // Se envía de inmediato la primera vez que se activa, o cada 15 minutos exactos mientras siga sin gestionarse
+      if (!ultimo || (now - ultimo >= cooldown)) {
+        const nuevaReiteracion = count + 1;
+        enviarNotificacionWhatsApp(key, {
+          ...datos(),
+          reiteracion: nuevaReiteracion,
+        }, contexto);
+        rawLast[key] = now;
+        rawLast[`${key}_count`] = nuevaReiteracion;
+        enviadas++;
+      }
+    } else {
+      // Cuando la alerta ya no está activa (se registró toma, pañal, vitamina, siesta),
+      // se reinicia el contador y marca temporal para que la próxima alerta inicie desde cero inmediatamente
+      if (rawLast[key] || rawLast[`${key}_count`]) {
+        delete rawLast[key];
+        delete rawLast[`${key}_count`];
+        enviadas++;
+      }
     }
-  }
+  });
 
   if (enviadas > 0) {
     try {

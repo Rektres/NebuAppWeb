@@ -2347,6 +2347,7 @@ $('cfgWspTestBtn')?.addEventListener('click', async () => {
 // ---------- Recarga de Datos y Auto-Refresh ----------
 let lastRefreshTime = Date.now();
 let autoRefreshTimer = null;
+let alertCheckInterval = null;
 let bgWorker = null;
 let realtimeChannel = null;
 
@@ -2374,14 +2375,23 @@ function iniciarAutoRefresh() {
   detenerAutoRefresh();
   lastRefreshTime = Date.now();
 
-  // 1. Temporizador estándar cada 15 minutos (900.000 ms) incondicional
+  // 1. Supervisión continua de alertas cada 60 segundos (evalúa umbrales y dispara reiteraciones cada 15 min exactos)
+  alertCheckInterval = setInterval(() => {
+    if (appStarted && bebe?.id) {
+      if (typeof actualizarAlertasYBadge === 'function') {
+        actualizarAlertasYBadge();
+      }
+    }
+  }, 60 * 1000);
+
+  // 2. Temporizador estándar cada 15 minutos (900.000 ms) incondicional para sincronización remota completa
   autoRefreshTimer = setInterval(() => {
     if (appStarted && bebe?.id) {
       recargarDatos(false);
     }
   }, 15 * 60 * 1000);
 
-  // 2. Web Worker Heartbeat en segundo plano (para evitar que el navegador suspenda el temporizador al cambiar de pestaña/pantalla)
+  // 3. Web Worker Heartbeat en segundo plano (para evitar que el navegador suspenda el temporizador al cambiar de pestaña/pantalla)
   try {
     const workerBlob = new Blob([
       `setInterval(function() { postMessage('tick'); }, 15 * 60 * 1000);`
@@ -2396,7 +2406,7 @@ function iniciarAutoRefresh() {
     console.warn('Web Worker en segundo plano no disponible:', e);
   }
 
-  // 3. Suscripción Supabase Realtime para sincronización instantánea adicional
+  // 4. Suscripción Supabase Realtime para sincronización instantánea adicional
   try {
     if (bebe?.id) {
       realtimeChannel = db
@@ -2412,6 +2422,10 @@ function iniciarAutoRefresh() {
 }
 
 function detenerAutoRefresh() {
+  if (alertCheckInterval) {
+    clearInterval(alertCheckInterval);
+    alertCheckInterval = null;
+  }
   if (autoRefreshTimer) {
     clearInterval(autoRefreshTimer);
     autoRefreshTimer = null;
@@ -2426,9 +2440,12 @@ function detenerAutoRefresh() {
   }
 }
 
-// Al regresar a la pestaña o desbloquear pantalla si han transcurrido 15 minutos o más
+// Al regresar a la pestaña o desbloquear pantalla
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && appStarted && bebe?.id) {
+    if (typeof actualizarAlertasYBadge === 'function') {
+      actualizarAlertasYBadge();
+    }
     if (Date.now() - lastRefreshTime >= 15 * 60 * 1000) {
       recargarDatos(false);
     }
