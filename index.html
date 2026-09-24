@@ -245,9 +245,9 @@
           <div class="card" id="cardAlertaHambre" style="border-left:5px solid #199e70; transition:border-color 0.3s ease;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start;">
               <div>
-                <h3 style="margin:0 0 4px 0; font-size:0.95rem; font-weight:800;">🍼 Alimentación (Máx 2:30 horas)</h3>
+                <h3 style="margin:0 0 4px 0; font-size:0.95rem; font-weight:800;">🍼 Alimentación (Despierto > 2:30h / Durmiendo > 8h)</h3>
                 <p id="txtAlertaHambre" style="font-size:0.82rem; color:var(--text); margin:0 0 4px 0;">Calculando tiempo desde última toma…</p>
-                <span id="subAlertaHambre" style="font-size:0.75rem; color:var(--muted);">Regla: alertar si pasan más de 2:30 horas sin leche.</span>
+                <span id="subAlertaHambre" style="font-size:0.75rem; color:var(--muted);">Regla: alertar si pasan más de 2:30h despierto o más de 8h si está durmiendo.</span>
               </div>
               <span id="badgeAlertaHambre" style="font-size:0.75rem; font-weight:700; padding:3px 8px; border-radius:8px; background:rgba(25, 158, 112, 0.15); color:#199e70;">Normal</span>
             </div>
@@ -863,7 +863,7 @@
 
         <div class="field-label">Alertas proactivas automáticas
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-            <label class="check-pill" style="padding:8px 10px; font-size:0.8rem;"><input type="checkbox" id="cfgWspAlertHambre" checked> ⚠️ >2:30h sin comer</label>
+            <label class="check-pill" style="padding:8px 10px; font-size:0.8rem;"><input type="checkbox" id="cfgWspAlertHambre" checked> ⚠️ >2:30h / >8h durmiendo</label>
             <label class="check-pill" style="padding:8px 10px; font-size:0.8rem;"><input type="checkbox" id="cfgWspAlertVits" checked> ⚠️ >19h s/vitamina</label>
             <label class="check-pill" style="padding:8px 10px; font-size:0.8rem;"><input type="checkbox" id="cfgWspAlertFecas" checked> 🚨 >3d sin feca</label>
             <label class="check-pill" style="padding:8px 10px; font-size:0.8rem;"><input type="checkbox" id="cfgWspAlertSueno" checked> ⚠️ >1:40h despierto</label>
@@ -931,8 +931,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
-  <script src="config.js?v=2.5.7"></script>
-  <script src="whatsapp.js?v=2.5.7"></script>
-  <script src="app.js?v=2.5.7"></script>
+  <script src="config.js?v=2.5.8"></script>
+  <script src="whatsapp.js?v=2.5.8"></script>
+  <script src="app.js?v=2.5.8"></script>
 </body>
 </html>

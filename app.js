@@ -1267,9 +1267,14 @@ function renderAlertas() {
     txtHambre.textContent = res.hambre.mensaje;
     if (res.hambre.activa) {
       cardHambre.style.borderLeftColor = '#ef4444';
-      badgeHambre.textContent = '⚠️ Alerta';
+      badgeHambre.textContent = res.hambre.durmiendo ? '⚠️ >8h Durmiendo' : '⚠️ Alerta';
       badgeHambre.style.background = 'rgba(239, 68, 68, 0.2)';
       badgeHambre.style.color = '#ef4444';
+    } else if (res.hambre.durmiendo) {
+      cardHambre.style.borderLeftColor = '#9085e9';
+      badgeHambre.textContent = 'Durmiendo 💤';
+      badgeHambre.style.background = 'rgba(144, 133, 233, 0.15)';
+      badgeHambre.style.color = '#9085e9';
     } else {
       cardHambre.style.borderLeftColor = '#199e70';
       badgeHambre.textContent = 'Normal';

@@ -629,11 +629,20 @@ function construirMensajeWhatsApp(tipo, datos, contexto = {}) {
 
     case 'alerta_hambre': {
       const { hora } = fmtFechaHora(datos.ultimaFecha);
-      const tiempoTxt = fmtMinutos(datos.minutosTranscurridos || 150);
+      const tiempoTxt = fmtMinutos(datos.minutosTranscurridos || (datos.durmiendo ? 480 : 150));
       const reitHeader = datos.reiteracion && datos.reiteracion > 1 ? ` (Recordatorio #${datos.reiteracion})` : '';
       const reitNota = datos.reiteracion && datos.reiteracion > 1
         ? `\n⏰ *Recordatorio:* Han pasado más de 15 minutos desde el aviso anterior y aún no se registra la toma de leche.`
         : '';
+
+      if (datos.durmiendo) {
+        return `⚠️ *Alerta de Rutina: Hora de Comer (Bebé Durmiendo)*${reitHeader}\n` +
+               `👶 *Bebé:* ${bebeNombre}\n` +
+               `🍼 *Última toma:* hace ${tiempoTxt}${hora ? ` (a las ${hora})` : ''}\n` +
+               `💤 *Estado:* El bebé está durmiendo.\n` +
+               `📢 *Aviso:* Han transcurrido más de 8 horas desde su última toma de leche. Evalúa si es necesario despertarlo suavemente para alimentarlo.${reitNota}`;
+      }
+
       return `⚠️ *Alerta de Rutina: Hora de Comer*${reitHeader}\n` +
              `👶 *Bebé:* ${bebeNombre}\n` +
              `🍼 *Última toma:* hace ${tiempoTxt}${hora ? ` (a las ${hora})` : ''}\n` +
@@ -851,7 +860,9 @@ const ALERT_COOLDOWNS = {
 
 /**
  * Evalúa las 5 reglas proactivas de rutina pediátrica a partir del estado actual de datos en caché:
- * 1. Toma de leche: más de 2:30 horas sin comer (>150 min).
+ * 1. Toma de leche:
+ *    - Si el bebé está durmiendo: alertar si no ha comido por más de 8 horas (>480 min).
+ *    - Si está despierto: alertar si no ha comido por más de 2:30 horas (>150 min).
  * 2. Vitaminas diarias: pasadas las 19:00 hrs sin vitaminas registradas hoy.
  * 3. Fecas: más de 3 días (72 hrs) sin registrar deposiciones.
  * 4. Sueño: más de 1:40 horas despierto (>100 min).
@@ -860,7 +871,7 @@ const ALERT_COOLDOWNS = {
 function evaluarAlertasRutina(cache = {}) {
   const now = new Date();
   const res = {
-    hambre: { activa: false, minsTranscurridos: 0, ultimaFecha: null, mensaje: 'Al día' },
+    hambre: { activa: false, durmiendo: false, minsTranscurridos: 0, ultimaFecha: null, mensaje: 'Al día' },
     vitaminas: { activa: false, tomadaHoy: false, horaActual: '', mensaje: 'Al día' },
     fecas: { activa: false, diasTranscurridos: 0, ultimaFecha: null, mensaje: 'Normal' },
     sueno: { activa: false, durmiendo: false, minsDespierto: 0, despertarFecha: null, mensaje: 'Normal' },
@@ -868,7 +879,14 @@ function evaluarAlertasRutina(cache = {}) {
     conteoActivas: 0,
   };
 
-  // 1. Alimentación (más de 2:30 horas sin comer = 150 min)
+  // Detección previa de estado de sueño (activo vs despierto)
+  const suenos = Array.isArray(cache.sueno) ? cache.sueno : [];
+  const siestaActiva = suenos.find((s) => !s.fin);
+  const estaDurmiendo = Boolean(siestaActiva);
+  res.sueno.durmiendo = estaDurmiendo;
+  res.hambre.durmiendo = estaDurmiendo;
+
+  // 1. Alimentación (Durmiendo: > 8 hrs = 480 min / Despierto: > 2:30 hrs = 150 min)
   const tomas = Array.isArray(cache.tomas) ? cache.tomas : [];
   if (tomas.length > 0) {
     const tomasOrdenadas = [...tomas].sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora));
@@ -877,11 +895,25 @@ function evaluarAlertasRutina(cache = {}) {
     const mins = Math.max(0, Math.floor(diffMs / 60000));
     res.hambre.minsTranscurridos = mins;
     res.hambre.ultimaFecha = ultimaToma.fecha_hora;
-    if (mins >= 150) {
-      res.hambre.activa = true;
-      res.hambre.mensaje = `Lleva ${fmtMinutos(mins)} sin comer (> 2:30 hrs)`;
+
+    if (estaDurmiendo) {
+      // Caso 1: Bebé durmiendo -> alertar solo si lleva más de 8 horas sin comer (>480 min)
+      if (mins >= 480) {
+        res.hambre.activa = true;
+        res.hambre.mensaje = `Durmiendo: lleva ${fmtMinutos(mins)} sin comer (> 8 hrs)`;
+      } else {
+        res.hambre.activa = false;
+        res.hambre.mensaje = `Durmiendo 💤 (${fmtMinutos(mins)} sin comer, máx 8 hrs)`;
+      }
     } else {
-      res.hambre.mensaje = `Última toma hace ${fmtMinutos(mins)}`;
+      // Caso 2: Bebé despierto -> alertar si lleva más de 2:30 horas sin comer (>150 min)
+      if (mins >= 150) {
+        res.hambre.activa = true;
+        res.hambre.mensaje = `Lleva ${fmtMinutos(mins)} sin comer (> 2:30 hrs)`;
+      } else {
+        res.hambre.activa = false;
+        res.hambre.mensaje = `Última toma hace ${fmtMinutos(mins)}`;
+      }
     }
   } else {
     res.hambre.mensaje = 'Sin tomas registradas';
@@ -942,8 +974,6 @@ function evaluarAlertasRutina(cache = {}) {
   }
 
   // 4. Sueño (más de 1:40 horas despierto = 100 min)
-  const suenos = Array.isArray(cache.sueno) ? cache.sueno : [];
-  const siestaActiva = suenos.find((s) => !s.fin);
   if (siestaActiva) {
     res.sueno.durmiendo = true;
     res.sueno.activa = false;
@@ -1016,6 +1046,7 @@ function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
       datos: () => ({
         minutosTranscurridos: alertas.hambre.minsTranscurridos,
         ultimaFecha: alertas.hambre.ultimaFecha,
+        durmiendo: alertas.hambre.durmiendo,
       }),
     },
     {
