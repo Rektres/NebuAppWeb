@@ -20,6 +20,7 @@ const DEFAULT_WSP_CONFIG = {
   notifyAlertaVitaminas: true,
   notifyAlertaFecas: true,
   notifyAlertaSueno: true,
+  notifyAlertaPanal: true,
 };
 
 /**
@@ -34,6 +35,18 @@ function getWhatsAppConfig(bebe = null) {
     if (raw) localCfg = JSON.parse(raw);
   } catch (e) {
     console.warn('Error leyendo configuración local de WhatsApp:', e);
+  }
+
+  // Migración automática de almacenamiento local previo con teléfonos heredados:
+  // Si localCfg contiene los números personales antiguos precargados, limpiarlos para que quede exclusivamente el grupo
+  if (localCfg.target && (localCfg.target.includes('56944830378') || localCfg.target.includes('56950192577'))) {
+    const limpios = typeof normalizarDestinatarios === 'function'
+      ? normalizarDestinatarios(localCfg.target).filter(t => t.endsWith('@g.us'))
+      : [NEBU_GROUP_JID];
+    localCfg.target = limpios.length > 0 ? limpios.join(', ') : NEBU_GROUP_JID;
+    try {
+      localStorage.setItem('nebu_wsp_config', JSON.stringify({ ...localCfg }));
+    } catch {}
   }
 
   let bebeCfg = {};
@@ -442,6 +455,15 @@ function construirMensajeWhatsApp(tipo, datos, contexto = {}) {
              `📢 *Aviso:* Lleva más de 1:40 horas despierto. Es probable que esté sobrecansado y necesite iniciar su siesta.`;
     }
 
+    case 'alerta_panal': {
+      const { hora } = fmtFechaHora(datos.ultimaFecha);
+      const tiempoTxt = fmtMinutos(datos.minutosTranscurridos || 240);
+      return `🧷 *Alerta de Rutina: Cambio de Pañal Necesario*\n` +
+             `👶 *Bebé:* ${bebeNombre}\n` +
+             `⏰ *Último cambio:* hace ${tiempoTxt}${hora ? ` (a las ${hora})` : ''}\n` +
+             `📢 *Aviso:* Han transcurrido más de 4 horas sin registrar cambio de pañal. Revisa si necesita un cambio para proteger su piel y prevenir irritaciones.`;
+    }
+
     case 'prueba': {
       return `✅ *NebuAppWeb*: Prueba de conexión exitosa con WhatsApp.\n` +
              `🚀 Gateway activo en *rektressserver* vía Evolution API v2.\n` +
@@ -462,7 +484,7 @@ function enviarNotificacionWhatsApp(tipo, datos, contexto = {}) {
   const cfg = getWhatsAppConfig(contexto.bebe);
   if (!cfg.enabled) return;
 
-  const targets = normalizarDestinatarios(cfg.target);
+  let targets = normalizarDestinatarios(cfg.target);
   if (targets.length === 0) return;
 
   // Filtrado de eventos según preferencias
@@ -474,6 +496,15 @@ function enviarNotificacionWhatsApp(tipo, datos, contexto = {}) {
   if (tipo === 'alerta_vitaminas' && !cfg.notifyAlertaVitaminas) return;
   if (tipo === 'alerta_fecas' && !cfg.notifyAlertaFecas) return;
   if (tipo === 'alerta_sueno' && !cfg.notifyAlertaSueno) return;
+  if (tipo === 'alerta_panal' && !cfg.notifyAlertaPanal) return;
+
+  // Requisito estricto: Las alertas proactivas ('alerta_*') se envían exclusivamente al grupo de WhatsApp y a nadie más
+  if (tipo.startsWith('alerta_')) {
+    targets = targets.filter((t) => t.endsWith('@g.us'));
+    if (targets.length === 0) {
+      targets = [NEBU_GROUP_JID];
+    }
+  }
 
   const mensaje = construirMensajeWhatsApp(tipo, datos, contexto);
   if (!mensaje) return;
@@ -592,14 +623,16 @@ const ALERT_COOLDOWNS = {
   alerta_vitaminas: 720 * 60 * 1000,
   alerta_fecas: 1440 * 60 * 1000,
   alerta_sueno: 100 * 60 * 1000,
+  alerta_panal: 120 * 60 * 1000,
 };
 
 /**
- * Evalúa las 4 reglas proactivas de rutina pediátrica a partir del estado actual de datos en caché:
+ * Evalúa las 5 reglas proactivas de rutina pediátrica a partir del estado actual de datos en caché:
  * 1. Toma de leche: más de 2:30 horas sin comer (>150 min).
  * 2. Vitaminas diarias: pasadas las 19:00 hrs sin vitaminas registradas hoy.
  * 3. Fecas: más de 3 días (72 hrs) sin registrar deposiciones.
  * 4. Sueño: más de 1:40 horas despierto (>100 min).
+ * 5. Cambio de pañal: más de 4 horas sin cambio de pañal (>240 min).
  */
 function evaluarAlertasRutina(cache = {}) {
   const now = new Date();
@@ -608,6 +641,7 @@ function evaluarAlertasRutina(cache = {}) {
     vitaminas: { activa: false, tomadaHoy: false, horaActual: '', mensaje: 'Al día' },
     fecas: { activa: false, diasTranscurridos: 0, ultimaFecha: null, mensaje: 'Normal' },
     sueno: { activa: false, durmiendo: false, minsDespierto: 0, despertarFecha: null, mensaje: 'Normal' },
+    panal: { activa: false, minsTranscurridos: 0, ultimaFecha: null, mensaje: 'Normal' },
     conteoActivas: 0,
   };
 
@@ -710,10 +744,29 @@ function evaluarAlertasRutina(cache = {}) {
     }
   }
 
+  // 5. Cambio de pañal (más de 4 horas sin cambio = 240 min)
+  if (panales.length > 0) {
+    const panalesOrdenados = [...panales].sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora));
+    const ultimoPanal = panalesOrdenados[0];
+    const diffMs = now - new Date(ultimoPanal.fecha_hora);
+    const minsPanal = Math.max(0, Math.floor(diffMs / 60000));
+    res.panal.minsTranscurridos = minsPanal;
+    res.panal.ultimaFecha = ultimoPanal.fecha_hora;
+    if (minsPanal >= 240) {
+      res.panal.activa = true;
+      res.panal.mensaje = `Lleva ${fmtMinutos(minsPanal)} sin cambio de pañal (> 4 hrs)`;
+    } else {
+      res.panal.mensaje = `Último cambio hace ${fmtMinutos(minsPanal)}`;
+    }
+  } else {
+    res.panal.mensaje = 'Sin cambios de pañal registrados';
+  }
+
   res.conteoActivas = (res.hambre.activa ? 1 : 0) +
                       (res.vitaminas.activa ? 1 : 0) +
                       (res.fecas.activa ? 1 : 0) +
-                      (res.sueno.activa ? 1 : 0);
+                      (res.sueno.activa ? 1 : 0) +
+                      (res.panal.activa ? 1 : 0);
 
   return res;
 }
@@ -778,6 +831,19 @@ function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
         despertarFecha: alertas.sueno.despertarFecha,
       }, contexto);
       rawLast.alerta_sueno = now;
+      enviadas++;
+    }
+  }
+
+  // 5. Pañal (> 4 horas sin cambio)
+  if (alertas.panal.activa) {
+    const ultimo = rawLast.alerta_panal || 0;
+    if (now - ultimo > ALERT_COOLDOWNS.alerta_panal) {
+      enviarNotificacionWhatsApp('alerta_panal', {
+        minutosTranscurridos: alertas.panal.minsTranscurridos,
+        ultimaFecha: alertas.panal.ultimaFecha,
+      }, contexto);
+      rawLast.alerta_panal = now;
       enviadas++;
     }
   }

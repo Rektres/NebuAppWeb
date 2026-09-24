@@ -1334,6 +1334,25 @@ function renderAlertas() {
       badgeSueno.style.color = '#199e70';
     }
   }
+
+  // 5. Pañal
+  const cardPanal = $('cardAlertaPanal');
+  const txtPanal = $('txtAlertaPanal');
+  const badgePanal = $('badgeAlertaPanal');
+  if (cardPanal && txtPanal && badgePanal) {
+    txtPanal.textContent = res.panal.mensaje;
+    if (res.panal.activa) {
+      cardPanal.style.borderLeftColor = '#ef4444';
+      badgePanal.textContent = '⚠️ Alerta';
+      badgePanal.style.background = 'rgba(239, 68, 68, 0.2)';
+      badgePanal.style.color = '#ef4444';
+    } else {
+      cardPanal.style.borderLeftColor = '#199e70';
+      badgePanal.textContent = 'Normal';
+      badgePanal.style.background = 'rgba(25, 158, 112, 0.15)';
+      badgePanal.style.color = '#199e70';
+    }
+  }
 }
 
 function actualizarAlertasYBadge() {
@@ -1939,6 +1958,7 @@ $('settingsBtn').addEventListener('click', () => {
     if ($('cfgWspAlertVits')) $('cfgWspAlertVits').checked = wspCfg.notifyAlertaVitaminas !== false;
     if ($('cfgWspAlertFecas')) $('cfgWspAlertFecas').checked = wspCfg.notifyAlertaFecas !== false;
     if ($('cfgWspAlertSueno')) $('cfgWspAlertSueno').checked = wspCfg.notifyAlertaSueno !== false;
+    if ($('cfgWspAlertPanal')) $('cfgWspAlertPanal').checked = wspCfg.notifyAlertaPanal !== false;
     $('cfgWspTestResult')?.classList.add('hidden');
     $('cfgWspQrContainer')?.classList.add('hidden');
     $('cfgWspGroupsBox')?.classList.add('hidden');
@@ -2050,6 +2070,7 @@ $('cfgGuardar').addEventListener('click', async () => {
       notifyAlertaVitaminas: $('cfgWspAlertVits') ? $('cfgWspAlertVits').checked : true,
       notifyAlertaFecas: $('cfgWspAlertFecas') ? $('cfgWspAlertFecas').checked : true,
       notifyAlertaSueno: $('cfgWspAlertSueno') ? $('cfgWspAlertSueno').checked : true,
+      notifyAlertaPanal: $('cfgWspAlertPanal') ? $('cfgWspAlertPanal').checked : true,
     };
     patch.whatsapp_config = wspPatch;
     if (typeof saveWhatsAppConfig === 'function') {

@@ -18,5 +18,6 @@ alter table bebes add column if not exists whatsapp_config jsonb default '{
   "notifyAlertaHambre": true,
   "notifyAlertaVitaminas": true,
   "notifyAlertaFecas": true,
-  "notifyAlertaSueno": true
+  "notifyAlertaSueno": true,
+  "notifyAlertaPanal": true
 }'::jsonb;
