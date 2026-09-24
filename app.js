@@ -2242,6 +2242,18 @@ function actualizarPreviewDestinatarios() {
   const chips = $('cfgWspTargetChips');
   if (!input || !preview || !chips) return;
 
+  // Auto-convertir enlaces de grupo pegados directamente
+  if (input.value.includes('chat.whatsapp.com/')) {
+    const match = input.value.match(/chat\.whatsapp\.com\/([a-zA-Z0-9_-]+)/);
+    if (match) {
+      const code = match[1];
+      if (code === 'LWYU1T9wGW72wEwlcfSPDy') {
+        input.value = input.value.replace(/https?:\/\/chat\.whatsapp\.com\/[a-zA-Z0-9_-]+/g, '120363414573336812@g.us');
+        toast('Enlace convertido a grupo "Alertas Nebubu" ✓');
+      }
+    }
+  }
+
   const val = input.value.trim();
   if (!val) {
     preview.classList.add('hidden');
@@ -2262,7 +2274,9 @@ function actualizarPreviewDestinatarios() {
     const chip = document.createElement('span');
     chip.style.cssText = 'background:rgba(25, 158, 112, 0.2); border:1px solid #199e70; color:#199e70; padding:2px 6px; border-radius:6px; font-size:0.72rem; font-weight:600; display:inline-flex; align-items:center; gap:2px;';
     const isGroup = t.includes('@g.us');
-    chip.textContent = isGroup ? `👥 Grupo (${t.split('@')[0].slice(-6)})` : `📱 +${t}`;
+    let label = isGroup ? `👥 Grupo (${t.split('@')[0].slice(-6)})` : `📱 +${t}`;
+    if (t === '120363414573336812@g.us') label = '👥 Alertas Nebubu';
+    chip.textContent = label;
     chips.appendChild(chip);
   });
 }

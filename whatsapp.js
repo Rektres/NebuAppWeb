@@ -9,7 +9,7 @@ const DEFAULT_WSP_CONFIG = {
   apiUrl: 'https://rektressserver.tailda85b3.ts.net:8443',
   apiKey: 'NebuAppWspKey_2026_Secure!',
   instance: 'nebuapp',
-  target: '56944830378, 56950192577',
+  target: '120363414573336812@g.us, 56944830378, 56950192577',
   notifyTomas: true,
   notifyPanales: true,
   notifyVitaminas: true,
@@ -115,7 +115,19 @@ function normalizarDestinatarios(raw) {
     token = token.trim();
     if (!token) continue;
 
-    // 1. JID de grupo de WhatsApp (@g.us) o de usuario (@s.whatsapp.net)
+    // 1. Enlaces de invitación de grupos de WhatsApp (https://chat.whatsapp.com/CODE)
+    if (token.includes('chat.whatsapp.com/')) {
+      const match = token.match(/chat\.whatsapp\.com\/([a-zA-Z0-9_-]+)/);
+      if (match) {
+        const code = match[1];
+        if (code === 'LWYU1T9wGW72wEwlcfSPDy') {
+          result.push('120363414573336812@g.us');
+          continue;
+        }
+      }
+    }
+
+    // 2. JID de grupo de WhatsApp (@g.us) o de usuario (@s.whatsapp.net)
     if (token.includes('@g.us') || token.includes('@s.whatsapp.net')) {
       const match = token.match(/([a-zA-Z0-9.\-_]+@(g\.us|s\.whatsapp\.net))/);
       if (match) result.push(match[1]);
