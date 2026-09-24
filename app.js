@@ -2055,7 +2055,7 @@ $('cfgGuardar').addEventListener('click', async () => {
   if ($('cfgWspEnabled')) {
     const rawTarget = $('cfgWspTarget').value.trim();
     const parsedTargets = typeof normalizarDestinatarios === 'function'
-      ? normalizarDestinatarios(rawTarget)
+      ? normalizarDestinatarios(rawTarget).filter((t) => t.endsWith('@g.us'))
       : ['120363414573336812@g.us'];
     const target = parsedTargets.length > 0 ? parsedTargets.join(', ') : '120363414573336812@g.us';
 
