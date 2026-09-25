@@ -879,9 +879,14 @@ function evaluarAlertasRutina(cache = {}) {
     conteoActivas: 0,
   };
 
-  // Detección previa de estado de sueño (activo vs despierto)
+  // Detección robusta de siesta activa: ordenamos por inicio descendente y verificamos que no tenga fin
   const suenos = Array.isArray(cache.sueno) ? cache.sueno : [];
-  const siestaActiva = suenos.find((s) => !s.fin);
+  const suenosOrdenados = [...suenos].sort((a, b) => new Date(b.inicio) - new Date(a.inicio));
+  const ultSueno = suenosOrdenados[0] || null;
+  // Solo se considera siesta activa si no tiene fin y se inició hace menos de 24 horas (para evitar sesiones abandonadas)
+  const siestaActiva = (ultSueno && (!ultSueno.fin || ultSueno.fin === '') && (now - new Date(ultSueno.inicio)) < 24 * 3600 * 1000)
+    ? ultSueno
+    : null;
   const estaDurmiendo = Boolean(siestaActiva);
   res.sueno.durmiendo = estaDurmiendo;
   res.hambre.durmiendo = estaDurmiendo;
@@ -1025,139 +1030,251 @@ function evaluarAlertasRutina(cache = {}) {
 }
 
 /**
- * Supervisa las alertas y despacha a WhatsApp respetando el cooldown anti-spam.
+ * Fusiona registros remotos de Supabase con los existentes en memoria evitando duplicados
+ * y ordenando cronológicamente de forma descendente.
  */
-function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
-  const alertas = evaluarAlertasRutina(cache);
-  let rawLast = {};
+function fusionarRegistros(existentes = [], nuevos = [], colFecha = 'fecha_hora') {
+  const map = new Map();
+  (nuevos || []).forEach((r) => { if (r && r.id != null) map.set(r.id, r); });
+  (existentes || []).forEach((r) => { if (r && r.id != null && !map.has(r.id)) map.set(r.id, r); });
+  return Array.from(map.values()).sort((a, b) => new Date(b[colFecha]) - new Date(a[colFecha]));
+}
+
+let isDispatchingAlerts = false;
+
+/**
+ * Supervisa las alertas y despacha a WhatsApp de forma 100% coordinada y fiable:
+ * 1. Pre-flight sync con Supabase: consulta remota ligera en paralelo para verificar el estado REAL
+ *    (evita falsas alertas por cachés locales obsoletas entre ambos padres).
+ * 2. Validación de reglas contra estado remoto verificado:
+ *    - Si duerme: alerta de hambre solo si > 8h (>480 min). Si < 8h, jamás alerta.
+ *    - Si despierto: alerta de hambre solo si > 2:30h (>150 min).
+ *    - Si pañal cambiado < 4h: jamás alerta.
+ * 3. Cooldown compartido y descentralizado en Supabase (bebes.whatsapp_config.alert_state):
+ *    - Elimina duplicaciones entre el teléfono de mamá y papá.
+ *    - Respeta la regla de NO reiteración para sueño y deposiciones (envío único por evento).
+ *    - Respeta la regla de reiteración cada 15 min para hambre, pañales y vitaminas mientras continúe sin gestionarse.
+ */
+async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
+  if (isDispatchingAlerts) return { enviadas: 0 };
+  isDispatchingAlerts = true;
+
   try {
-    rawLast = JSON.parse(localStorage.getItem('nebu_alert_timestamps') || '{}');
-  } catch {}
+    const dbClient = contexto.dbClient || window.db;
+    const bebe = contexto.bebe;
 
-  const now = Date.now();
-  let enviadas = 0;
+    // 1. Sincronización remota pre-flight obligatoria:
+    if (dbClient && bebe?.id) {
+      try {
+        const nowObj = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const todayStr = `${nowObj.getFullYear()}-${pad(nowObj.getMonth() + 1)}-${pad(nowObj.getDate())}`;
+        const hoyInicioIso = `${todayStr}T00:00:00`;
 
-  // Configuración de las 5 reglas proactivas
-  const reglas = [
-    {
-      key: 'alerta_hambre',
-      activa: alertas.hambre.activa,
-      reiterar: true,
-      datos: () => ({
-        minutosTranscurridos: alertas.hambre.minsTranscurridos,
-        ultimaFecha: alertas.hambre.ultimaFecha,
-        durmiendo: alertas.hambre.durmiendo,
-      }),
-    },
-    {
-      key: 'alerta_vitaminas',
-      activa: alertas.vitaminas.activa,
-      reiterar: true,
-      datos: () => ({
-        horaActual: alertas.vitaminas.horaActual,
-      }),
-    },
-    {
-      key: 'alerta_panal',
-      activa: alertas.panal.activa,
-      reiterar: true,
-      datos: () => ({
-        minutosTranscurridos: alertas.panal.minsTranscurridos,
-        ultimaFecha: alertas.panal.ultimaFecha,
-      }),
-    },
-    {
-      key: 'alerta_sueno',
-      activa: alertas.sueno.activa,
-      reiterar: false, // Sin reiteración de 15 minutos
-      datos: () => ({
-        minutosDespierto: alertas.sueno.minsDespierto,
-        despertarFecha: alertas.sueno.despertarFecha,
-      }),
-    },
-    {
-      key: 'alerta_fecas',
-      activa: alertas.fecas.activa,
-      reiterar: false, // Sin reiteración de 15 minutos
-      datos: () => ({
-        diasTranscurridos: alertas.fecas.diasTranscurridos,
-        ultimaFecha: alertas.fecas.ultimaFecha,
-      }),
-    },
-  ];
+        const [tomasRes, suenoRes, panalesRes, vitsRes, vitLogRes, bebeRes] = await Promise.all([
+          dbClient.from('tomas').select('id, fecha_hora, cantidad_ml').eq('bebe_id', bebe.id).order('fecha_hora', { ascending: false }).limit(5),
+          dbClient.from('sueno').select('id, inicio, fin').eq('bebe_id', bebe.id).order('inicio', { ascending: false }).limit(5),
+          dbClient.from('panales').select('id, fecha_hora, heces, orina').eq('bebe_id', bebe.id).order('fecha_hora', { ascending: false }).limit(5),
+          dbClient.from('vitaminas').select('id, fecha_hora, gotas').eq('bebe_id', bebe.id).gte('fecha_hora', hoyInicioIso).limit(5),
+          dbClient.from('vitaminas_tipos_log').select('id, vitamina_id, fecha, hora, gotas').eq('bebe_id', bebe.id).eq('fecha', todayStr).limit(10),
+          dbClient.from('bebes').select('id, nombre, codigo, whatsapp_config').eq('id', bebe.id).maybeSingle(),
+        ]);
 
-  reglas.forEach(({ key, activa, reiterar, datos }) => {
-    if (activa) {
-      const ultimo = rawLast[key] || 0;
-      const count = rawLast[`${key}_count`] || 0;
-      const cooldown = ALERT_COOLDOWNS[key] || ALERT_RETRY_INTERVAL_MS;
+        if (tomasRes.data && Array.isArray(tomasRes.data) && tomasRes.data.length > 0) {
+          cache.tomas = fusionarRegistros(cache.tomas, tomasRes.data, 'fecha_hora');
+        }
+        if (suenoRes.data && Array.isArray(suenoRes.data) && suenoRes.data.length > 0) {
+          cache.sueno = fusionarRegistros(cache.sueno, suenoRes.data, 'inicio');
+        }
+        if (panalesRes.data && Array.isArray(panalesRes.data) && panalesRes.data.length > 0) {
+          cache.panales = fusionarRegistros(cache.panales, panalesRes.data, 'fecha_hora');
+        }
+        if (vitsRes.data && Array.isArray(vitsRes.data)) {
+          cache.vitaminas = fusionarRegistros(cache.vitaminas, vitsRes.data, 'fecha_hora');
+        }
+        if (vitLogRes.data && Array.isArray(vitLogRes.data)) {
+          cache.vitaminas_tipos_log = vitLogRes.data;
+        }
+        if (bebeRes.data?.whatsapp_config) {
+          bebe.whatsapp_config = bebeRes.data.whatsapp_config;
+        }
+      } catch (errSync) {
+        console.warn('[WhatsApp Alertas] Fallo en pre-flight sync (se evalúa con caché existente):', errSync);
+      }
+    }
 
-      if (reiterar) {
-        // Alertas con reiteración cada 15 min mientras siga sin gestionarse (comida, vitaminas, pañal)
-        if (!ultimo || (now - ultimo >= cooldown)) {
-          const nuevaReiteracion = count + 1;
-          enviarNotificacionWhatsApp(key, {
-            ...datos(),
-            reiteracion: nuevaReiteracion,
-          }, contexto);
-          rawLast[key] = now;
-          rawLast[`${key}_count`] = nuevaReiteracion;
-          enviadas++;
+    // 2. Evaluar reglas con datos consolidados
+    const alertas = evaluarAlertasRutina(cache);
+
+    // 3. Obtener estado de alertas compartido (prioridad remota en bebe.whatsapp_config) y local
+    const cfg = getWhatsAppConfig(bebe);
+    const alertState = (cfg && typeof cfg.alert_state === 'object' && cfg.alert_state) ? { ...cfg.alert_state } : {};
+
+    let localTimestamps = {};
+    try {
+      localTimestamps = JSON.parse(localStorage.getItem('nebu_alert_timestamps') || '{}');
+    } catch {}
+
+    const now = Date.now();
+    let enviadas = 0;
+    let stateChanged = false;
+
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const todayDayKey = `${new Date().getFullYear()}-${pad2(new Date().getMonth() + 1)}-${pad2(new Date().getDate())}`;
+
+    // 4. Configuración de las 5 reglas proactivas
+    const reglas = [
+      {
+        key: 'alerta_hambre',
+        activa: alertas.hambre.activa,
+        reiterar: true,
+        referencia: `${alertas.hambre.ultimaFecha || 'sin_toma'}_${alertas.hambre.durmiendo ? 'dormido' : 'despierto'}`,
+        datos: () => ({
+          minutosTranscurridos: alertas.hambre.minsTranscurridos,
+          ultimaFecha: alertas.hambre.ultimaFecha,
+          durmiendo: alertas.hambre.durmiendo,
+        }),
+      },
+      {
+        key: 'alerta_vitaminas',
+        activa: alertas.vitaminas.activa,
+        reiterar: true,
+        referencia: todayDayKey,
+        datos: () => ({
+          horaActual: alertas.vitaminas.horaActual,
+        }),
+      },
+      {
+        key: 'alerta_panal',
+        activa: alertas.panal.activa,
+        reiterar: true,
+        referencia: `${alertas.panal.ultimaFecha || 'sin_panal'}`,
+        datos: () => ({
+          minutosTranscurridos: alertas.panal.minsTranscurridos,
+          ultimaFecha: alertas.panal.ultimaFecha,
+        }),
+      },
+      {
+        key: 'alerta_sueno',
+        activa: alertas.sueno.activa,
+        reiterar: false, // Sin reiteración de 15 minutos (aviso único por ventana de vigilia)
+        referencia: `${alertas.sueno.despertarFecha || 'sin_despertar'}`,
+        datos: () => ({
+          minutosDespierto: alertas.sueno.minsDespierto,
+          despertarFecha: alertas.sueno.despertarFecha,
+        }),
+      },
+      {
+        key: 'alerta_fecas',
+        activa: alertas.fecas.activa,
+        reiterar: false, // Sin reiteración de 15 minutos (aviso único por episodio)
+        referencia: `${alertas.fecas.ultimaFecha || 'sin_fecas'}`,
+        datos: () => ({
+          diasTranscurridos: alertas.fecas.diasTranscurridos,
+          ultimaFecha: alertas.fecas.ultimaFecha,
+        }),
+      },
+    ];
+
+    reglas.forEach(({ key, activa, reiterar, referencia, datos }) => {
+      if (activa) {
+        const sharedItem = alertState[key];
+        const lastSent = (sharedItem && sharedItem.ultimoEnvio) ? sharedItem.ultimoEnvio : (localTimestamps[key] || 0);
+        const lastRef = (sharedItem && sharedItem.referencia) ? sharedItem.referencia : localTimestamps[`${key}_ref`];
+        const count = (sharedItem && sharedItem.count) ? sharedItem.count : (localTimestamps[`${key}_count`] || 0);
+
+        const esMismaRef = (lastRef === referencia);
+        const cooldown = ALERT_COOLDOWNS[key] || ALERT_RETRY_INTERVAL_MS;
+
+        if (reiterar) {
+          // Si la referencia del evento cambió (ej: nueva toma, o cambió estado despierto/dormido), reinicia ciclo
+          const baseCount = esMismaRef ? count : 0;
+          const tiempoDesdeUltimo = now - (esMismaRef ? lastSent : 0);
+
+          if (!esMismaRef || tiempoDesdeUltimo >= cooldown) {
+            const nuevaReiteracion = baseCount + 1;
+            enviarNotificacionWhatsApp(key, {
+              ...datos(),
+              reiteracion: nuevaReiteracion,
+            }, contexto);
+
+            alertState[key] = {
+              ultimoEnvio: now,
+              count: nuevaReiteracion,
+              referencia,
+            };
+            localTimestamps[key] = now;
+            localTimestamps[`${key}_count`] = nuevaReiteracion;
+            localTimestamps[`${key}_ref`] = referencia;
+            stateChanged = true;
+            enviadas++;
+          }
+        } else {
+          // Reglas SIN reiteración (sueño y deposición): un único aviso por ciclo de referencia
+          if (!esMismaRef || !lastSent) {
+            enviarNotificacionWhatsApp(key, {
+              ...datos(),
+              reiteracion: 1,
+            }, contexto);
+
+            alertState[key] = {
+              ultimoEnvio: now,
+              count: 1,
+              referencia,
+            };
+            localTimestamps[key] = now;
+            localTimestamps[`${key}_count`] = 1;
+            localTimestamps[`${key}_ref`] = referencia;
+            stateChanged = true;
+            enviadas++;
+          }
         }
       } else {
-        // Alertas SIN reiteración cada 15 min (sueño y deposición): se envía un único aviso al activarse
-        if (!ultimo || (now - ultimo >= cooldown)) {
-          enviarNotificacionWhatsApp(key, {
-            ...datos(),
-            reiteracion: 1,
-          }, contexto);
-          rawLast[key] = now;
-          rawLast[`${key}_count`] = 1;
-          enviadas++;
+        // Alerta inactiva (bebé comió, durmió, se cambió pañal, etc.):
+        // limpiar registro activo para que la próxima alerta inicie desde Recordatorio #1
+        if (alertState[key] || localTimestamps[key]) {
+          delete alertState[key];
+          delete localTimestamps[key];
+          delete localTimestamps[`${key}_count`];
+          delete localTimestamps[`${key}_ref`];
+          stateChanged = true;
         }
       }
-    } else {
-      // Cuando la alerta ya no está activa (se registró toma, pañal, vitamina, siesta),
-      // se reinicia el contador y marca temporal para que la próxima alerta inicie desde cero inmediatamente
-      if (rawLast[key] || rawLast[`${key}_count`]) {
-        delete rawLast[key];
-        delete rawLast[`${key}_count`];
+    });
+
+    // 5. Despacho automático del Informe Diario a las 23:00 hrs
+    const nowDate = new Date();
+    const hoyDayKey = `${nowDate.getFullYear()}-${pad2(nowDate.getMonth() + 1)}-${pad2(nowDate.getDate())}`;
+
+    if (nowDate.getHours() >= 23 && cfg.notifyInformeDiario !== false) {
+      const yaEnviadoLocal = localTimestamps.informe_diario === hoyDayKey;
+      const yaEnviadoRemoto = cfg.ultimoInformeFecha === hoyDayKey;
+
+      if (!yaEnviadoLocal && !yaEnviadoRemoto) {
+        const datosInforme = generarDatosInformeDiario(cache, nowDate);
+        enviarNotificacionWhatsApp('informe_diario', datosInforme, contexto);
+        localTimestamps.informe_diario = hoyDayKey;
+        cfg.ultimoInformeFecha = hoyDayKey;
+        stateChanged = true;
         enviadas++;
       }
     }
-  });
 
-  // 6. Despacho automático del Informe Diario a las 23:00 hrs
-  const nowDate = new Date();
-  const pad2 = (n) => String(n).padStart(2, '0');
-  const hoyDayKey = `${nowDate.getFullYear()}-${pad2(nowDate.getMonth() + 1)}-${pad2(nowDate.getDate())}`;
-  const cfg = getWhatsAppConfig(contexto.bebe);
-
-  if (nowDate.getHours() >= 23 && cfg.notifyInformeDiario !== false) {
-    const yaEnviadoLocal = rawLast.informe_diario === hoyDayKey;
-    const yaEnviadoRemoto = cfg.ultimoInformeFecha === hoyDayKey;
-
-    if (!yaEnviadoLocal && !yaEnviadoRemoto) {
-      const datosInforme = generarDatosInformeDiario(cache, nowDate);
-      enviarNotificacionWhatsApp('informe_diario', datosInforme, contexto);
-      rawLast.informe_diario = hoyDayKey;
-      enviadas++;
-
-      // Guardar fecha en config compartida para evitar reenvío duplicado desde el otro padre
-      cfg.ultimoInformeFecha = hoyDayKey;
-      if (contexto.bebe?.id && typeof saveWhatsAppConfig === 'function') {
-        saveWhatsAppConfig(cfg, contexto.bebe.id, contexto.dbClient || window.db);
+    // 6. Persistir estado compartido en Supabase y localmente si hubo cambios
+    if (stateChanged) {
+      cfg.alert_state = alertState;
+      try {
+        localStorage.setItem('nebu_alert_timestamps', JSON.stringify(localTimestamps));
+      } catch {}
+      if (bebe?.id && dbClient) {
+        saveWhatsAppConfig(cfg, bebe.id, dbClient);
       }
     }
-  }
 
-  if (enviadas > 0) {
-    try {
-      localStorage.setItem('nebu_alert_timestamps', JSON.stringify(rawLast));
-    } catch {}
+    return { alertas, enviadas };
+  } finally {
+    isDispatchingAlerts = false;
   }
-
-  return { alertas, enviadas };
 }
 
 // Exportar globalmente para el cliente web
@@ -1177,4 +1294,5 @@ window.enviarInformeDiarioManual = enviarInformeDiarioManual;
 window.verificarYDespacharAlertasWhatsApp = verificarYDespacharAlertasWhatsApp;
 window.ALERT_COOLDOWNS = ALERT_COOLDOWNS;
 window.NEBU_GROUP_JID = NEBU_GROUP_JID;
+window.fusionarRegistros = fusionarRegistros;
 

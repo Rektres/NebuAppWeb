@@ -12,6 +12,7 @@ const db = supabase.createClient(
   configurado ? ENV.SUPABASE_URL : 'https://iseevvlfdjdsrxtxicvu.supabase.co',
   ENV.SUPABASE_ANON_KEY || 'sb_publishable_vAGgN8aMen8mk6NRU1qSwQ_McgBI603'
 );
+window.db = db;
 
 // ---------- Helpers ----------
 const $ = (id) => document.getElementById(id);
@@ -1401,7 +1402,7 @@ function renderAlertas() {
   }
 }
 
-function actualizarAlertasYBadge() {
+async function actualizarAlertasYBadge() {
   if (typeof evaluarAlertasRutina === 'function') {
     const res = evaluarAlertasRutina(cache);
     window.conteoAlertasActivas = res.conteoActivas;
@@ -1411,7 +1412,7 @@ function actualizarAlertasYBadge() {
     renderAlertas();
   }
   if (typeof verificarYDespacharAlertasWhatsApp === 'function' && bebe) {
-    verificarYDespacharAlertasWhatsApp(cache, { bebe, miRol });
+    await verificarYDespacharAlertasWhatsApp(cache, { bebe, miRol, dbClient: db });
   }
 }
 
@@ -2457,10 +2458,10 @@ function iniciarAutoRefresh() {
   lastRefreshTime = Date.now();
 
   // 1. Supervisión continua de alertas cada 60 segundos (evalúa umbrales y dispara reiteraciones cada 15 min exactos)
-  alertCheckInterval = setInterval(() => {
+  alertCheckInterval = setInterval(async () => {
     if (appStarted && bebe?.id) {
       if (typeof actualizarAlertasYBadge === 'function') {
-        actualizarAlertasYBadge();
+        await actualizarAlertasYBadge();
       }
     }
   }, 60 * 1000);
@@ -2521,15 +2522,11 @@ function detenerAutoRefresh() {
   }
 }
 
-// Al regresar a la pestaña o desbloquear pantalla
-document.addEventListener('visibilitychange', () => {
+// Al regresar a la pestaña o desbloquear pantalla:
+// Siempre recargar primero los datos remotos de Supabase para evitar alertas con caché desfasada
+document.addEventListener('visibilitychange', async () => {
   if (!document.hidden && appStarted && bebe?.id) {
-    if (typeof actualizarAlertasYBadge === 'function') {
-      actualizarAlertasYBadge();
-    }
-    if (Date.now() - lastRefreshTime >= 15 * 60 * 1000) {
-      recargarDatos(false);
-    }
+    await recargarDatos(false);
   }
 });
 
