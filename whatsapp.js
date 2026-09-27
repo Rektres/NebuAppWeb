@@ -1040,20 +1040,71 @@ function fusionarRegistros(existentes = [], nuevos = [], colFecha = 'fecha_hora'
   return Array.from(map.values()).sort((a, b) => new Date(b[colFecha]) - new Date(a[colFecha]));
 }
 
+const SYSTEM_ALERT_KEY = '__system_alert_state__';
+
+/**
+ * Lee el estado compartido de alertas entre dispositivos desde la tabla bitácora de Supabase.
+ */
+async function leerAlertStateRemoto(bebeId, dbClient) {
+  if (!bebeId || !dbClient) return null;
+  try {
+    const { data, error } = await dbClient
+      .from('bitacora')
+      .select('id, notas')
+      .eq('bebe_id', bebeId)
+      .eq('titulo', SYSTEM_ALERT_KEY)
+      .order('id', { ascending: false })
+      .limit(1);
+    if (!error && data && data.length > 0 && data[0].notas) {
+      return { id: data[0].id, state: JSON.parse(data[0].notas) };
+    }
+  } catch (e) {
+    console.warn('[WhatsApp Alertas] Fallo al leer estado compartido en bitácora:', e);
+  }
+  return null;
+}
+
+/**
+ * Guarda el estado compartido de alertas en la tabla bitácora de Supabase (sin requerir cambios de esquema).
+ */
+async function guardarAlertStateRemoto(bebeId, alertState, dbClient, existingId = null) {
+  if (!bebeId || !dbClient) return;
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const notasStr = JSON.stringify(alertState);
+    if (existingId) {
+      await dbClient.from('bitacora').update({ notas: notasStr, fecha: today }).eq('id', existingId);
+    } else {
+      const { data } = await dbClient
+        .from('bitacora')
+        .select('id')
+        .eq('bebe_id', bebeId)
+        .eq('titulo', SYSTEM_ALERT_KEY)
+        .limit(1);
+      if (data && data.length > 0) {
+        await dbClient.from('bitacora').update({ notas: notasStr, fecha: today }).eq('id', data[0].id);
+      } else {
+        await dbClient.from('bitacora').insert({
+          bebe_id: bebeId,
+          titulo: SYSTEM_ALERT_KEY,
+          fecha: today,
+          notas: notasStr,
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('[WhatsApp Alertas] Fallo al guardar estado compartido en bitácora:', e);
+  }
+}
+
 let isDispatchingAlerts = false;
 
 /**
  * Supervisa las alertas y despacha a WhatsApp de forma 100% coordinada y fiable:
- * 1. Pre-flight sync con Supabase: consulta remota ligera en paralelo para verificar el estado REAL
- *    (evita falsas alertas por cachés locales obsoletas entre ambos padres).
- * 2. Validación de reglas contra estado remoto verificado:
- *    - Si duerme: alerta de hambre solo si > 8h (>480 min). Si < 8h, jamás alerta.
- *    - Si despierto: alerta de hambre solo si > 2:30h (>150 min).
- *    - Si pañal cambiado < 4h: jamás alerta.
- * 3. Cooldown compartido y descentralizado en Supabase (bebes.whatsapp_config.alert_state):
- *    - Elimina duplicaciones entre el teléfono de mamá y papá.
- *    - Respeta la regla de NO reiteración para sueño y deposiciones (envío único por evento).
- *    - Respeta la regla de reiteración cada 15 min para hambre, pañales y vitaminas mientras continúe sin gestionarse.
+ * 1. Validación de sesión Supabase: evita que pestañas en segundo plano con token expirado evalúen datos viejos.
+ * 2. Pre-flight sync obligatorio Fail-Closed: si no se puede verificar con Supabase, SE CANCELA el despacho.
+ * 3. Doble verificación atómica de umbrales: valida con los timestamps más recientes de la base de datos.
+ * 4. Cooldown compartido y descentralizado en Supabase (bitácora): sincroniza a ambos padres en tiempo real.
  */
 async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
   if (isDispatchingAlerts) return { enviadas: 0 };
@@ -1063,66 +1114,132 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
     const dbClient = contexto.dbClient || window.db;
     const bebe = contexto.bebe;
 
-    // 1. Sincronización remota pre-flight obligatoria:
-    if (dbClient && bebe?.id) {
-      try {
-        const nowObj = new Date();
-        const pad = (n) => String(n).padStart(2, '0');
-        const todayStr = `${nowObj.getFullYear()}-${pad(nowObj.getMonth() + 1)}-${pad(nowObj.getDate())}`;
-        const hoyInicioIso = `${todayStr}T00:00:00`;
+    // 0. Si no hay cliente de base de datos o identificador de bebé, ABORTAR INMEDIATAMENTE.
+    if (!dbClient || !bebe?.id) {
+      return { alertas: evaluarAlertasRutina(cache), enviadas: 0 };
+    }
 
-        const [tomasRes, suenoRes, panalesRes, vitsRes, vitLogRes, bebeRes] = await Promise.all([
-          dbClient.from('tomas').select('id, fecha_hora, cantidad_ml').eq('bebe_id', bebe.id).order('fecha_hora', { ascending: false }).limit(5),
-          dbClient.from('sueno').select('id, inicio, fin').eq('bebe_id', bebe.id).order('inicio', { ascending: false }).limit(5),
-          dbClient.from('panales').select('id, fecha_hora, heces, orina').eq('bebe_id', bebe.id).order('fecha_hora', { ascending: false }).limit(5),
-          dbClient.from('vitaminas').select('id, fecha_hora, gotas').eq('bebe_id', bebe.id).gte('fecha_hora', hoyInicioIso).limit(5),
-          dbClient.from('vitaminas_tipos_log').select('id, vitamina_id, fecha, hora, gotas').eq('bebe_id', bebe.id).eq('fecha', todayStr).limit(10),
-          dbClient.from('bebes').select('id, nombre, codigo, whatsapp_config').eq('id', bebe.id).maybeSingle(),
-        ]);
+    // 1. Verificación de sesión Supabase activa
+    try {
+      const { data: sessionData, error: sessErr } = await dbClient.auth.getSession();
+      if (sessErr || !sessionData?.session) {
+        console.warn('[WhatsApp Alertas] Sesión de Supabase no disponible o expirada. Despacho omitido.');
+        return { alertas: evaluarAlertasRutina(cache), enviadas: 0 };
+      }
+    } catch (e) {
+      console.warn('[WhatsApp Alertas] Error comprobando sesión auth:', e);
+      return { alertas: evaluarAlertasRutina(cache), enviadas: 0 };
+    }
 
-        if (tomasRes.data && Array.isArray(tomasRes.data) && tomasRes.data.length > 0) {
-          cache.tomas = fusionarRegistros(cache.tomas, tomasRes.data, 'fecha_hora');
-        }
-        if (suenoRes.data && Array.isArray(suenoRes.data) && suenoRes.data.length > 0) {
-          cache.sueno = fusionarRegistros(cache.sueno, suenoRes.data, 'inicio');
-        }
-        if (panalesRes.data && Array.isArray(panalesRes.data) && panalesRes.data.length > 0) {
-          cache.panales = fusionarRegistros(cache.panales, panalesRes.data, 'fecha_hora');
-        }
-        if (vitsRes.data && Array.isArray(vitsRes.data)) {
-          cache.vitaminas = fusionarRegistros(cache.vitaminas, vitsRes.data, 'fecha_hora');
-        }
-        if (vitLogRes.data && Array.isArray(vitLogRes.data)) {
-          cache.vitaminas_tipos_log = vitLogRes.data;
-        }
-        if (bebeRes.data?.whatsapp_config) {
-          bebe.whatsapp_config = bebeRes.data.whatsapp_config;
-        }
-      } catch (errSync) {
-        console.warn('[WhatsApp Alertas] Fallo en pre-flight sync (se evalúa con caché existente):', errSync);
+    // 2. Sincronización remota pre-flight obligatoria (FAIL-CLOSED):
+    const nowObj = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const todayStr = `${nowObj.getFullYear()}-${pad(nowObj.getMonth() + 1)}-${pad(nowObj.getDate())}`;
+    const hoyInicioIso = `${todayStr}T00:00:00`;
+
+    let tomasRes, suenoRes, panalesRes, vitsRes, vitLogRes, remoteStateInfo;
+    try {
+      [tomasRes, suenoRes, panalesRes, vitsRes, vitLogRes, remoteStateInfo] = await Promise.all([
+        dbClient.from('tomas').select('id, fecha_hora, cantidad_ml').eq('bebe_id', bebe.id).order('fecha_hora', { ascending: false }).limit(5),
+        dbClient.from('sueno').select('id, inicio, fin').eq('bebe_id', bebe.id).order('inicio', { ascending: false }).limit(5),
+        dbClient.from('panales').select('id, fecha_hora, heces, orina').eq('bebe_id', bebe.id).order('fecha_hora', { ascending: false }).limit(5),
+        dbClient.from('vitaminas').select('id, fecha_hora, gotas').eq('bebe_id', bebe.id).gte('fecha_hora', hoyInicioIso).limit(5),
+        dbClient.from('vitaminas_tipos_log').select('id, vitamina_id, fecha, hora, gotas').eq('bebe_id', bebe.id).eq('fecha', todayStr).limit(10),
+        leerAlertStateRemoto(bebe.id, dbClient),
+      ]);
+    } catch (netErr) {
+      console.warn('[WhatsApp Alertas] Error de red en pre-flight sync. Se cancela despacho para evitar falsas alertas:', netErr);
+      return { alertas: evaluarAlertasRutina(cache), enviadas: 0 };
+    }
+
+    // SI LAS CONSULTAS FUNDAMENTALES TIENEN ERROR, ABORTAR
+    if (tomasRes.error || suenoRes.error || panalesRes.error || !tomasRes.data || !suenoRes.data || !panalesRes.data) {
+      console.warn('[WhatsApp Alertas] Falló la verificación de tomas, sueño o pañales en Supabase. Se cancela despacho:', {
+        tomas: tomasRes.error?.message,
+        sueno: suenoRes.error?.message,
+        panales: panalesRes.error?.message,
+      });
+      return { alertas: evaluarAlertasRutina(cache), enviadas: 0 };
+    }
+
+    // Fusionar datos verificados del servidor en la caché de la aplicación
+    cache.tomas = fusionarRegistros(cache.tomas, tomasRes.data, 'fecha_hora');
+    cache.sueno = fusionarRegistros(cache.sueno, suenoRes.data, 'inicio');
+    cache.panales = fusionarRegistros(cache.panales, panalesRes.data, 'fecha_hora');
+    if (vitsRes.data && Array.isArray(vitsRes.data)) {
+      cache.vitaminas = fusionarRegistros(cache.vitaminas, vitsRes.data, 'fecha_hora');
+    }
+    if (vitLogRes.data && Array.isArray(vitLogRes.data)) {
+      cache.vitaminas_tipos_log = vitLogRes.data;
+    }
+
+    // 3. Evaluar reglas con datos remotos frescos y consolidados
+    const alertas = evaluarAlertasRutina(cache);
+
+    // 4. DOBLE VERIFICACIÓN ATÓMICA DE UMBRALES (Sanity check final):
+    const nowMs = Date.now();
+
+    // Verificación 1: Alimentación
+    if (cache.tomas && cache.tomas.length > 0) {
+      const diffMinToma = Math.max(0, Math.floor((nowMs - new Date(cache.tomas[0].fecha_hora).getTime()) / 60000));
+      alertas.hambre.minsTranscurridos = diffMinToma;
+      alertas.hambre.ultimaFecha = cache.tomas[0].fecha_hora;
+      if (alertas.hambre.durmiendo) {
+        if (diffMinToma < 480) alertas.hambre.activa = false;
+      } else {
+        if (diffMinToma < 150) alertas.hambre.activa = false;
       }
     }
 
-    // 2. Evaluar reglas con datos consolidados
-    const alertas = evaluarAlertasRutina(cache);
+    // Verificación 5: Pañal
+    if (cache.panales && cache.panales.length > 0) {
+      const diffMinPanal = Math.max(0, Math.floor((nowMs - new Date(cache.panales[0].fecha_hora).getTime()) / 60000));
+      alertas.panal.minsTranscurridos = diffMinPanal;
+      alertas.panal.ultimaFecha = cache.panales[0].fecha_hora;
+      if (diffMinPanal < 240) alertas.panal.activa = false;
+    }
 
-    // 3. Obtener estado de alertas compartido (prioridad remota en bebe.whatsapp_config) y local
-    const cfg = getWhatsAppConfig(bebe);
-    const alertState = (cfg && typeof cfg.alert_state === 'object' && cfg.alert_state) ? { ...cfg.alert_state } : {};
+    // Verificación 4: Sueño
+    if (alertas.sueno.durmiendo) {
+      alertas.sueno.activa = false;
+    } else if (alertas.sueno.minsDespierto < 100) {
+      alertas.sueno.activa = false;
+    }
+
+    // Verificación 3: Fecas
+    const panalesConHeces = (cache.panales || []).filter((p) => p.heces).sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora));
+    if (panalesConHeces.length > 0) {
+      const diffDiasFecas = Math.floor((nowMs - new Date(panalesConHeces[0].fecha_hora).getTime()) / (24 * 3600 * 1000));
+      alertas.fecas.diasTranscurridos = diffDiasFecas;
+      alertas.fecas.ultimaFecha = panalesConHeces[0].fecha_hora;
+      if (diffDiasFecas < 3) alertas.fecas.activa = false;
+    }
+
+    // Verificación 2: Vitaminas
+    if (alertas.vitaminas.tomadaHoy || nowObj.getHours() < 19) {
+      alertas.vitaminas.activa = false;
+    }
+
+    // Recalcular conteo activo tras doble verificación
+    alertas.conteoActivas = (alertas.hambre.activa ? 1 : 0) +
+                            (alertas.vitaminas.activa ? 1 : 0) +
+                            (alertas.fecas.activa ? 1 : 0) +
+                            (alertas.sueno.activa ? 1 : 0) +
+                            (alertas.panal.activa ? 1 : 0);
+
+    // 5. Estado de alertas compartido (en bitacora de Supabase) + respaldo local
+    let alertState = (remoteStateInfo && remoteStateInfo.state) ? { ...remoteStateInfo.state } : {};
+    let stateRowId = remoteStateInfo ? remoteStateInfo.id : null;
 
     let localTimestamps = {};
     try {
       localTimestamps = JSON.parse(localStorage.getItem('nebu_alert_timestamps') || '{}');
     } catch {}
 
-    const now = Date.now();
     let enviadas = 0;
     let stateChanged = false;
 
-    const pad2 = (n) => String(n).padStart(2, '0');
-    const todayDayKey = `${new Date().getFullYear()}-${pad2(new Date().getMonth() + 1)}-${pad2(new Date().getDate())}`;
-
-    // 4. Configuración de las 5 reglas proactivas
+    // 6. Configuración de las 5 reglas proactivas
     const reglas = [
       {
         key: 'alerta_hambre',
@@ -1139,7 +1256,7 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
         key: 'alerta_vitaminas',
         activa: alertas.vitaminas.activa,
         reiterar: true,
-        referencia: todayDayKey,
+        referencia: todayStr,
         datos: () => ({
           horaActual: alertas.vitaminas.horaActual,
         }),
@@ -1157,7 +1274,7 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
       {
         key: 'alerta_sueno',
         activa: alertas.sueno.activa,
-        reiterar: false, // Sin reiteración de 15 minutos (aviso único por ventana de vigilia)
+        reiterar: false,
         referencia: `${alertas.sueno.despertarFecha || 'sin_despertar'}`,
         datos: () => ({
           minutosDespierto: alertas.sueno.minsDespierto,
@@ -1167,7 +1284,7 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
       {
         key: 'alerta_fecas',
         activa: alertas.fecas.activa,
-        reiterar: false, // Sin reiteración de 15 minutos (aviso único por episodio)
+        reiterar: false,
         referencia: `${alertas.fecas.ultimaFecha || 'sin_fecas'}`,
         datos: () => ({
           diasTranscurridos: alertas.fecas.diasTranscurridos,
@@ -1178,18 +1295,17 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
 
     reglas.forEach(({ key, activa, reiterar, referencia, datos }) => {
       if (activa) {
-        const sharedItem = alertState[key];
-        const lastSent = (sharedItem && sharedItem.ultimoEnvio) ? sharedItem.ultimoEnvio : (localTimestamps[key] || 0);
-        const lastRef = (sharedItem && sharedItem.referencia) ? sharedItem.referencia : localTimestamps[`${key}_ref`];
-        const count = (sharedItem && sharedItem.count) ? sharedItem.count : (localTimestamps[`${key}_count`] || 0);
+        const itemRemoto = alertState[key];
+        const lastSent = (itemRemoto && itemRemoto.ultimoEnvio) ? itemRemoto.ultimoEnvio : (localTimestamps[key] || 0);
+        const lastRef = (itemRemoto && itemRemoto.referencia) ? itemRemoto.referencia : localTimestamps[`${key}_ref`];
+        const count = (itemRemoto && itemRemoto.count) ? itemRemoto.count : (localTimestamps[`${key}_count`] || 0);
 
         const esMismaRef = (lastRef === referencia);
         const cooldown = ALERT_COOLDOWNS[key] || ALERT_RETRY_INTERVAL_MS;
 
         if (reiterar) {
-          // Si la referencia del evento cambió (ej: nueva toma, o cambió estado despierto/dormido), reinicia ciclo
           const baseCount = esMismaRef ? count : 0;
-          const tiempoDesdeUltimo = now - (esMismaRef ? lastSent : 0);
+          const tiempoDesdeUltimo = nowMs - (esMismaRef ? lastSent : 0);
 
           if (!esMismaRef || tiempoDesdeUltimo >= cooldown) {
             const nuevaReiteracion = baseCount + 1;
@@ -1199,18 +1315,18 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
             }, contexto);
 
             alertState[key] = {
-              ultimoEnvio: now,
+              ultimoEnvio: nowMs,
               count: nuevaReiteracion,
               referencia,
             };
-            localTimestamps[key] = now;
+            localTimestamps[key] = nowMs;
             localTimestamps[`${key}_count`] = nuevaReiteracion;
             localTimestamps[`${key}_ref`] = referencia;
             stateChanged = true;
             enviadas++;
           }
         } else {
-          // Reglas SIN reiteración (sueño y deposición): un único aviso por ciclo de referencia
+          // Sin reiteración: envío único por referencia de evento
           if (!esMismaRef || !lastSent) {
             enviarNotificacionWhatsApp(key, {
               ...datos(),
@@ -1218,11 +1334,11 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
             }, contexto);
 
             alertState[key] = {
-              ultimoEnvio: now,
+              ultimoEnvio: nowMs,
               count: 1,
               referencia,
             };
-            localTimestamps[key] = now;
+            localTimestamps[key] = nowMs;
             localTimestamps[`${key}_count`] = 1;
             localTimestamps[`${key}_ref`] = referencia;
             stateChanged = true;
@@ -1230,8 +1346,7 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
           }
         }
       } else {
-        // Alerta inactiva (bebé comió, durmió, se cambió pañal, etc.):
-        // limpiar registro activo para que la próxima alerta inicie desde Recordatorio #1
+        // Alerta inactiva / resuelta: limpiar registro para que inicie desde Recordatorio #1
         if (alertState[key] || localTimestamps[key]) {
           delete alertState[key];
           delete localTimestamps[key];
@@ -1242,33 +1357,29 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
       }
     });
 
-    // 5. Despacho automático del Informe Diario a las 23:00 hrs
-    const nowDate = new Date();
-    const hoyDayKey = `${nowDate.getFullYear()}-${pad2(nowDate.getMonth() + 1)}-${pad2(nowDate.getDate())}`;
-
-    if (nowDate.getHours() >= 23 && cfg.notifyInformeDiario !== false) {
-      const yaEnviadoLocal = localTimestamps.informe_diario === hoyDayKey;
-      const yaEnviadoRemoto = cfg.ultimoInformeFecha === hoyDayKey;
+    // 7. Informe diario a las 23:00 hrs
+    const cfg = getWhatsAppConfig(bebe);
+    if (nowObj.getHours() >= 23 && cfg.notifyInformeDiario !== false) {
+      const yaEnviadoLocal = localTimestamps.informe_diario === todayStr;
+      const yaEnviadoRemoto = (alertState.informe_diario === todayStr) || (cfg.ultimoInformeFecha === todayStr);
 
       if (!yaEnviadoLocal && !yaEnviadoRemoto) {
-        const datosInforme = generarDatosInformeDiario(cache, nowDate);
+        const datosInforme = generarDatosInformeDiario(cache, nowObj);
         enviarNotificacionWhatsApp('informe_diario', datosInforme, contexto);
-        localTimestamps.informe_diario = hoyDayKey;
-        cfg.ultimoInformeFecha = hoyDayKey;
+        localTimestamps.informe_diario = todayStr;
+        alertState.informe_diario = todayStr;
+        cfg.ultimoInformeFecha = todayStr;
         stateChanged = true;
         enviadas++;
       }
     }
 
-    // 6. Persistir estado compartido en Supabase y localmente si hubo cambios
+    // 8. Persistir estado compartido en Supabase (bitácora) y localmente
     if (stateChanged) {
-      cfg.alert_state = alertState;
       try {
         localStorage.setItem('nebu_alert_timestamps', JSON.stringify(localTimestamps));
       } catch {}
-      if (bebe?.id && dbClient) {
-        saveWhatsAppConfig(cfg, bebe.id, dbClient);
-      }
+      await guardarAlertStateRemoto(bebe.id, alertState, dbClient, stateRowId);
     }
 
     return { alertas, enviadas };

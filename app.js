@@ -200,7 +200,7 @@ async function insertar(tabla, valores) {
     window.enviarNotificacionWhatsApp(tabla, valores, { bebe, miRol });
   }
   if (typeof actualizarAlertasYBadge === 'function') {
-    actualizarAlertasYBadge();
+    await actualizarAlertasYBadge();
   }
   return true;
 }
@@ -212,7 +212,7 @@ async function eliminar(tabla, id) {
   await loadData(tabla);
   statsDirty = true;
   if (typeof actualizarAlertasYBadge === 'function') {
-    actualizarAlertasYBadge();
+    await actualizarAlertasYBadge();
   }
   renderTab(currentTab);
 }
@@ -1528,7 +1528,8 @@ $('abrirLataBtn').addEventListener('click', async () => {
 // ---------- Bitácora ----------
 function renderBitacora() {
   if (!$('bitFecha').value) $('bitFecha').value = dayKey(new Date());
-  $('bitLista').innerHTML = historialColapsable(cache.bitacora || [], (r) => r.fecha, (r) => `
+  const rowsVisibles = (cache.bitacora || []).filter((r) => !r.titulo?.startsWith('__'));
+  $('bitLista').innerHTML = historialColapsable(rowsVisibles, (r) => r.fecha, (r) => `
       <div class="bit-item">
         <div class="bit-head"><strong>${escapeHtml(r.titulo)}</strong></div>
         ${r.notas ? `<p>${escapeHtml(r.notas)}</p>` : ''}
@@ -1786,7 +1787,7 @@ $('editGuardar').addEventListener('click', async () => {
   $('editModal').classList.add('hidden');
   toast('Registro actualizado ✓');
   if (typeof actualizarAlertasYBadge === 'function') {
-    actualizarAlertasYBadge();
+    await actualizarAlertasYBadge();
   }
   renderTab(currentTab);
 });
