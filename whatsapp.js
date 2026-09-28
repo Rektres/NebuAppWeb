@@ -875,7 +875,7 @@ function evaluarAlertasRutina(cache = {}) {
     vitaminas: { activa: false, tomadaHoy: false, horaActual: '', mensaje: 'Al día' },
     fecas: { activa: false, diasTranscurridos: 0, ultimaFecha: null, mensaje: 'Normal' },
     sueno: { activa: false, durmiendo: false, minsDespierto: 0, despertarFecha: null, mensaje: 'Normal' },
-    panal: { activa: false, minsTranscurridos: 0, ultimaFecha: null, mensaje: 'Normal' },
+    panal: { activa: false, durmiendo: false, esHorarioNocturno: false, minsTranscurridos: 0, ultimaFecha: null, mensaje: 'Normal' },
     conteoActivas: 0,
   };
 
@@ -890,6 +890,7 @@ function evaluarAlertasRutina(cache = {}) {
   const estaDurmiendo = Boolean(siestaActiva);
   res.sueno.durmiendo = estaDurmiendo;
   res.hambre.durmiendo = estaDurmiendo;
+  res.panal.durmiendo = estaDurmiendo;
 
   // 1. Alimentación (Durmiendo: > 8 hrs = 480 min / Despierto: > 2:30 hrs = 150 min)
   const tomas = Array.isArray(cache.tomas) ? cache.tomas : [];
@@ -1003,6 +1004,11 @@ function evaluarAlertasRutina(cache = {}) {
   }
 
   // 5. Cambio de pañal (más de 4 horas sin cambio = 240 min)
+  // Regla especial: NO alertar si el bebé duerme entre las 20:00 y las 07:00 hrs
+  const horaNum = now.getHours();
+  const esHorarioNocturno = (horaNum >= 20 || horaNum < 7);
+  res.panal.esHorarioNocturno = esHorarioNocturno;
+
   if (panales.length > 0) {
     const panalesOrdenados = [...panales].sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora));
     const ultimoPanal = panalesOrdenados[0];
@@ -1010,7 +1016,12 @@ function evaluarAlertasRutina(cache = {}) {
     const minsPanal = Math.max(0, Math.floor(diffMs / 60000));
     res.panal.minsTranscurridos = minsPanal;
     res.panal.ultimaFecha = ultimoPanal.fecha_hora;
-    if (minsPanal >= 240) {
+
+    if (estaDurmiendo && esHorarioNocturno) {
+      // Bebé durmiendo en horario nocturno (20:00 a 07:00) -> Alerta desactivada
+      res.panal.activa = false;
+      res.panal.mensaje = `Durmiendo de noche 💤 (sin alertas de pañal entre 20:00 y 07:00)`;
+    } else if (minsPanal >= 240) {
       res.panal.activa = true;
       res.panal.mensaje = `Lleva ${fmtMinutos(minsPanal)} sin cambio de pañal (> 4 hrs)`;
     } else {
@@ -1197,6 +1208,10 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
       alertas.panal.minsTranscurridos = diffMinPanal;
       alertas.panal.ultimaFecha = cache.panales[0].fecha_hora;
       if (diffMinPanal < 240) alertas.panal.activa = false;
+      const horaVerif = nowObj.getHours();
+      if (alertas.sueno.durmiendo && (horaVerif >= 20 || horaVerif < 7)) {
+        alertas.panal.activa = false;
+      }
     }
 
     // Verificación 4: Sueño
@@ -1265,7 +1280,7 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
         key: 'alerta_panal',
         activa: alertas.panal.activa,
         reiterar: true,
-        referencia: `${alertas.panal.ultimaFecha || 'sin_panal'}`,
+        referencia: `${alertas.panal.ultimaFecha || 'sin_panal'}_${alertas.sueno.durmiendo ? 'dormido' : 'despierto'}`,
         datos: () => ({
           minutosTranscurridos: alertas.panal.minsTranscurridos,
           ultimaFecha: alertas.panal.ultimaFecha,
@@ -1358,8 +1373,12 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
     });
 
     // 7. Informe diario a las 23:00 hrs
+    // El informe diario es despachado automáticamente a las 23:00:00 por el cron de rektressserver.
+    // Para evitar duplicaciones, el cliente web solo actúa como respaldo tardío a partir de las 23:45 si el servidor no lo hubiese despachado.
     const cfg = getWhatsAppConfig(bebe);
-    if (nowObj.getHours() >= 23 && cfg.notifyInformeDiario !== false) {
+    const esHorarioFallback = (nowObj.getHours() === 23 && nowObj.getMinutes() >= 45);
+
+    if (esHorarioFallback && cfg.notifyInformeDiario !== false) {
       const yaEnviadoLocal = localTimestamps.informe_diario === todayStr;
       const yaEnviadoRemoto = (alertState.informe_diario === todayStr) || (cfg.ultimoInformeFecha === todayStr);
 

@@ -276,6 +276,29 @@ def enviar_whatsapp(texto, destinatario=NEBU_GROUP_JID):
         print(f"[Error] Fallo al enviar WhatsApp a {destinatario}: {e}", file=sys.stderr)
         return False
 
+def marcar_informe_en_supabase(bebe_id, hoy_key, bebe_cfg):
+    """Actualiza en Supabase que el informe del día hoy_key ya fue despachado para sincronizar clientes web."""
+    if not bebe_id:
+        return
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/bebes?id=eq.{bebe_id}"
+    cfg_copia = dict(bebe_cfg) if isinstance(bebe_cfg, dict) else {}
+    cfg_copia['ultimoInformeFecha'] = hoy_key
+    payload = {'whatsapp_config': cfg_copia}
+    headers = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': f'Bearer {SUPABASE_ANON_KEY}',
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+    }
+    data_bytes = json.dumps(payload).encode('utf-8')
+    req = urllib.request.Request(url, data=data_bytes, headers=headers, method='PATCH')
+    try:
+        with urllib.request.urlopen(req, timeout=10) as res:
+            if res.status in (200, 204):
+                print(f"[OK] Supabase sincronizado: ultimoInformeFecha = {hoy_key}")
+    except Exception as e:
+        print(f"[Aviso] No se pudo sincronizar Supabase tras despacho de informe: {e}", file=sys.stderr)
+
 def main():
     force = '--force' in sys.argv
     dry_run = '--dry-run' in sys.argv
@@ -322,7 +345,6 @@ def main():
         t = bebe_cfg.get('target', '')
         if '@g.us' in t:
             destinatario = t.strip()
-
     ok = enviar_whatsapp(mensaje, destinatario)
     if ok:
         state['ultimo_informe'] = hoy_key
@@ -334,6 +356,9 @@ def main():
             print(f"[OK] Estado actualizado en {STATE_FILE}.")
         except Exception as e:
             print(f"[Aviso] No se pudo guardar archivo de estado: {e}", file=sys.stderr)
+
+        bebe_id = bebe.get('id')
+        marcar_informe_en_supabase(bebe_id, hoy_key, bebe_cfg)
 
 if __name__ == '__main__':
     main()
