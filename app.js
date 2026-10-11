@@ -115,14 +115,26 @@ function toISO(fecha, hora) {
   return new Date(`${fecha}T${hora}`).toISOString();
 }
 
+function esErrorPausaSupabase(err) {
+  if (!err) return false;
+  const str = typeof err === 'string' ? err : `${err.message || ''} ${err.code || ''} ${err.details || ''}`;
+  return /schema cache|PGRST002|service unavailable/i.test(str);
+}
+
+const MENSAJE_PAUSA_SUPABASE = '⚠️ Base de datos pausada en Supabase por inactividad. Ingresa al panel de Supabase y pulsa "Restore Project" para reactivarla.';
+
 let toastTimer;
 function toast(msg, isError = false) {
   const t = $('toast');
+  if (esErrorPausaSupabase(msg)) {
+    msg = MENSAJE_PAUSA_SUPABASE;
+    isError = true;
+  }
   t.textContent = msg;
   t.classList.toggle('error', isError);
   t.classList.remove('hidden');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.add('hidden'), 3200);
+  toastTimer = setTimeout(() => t.classList.add('hidden'), typeof msg === 'string' && msg.includes('Supabase') ? 9000 : 3200);
 }
 
 function setNowDefaults() {
@@ -2610,6 +2622,7 @@ $('authForm').addEventListener('submit', async (e) => {
     let msg = err.message;
     if (msg === 'Invalid login credentials') msg = 'Correo o contraseña incorrectos';
     else if (/database error/i.test(msg)) msg = 'Este correo no está autorizado para registrarse.';
+    else if (esErrorPausaSupabase(err)) msg = MENSAJE_PAUSA_SUPABASE;
     $('authError').textContent = msg;
     $('authError').classList.remove('hidden');
   } finally {
