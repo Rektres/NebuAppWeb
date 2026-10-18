@@ -335,7 +335,8 @@ def main():
         return
 
     destinatario = NEBU_GROUP_JID
-    bebe_cfg = data.get('bebe', {}).get('whatsapp_config', {})
+    bebe = data.get('bebe') or {}
+    bebe_cfg = bebe.get('whatsapp_config', {})
     if isinstance(bebe_cfg, str):
         try:
             bebe_cfg = json.loads(bebe_cfg)
