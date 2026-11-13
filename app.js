@@ -43,7 +43,11 @@ function fmtDayLabel(key) {
 function groupByDay(rows, field) {
   const map = new Map();
   for (const r of rows || []) {
-    const k = dayKey(new Date(r[field]));
+    const raw = r[field];
+    if (!raw) continue;
+    const k = (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw))
+      ? raw
+      : dayKey(new Date(raw));
     if (!map.has(k)) map.set(k, []);
     map.get(k).push(r);
   }
@@ -493,7 +497,7 @@ const ordenarVitaminaTipos = (lista) => lista.slice().sort((a, b) => (a.nombre |
 
 function renderVitaminaTipos() {
   const lista = ordenarVitaminaTipos(cache.vitaminas_tipos || []);
-  const fechaSel = $('vitTipoFecha').value || dayKey(new Date());
+  const fechaSel = $('vitTipoFecha')?.value || dayKey(new Date());
   $('vitTipoHoy').innerHTML = lista.length
     ? lista.map((v) => {
         const row = (cache.vitaminas_tipos_log || []).find((l) => l.fecha === fechaSel && String(l.vitamina_id) === String(v.id));
@@ -508,46 +512,134 @@ function renderVitaminaTipos() {
     : '<p class="empty-msg">Aún no agregas vitaminas a tu lista</p>';
 
   const mapa = new Map((cache.vitaminas_tipos || []).map((v) => [String(v.id), v]));
-  const dias = [...new Set((cache.vitaminas_tipos_log || []).map((l) => l.fecha))].sort().reverse();
-  const itemsDelDia = (d) => (cache.vitaminas_tipos_log || [])
-    .filter((l) => l.fecha === d)
-    .map((l) => ({ l, v: mapa.get(String(l.vitamina_id)) }))
-    .filter((x) => x.v)
-    .map(({ l, v }) => `<tr><td>${escapeHtml(v.nombre)}</td><td>${l.gotas ?? v.gotas_default ?? 5} gotas ✅${l.hora ? ' · ' + l.hora.slice(0, 5) : ''}</td>${accionesTd('vitaminas_tipos_log', l.id)}</tr>`);
+  const logs = cache.vitaminas_tipos_log || [];
+  const grupos = new Map();
 
-  $('tablaVitaminaTipos').innerHTML = historialChecklistHTML(dias, itemsDelDia, 3);
+  // Ordenar logs descendentemente por fecha y luego por hora
+  const logsOrdenados = [...logs].sort((a, b) => {
+    const fComp = (b.fecha || '').localeCompare(a.fecha || '');
+    if (fComp !== 0) return fComp;
+    return (b.hora || '').localeCompare(a.hora || '');
+  });
+
+  for (const l of logsOrdenados) {
+    const f = l.fecha;
+    if (!f) continue;
+    if (!grupos.has(f)) grupos.set(f, []);
+    grupos.get(f).push(l);
+  }
+
+  $('tablaVitaminaTipos').innerHTML = tablaHTML(
+    ['Vitamina', 'Dosis / Hora'],
+    grupos,
+    (l) => {
+      const v = mapa.get(String(l.vitamina_id));
+      const nombre = v ? v.nombre : 'Vitamina';
+      const gotas = l.gotas ?? v?.gotas_default ?? 5;
+      const horaTxt = l.hora ? ` · ${l.hora.slice(0, 5)}` : '';
+      return `<tr><td><strong>${escapeHtml(nombre)}</strong></td><td>${gotas} gotas ✅${horaTxt}</td>${accionesTd('vitaminas_tipos_log', l.id)}</tr>`;
+    },
+    (rows) => `${rows.length} dosis (${rows.reduce((s, r) => s + (r.gotas || 5), 0)} gotas)`,
+    (rows) => `${rows.length} dosis (${rows.reduce((s, r) => s + (r.gotas || 5), 0)} gotas)`
+  );
 }
 
-// Toggle vitamina en checklist
+// Selector de fecha en checklist de vitaminas
+$('vitTipoFecha')?.addEventListener('change', () => {
+  renderVitaminaTipos();
+});
+
+// Toggle vitamina en checklist con protección contra clics repetidos
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('.past-btn');
   if (!btn || !btn.dataset.id) return;
-  const vitId = Number(btn.dataset.id);
-  const fecha = $('vitTipoFecha').value || dayKey(new Date());
-  const hora = ($('vitTipoHora').value || fmtTime(new Date())) + ':00';
-  const yaTomada = btn.classList.contains('tomada');
-  const v = (cache.vitaminas_tipos || []).find((x) => x.id === vitId);
-  const gotas = v?.gotas_default || 5;
+  if (btn.disabled) return;
+  btn.disabled = true;
 
-  if (!yaTomada) {
-    await db.from('vitaminas_tipos_log').upsert({ bebe_id: bebe.id, vitamina_id: vitId, fecha, hora, gotas }, { onConflict: 'vitamina_id,fecha' });
-    if (typeof window.enviarNotificacionWhatsApp === 'function') {
-      window.enviarNotificacionWhatsApp('vitaminas_tipos', {
-        nombre: v?.nombre || 'Vitamina',
-        gotas,
-        hora,
-      }, { bebe, miRol });
+  try {
+    const vitId = Number(btn.dataset.id);
+    const fecha = $('vitTipoFecha').value || dayKey(new Date());
+    const hora = ($('vitTipoHora').value || fmtTime(new Date())) + ':00';
+    const yaTomada = btn.classList.contains('tomada');
+    const v = (cache.vitaminas_tipos || []).find((x) => x.id === vitId);
+    const gotas = v?.gotas_default || 5;
+
+    if (!yaTomada) {
+      await db.from('vitaminas_tipos_log').upsert({ bebe_id: bebe.id, vitamina_id: vitId, fecha, hora, gotas }, { onConflict: 'vitamina_id,fecha' });
+      if (typeof window.enviarNotificacionWhatsApp === 'function') {
+        window.enviarNotificacionWhatsApp('vitaminas_tipos', {
+          nombre: v?.nombre || 'Vitamina',
+          gotas,
+          hora,
+        }, { bebe, miRol });
+      }
+    } else {
+      await db.from('vitaminas_tipos_log').delete().eq('vitamina_id', vitId).eq('fecha', fecha);
     }
-  } else {
-    await db.from('vitaminas_tipos_log').delete().eq('vitamina_id', vitId).eq('fecha', fecha);
-  }
-  await loadData('vitaminas_tipos_log');
-  statsDirty = true;
-  renderVitaminaTipos();
-  if (typeof actualizarAlertasYBadge === 'function') {
-    actualizarAlertasYBadge();
+    await loadData('vitaminas_tipos_log');
+    statsDirty = true;
+    renderVitaminaTipos();
+    if (typeof actualizarAlertasYBadge === 'function') {
+      actualizarAlertasYBadge();
+    }
+  } finally {
+    btn.disabled = false;
   }
 });
+
+// Sugerencias rápidas de vitaminas (+ Hierro, + B12, + Vitamina D)
+document.addEventListener('click', async (e) => {
+  const chip = e.target.closest('.chip-add-vit');
+  if (!chip) return;
+  if (chip.disabled) return;
+  chip.disabled = true;
+
+  try {
+    const nombre = chip.dataset.nombre;
+    const gotas = Number(chip.dataset.gotas) || 5;
+    const yaExiste = (cache.vitaminas_tipos || []).some(
+      (v) => (v.nombre || '').trim().toLowerCase() === nombre.trim().toLowerCase()
+    );
+    if (yaExiste) {
+      toast(`"${nombre}" ya está en tu lista de vitaminas`);
+      return;
+    }
+    const ok = await insertar('vitaminas_tipos', { nombre, gotas_default: gotas });
+    if (ok) {
+      toast(`"${nombre}" agregada ✓`);
+      renderVitaminaTipos();
+    }
+  } finally {
+    chip.disabled = false;
+  }
+});
+
+async function asegurarVitaminasPredeterminadas() {
+  if (!bebe?.id) return;
+  const lista = cache.vitaminas_tipos || [];
+  const nombres = lista.map((v) => (v.nombre || '').trim().toLowerCase());
+  const porCrear = [];
+  if (!nombres.some((n) => n.includes('hierro'))) {
+    porCrear.push({ nombre: 'Hierro', gotas_default: 5 });
+  }
+  if (!nombres.some((n) => n.includes('b12'))) {
+    porCrear.push({ nombre: 'B12', gotas_default: 5 });
+  }
+  if (lista.length === 0 && !nombres.some((n) => n.includes('vitamina'))) {
+    porCrear.push({ nombre: 'Vitamina D', gotas_default: 5 });
+  }
+  if (porCrear.length > 0) {
+    let hubonuevos = false;
+    for (const v of porCrear) {
+      const { error } = await db.from('vitaminas_tipos').insert({ bebe_id: bebe.id, ...v });
+      if (!error) hubonuevos = true;
+    }
+    if (hubonuevos) {
+      await loadData('vitaminas_tipos');
+      renderVitaminaTipos();
+    }
+  }
+}
 
 // ---------- Pañales ----------
 function renderPanales() {
@@ -706,27 +798,39 @@ function renderSueno() {
   );
 }
 
-// Botones de siesta en vivo
+// Botones de siesta en vivo con bloqueo durante el guardado
 $('btnDormir').addEventListener('click', async () => {
-  const ok = await insertar('sueno', { inicio: new Date().toISOString(), fin: null });
-  if (ok) renderSueno();
+  if ($('btnDormir').disabled) return;
+  $('btnDormir').disabled = true;
+  try {
+    const ok = await insertar('sueno', { inicio: new Date().toISOString(), fin: null });
+    if (ok) renderSueno();
+  } finally {
+    $('btnDormir').disabled = false;
+  }
 });
 
 $('btnDespertar').addEventListener('click', async () => {
   const siesta = (cache.sueno || []).find((r) => !r.fin);
   if (!siesta) return;
-  const fin = new Date().toISOString();
-  const { error } = await db.from('sueno').update({ fin }).eq('id', siesta.id);
-  if (error) { toast(`Error: ${error.message}`, true); return; }
-  await loadData('sueno');
-  statsDirty = true;
-  toast('Siesta registrada ✓');
-  renderSueno();
-  if (typeof window.enviarNotificacionWhatsApp === 'function') {
-    window.enviarNotificacionWhatsApp('sueno_fin', { inicio: siesta.inicio, fin }, { bebe, miRol });
-  }
-  if (typeof actualizarAlertasYBadge === 'function') {
-    actualizarAlertasYBadge();
+  if ($('btnDespertar').disabled) return;
+  $('btnDespertar').disabled = true;
+  try {
+    const fin = new Date().toISOString();
+    const { error } = await db.from('sueno').update({ fin }).eq('id', siesta.id);
+    if (error) { toast(`Error: ${error.message}`, true); return; }
+    await loadData('sueno');
+    statsDirty = true;
+    toast('Siesta registrada ✓');
+    renderSueno();
+    if (typeof window.enviarNotificacionWhatsApp === 'function') {
+      window.enviarNotificacionWhatsApp('sueno_fin', { inicio: siesta.inicio, fin }, { bebe, miRol });
+    }
+    if (typeof actualizarAlertasYBadge === 'function') {
+      actualizarAlertasYBadge();
+    }
+  } finally {
+    $('btnDespertar').disabled = false;
   }
 });
 
@@ -792,11 +896,28 @@ function sumarLechePorHoraHoy(rows) {
 function sumarVitaminasPorHoraHoy(rows) {
   const hoy = dayKey(new Date());
   const horas = new Array(24).fill(0);
+  // 1. Dosis sueltas (tabla vitaminas)
   for (const r of rows || []) {
+    if (!r.fecha_hora) continue;
     const d = new Date(r.fecha_hora);
     if (dayKey(d) === hoy) {
       const h = d.getHours();
-      horas[h] += r.gotas;
+      horas[h] += (Number(r.gotas) || 0);
+    }
+  }
+  // 2. Checklist de vitaminas con nombre (tabla vitaminas_tipos_log)
+  const mapa = new Map((cache.vitaminas_tipos || []).map((v) => [String(v.id), v]));
+  for (const l of cache.vitaminas_tipos_log || []) {
+    if (l.fecha === hoy) {
+      let h = 12; // Valor centrado si no tiene hora
+      if (l.hora) {
+        const parts = l.hora.split(':');
+        const parsedH = parseInt(parts[0], 10);
+        if (!isNaN(parsedH) && parsedH >= 0 && parsedH <= 23) h = parsedH;
+      }
+      const v = mapa.get(String(l.vitamina_id));
+      const gotas = Number(l.gotas) || v?.gotas_default || 5;
+      horas[h] += gotas;
     }
   }
   return horas;
@@ -1105,8 +1226,16 @@ function renderChartsDias(s, surface) {
     }),
   });
 
-  // 2. Vitaminas
+  // 2. Vitaminas (dosis sueltas + checklist por nombre)
   const vit = sumarPorDia(cache.vitaminas, 'fecha_hora', (r) => r.gotas);
+  const mapaTipos = new Map((cache.vitaminas_tipos || []).map((v) => [String(v.id), v]));
+  (cache.vitaminas_tipos_log || []).forEach((l) => {
+    if (l.fecha) {
+      const v = mapaTipos.get(String(l.vitamina_id));
+      const g = Number(l.gotas) || v?.gotas_default || 5;
+      vit[l.fecha] = (vit[l.fecha] || 0) + g;
+    }
+  });
   const typeVit = chartTypes.vitaminas || 'bar';
   charts.vitaminas = new Chart($('chartVitaminas'), {
     type: typeVit,
@@ -1201,6 +1330,7 @@ const TABS = {
   stats: { icon: '📊', label: 'Stats' },
   alertas: { icon: '🚨', label: 'Alertas' },
   leche: { icon: '🍼', label: 'Leche' },
+  comidas: { icon: '🍽️', label: 'Comidas' },
   vitaminas: { icon: '💊', label: 'Vitaminas' },
   panales: { icon: '🧷', label: 'Pañales' },
   sueno: { icon: '😴', label: 'Sueño' },
@@ -1209,7 +1339,7 @@ const TABS = {
   juegos: { icon: '🧸', label: 'Juegos' },
 };
 
-const ORDEN_DEFAULT = ['stats', 'alertas', 'leche', 'vitaminas', 'panales', 'sueno', 'info', 'bitacora', 'juegos'];
+const ORDEN_DEFAULT = ['stats', 'alertas', 'leche', 'comidas', 'vitaminas', 'panales', 'sueno', 'info', 'bitacora', 'juegos'];
 
 function leerOrdenTabs() {
   try {
@@ -1254,6 +1384,10 @@ function renderTabbar() {
   $('tabbar').innerHTML = html;
 }
 
+function renderComidas() {
+  // Pestaña en construcción
+}
+
 function renderAlertas() {
   if (typeof evaluarAlertasRutina !== 'function') return;
   const res = evaluarAlertasRutina(cache);
@@ -1296,7 +1430,45 @@ function renderAlertas() {
     }
   }
 
-  // 2. Vitaminas
+  // Hierro (08:00 hrs)
+  const cardHierro = $('cardAlertaHierro');
+  const txtHierro = $('txtAlertaHierro');
+  const badgeHierro = $('badgeAlertaHierro');
+  if (cardHierro && txtHierro && badgeHierro && res.hierro) {
+    txtHierro.textContent = res.hierro.mensaje;
+    if (res.hierro.activa) {
+      cardHierro.style.borderLeftColor = '#ef4444';
+      badgeHierro.textContent = '⚠️ Alerta';
+      badgeHierro.style.background = 'rgba(239, 68, 68, 0.2)';
+      badgeHierro.style.color = '#ef4444';
+    } else {
+      cardHierro.style.borderLeftColor = '#199e70';
+      badgeHierro.textContent = res.hierro.tomadoHoy ? 'Al día ✓' : 'Programado 08:00';
+      badgeHierro.style.background = 'rgba(25, 158, 112, 0.15)';
+      badgeHierro.style.color = '#199e70';
+    }
+  }
+
+  // B12 (17:30 hrs)
+  const cardB12 = $('cardAlertaB12');
+  const txtB12 = $('txtAlertaB12');
+  const badgeB12 = $('badgeAlertaB12');
+  if (cardB12 && txtB12 && badgeB12 && res.b12) {
+    txtB12.textContent = res.b12.mensaje;
+    if (res.b12.activa) {
+      cardB12.style.borderLeftColor = '#ef4444';
+      badgeB12.textContent = '⚠️ Alerta';
+      badgeB12.style.background = 'rgba(239, 68, 68, 0.2)';
+      badgeB12.style.color = '#ef4444';
+    } else {
+      cardB12.style.borderLeftColor = '#199e70';
+      badgeB12.textContent = res.b12.tomadoHoy ? 'Al día ✓' : 'Programado 17:30';
+      badgeB12.style.background = 'rgba(25, 158, 112, 0.15)';
+      badgeB12.style.color = '#199e70';
+    }
+  }
+
+  // 2. Vitaminas (20:15 hrs)
   const cardVits = $('cardAlertaVitaminas');
   const txtVits = $('txtAlertaVitaminas');
   const badgeVits = $('badgeAlertaVitaminas');
@@ -1309,7 +1481,7 @@ function renderAlertas() {
       badgeVits.style.color = '#ef4444';
     } else {
       cardVits.style.borderLeftColor = '#199e70';
-      badgeVits.textContent = res.vitaminas.tomadaHoy ? 'Al día ✓' : 'Pendiente';
+      badgeVits.textContent = res.vitaminas.tomadaHoy ? 'Al día ✓' : 'Programado 20:15';
       badgeVits.style.background = 'rgba(25, 158, 112, 0.15)';
       badgeVits.style.color = '#199e70';
     }
@@ -1440,6 +1612,7 @@ function renderTab(tab) {
   if (tab === 'stats') { if (statsDirty) renderCharts(); }
   else if (tab === 'alertas') renderAlertas();
   else if (tab === 'leche') renderLeche();
+  else if (tab === 'comidas') renderComidas();
   else if (tab === 'vitaminas') renderVitaminas();
   else if (tab === 'panales') renderPanales();
   else if (tab === 'sueno') renderSueno();
@@ -1470,14 +1643,20 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('#tabMenu')) $('tabMenu')?.classList.add('hidden');
 });
 
-// ---------- Formularios Principales ----------
+// ---------- Formularios Principales con bloqueo de botones ----------
 $('formLeche').addEventListener('submit', async (e) => {
   e.preventDefault();
   const v = Number($('lecheCantidad').value);
   if (!v || v <= 0) { toast('Ingresa una cantidad válida', true); return; }
-  const fh = $('lecheFechaHora').value ? new Date($('lecheFechaHora').value).toISOString() : new Date().toISOString();
-  const ok = await insertar('tomas', { cantidad_ml: v, fecha_hora: fh });
-  if (ok) { $('lecheCantidad').value = ''; setNowDefaults(); renderLeche(); }
+  const submitBtn = e.target.querySelector('button[type="submit"]') || e.submitter;
+  if (submitBtn) submitBtn.disabled = true;
+  try {
+    const fh = $('lecheFechaHora').value ? new Date($('lecheFechaHora').value).toISOString() : new Date().toISOString();
+    const ok = await insertar('tomas', { cantidad_ml: v, fecha_hora: fh });
+    if (ok) { $('lecheCantidad').value = ''; setNowDefaults(); renderLeche(); }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
 });
 
 $('lecheAhora').addEventListener('click', () => { $('lecheFechaHora').value = dtLocal(new Date()); });
@@ -1486,8 +1665,14 @@ $('formVitaminas').addEventListener('submit', async (e) => {
   e.preventDefault();
   const v = Number($('vitGotas').value);
   if (!v || v <= 0) { toast('Ingresa una cantidad válida', true); return; }
-  const ok = await insertar('vitaminas', { gotas: v, fecha_hora: toISO($('vitFecha').value, $('vitHora').value) });
-  if (ok) { setNowDefaults(); renderVitaminas(); }
+  const submitBtn = e.target.querySelector('button[type="submit"]') || e.submitter;
+  if (submitBtn) submitBtn.disabled = true;
+  try {
+    const ok = await insertar('vitaminas', { gotas: v, fecha_hora: toISO($('vitFecha').value, $('vitHora').value) });
+    if (ok) { setNowDefaults(); renderVitaminas(); }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
 });
 
 $('formVitaminaTipo').addEventListener('submit', async (e) => {
@@ -1495,17 +1680,29 @@ $('formVitaminaTipo').addEventListener('submit', async (e) => {
   const nombre = $('vitTipoNombre').value.trim();
   if (!nombre) return;
   const gotas = Number($('vitTipoGotas').value) || 5;
-  const ok = await insertar('vitaminas_tipos', { nombre, gotas_default: gotas });
-  if (ok) { $('vitTipoNombre').value = ''; $('vitTipoGotas').value = '5'; renderVitaminaTipos(); }
+  const submitBtn = e.target.querySelector('button[type="submit"]') || e.submitter;
+  if (submitBtn) submitBtn.disabled = true;
+  try {
+    const ok = await insertar('vitaminas_tipos', { nombre, gotas_default: gotas });
+    if (ok) { $('vitTipoNombre').value = ''; $('vitTipoGotas').value = '5'; renderVitaminaTipos(); }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
 });
 
 $('formPanales').addEventListener('submit', async (e) => {
   e.preventDefault();
   const h = $('panHeces').checked, o = $('panOrina').checked;
   if (!h && !o) { toast('Marca al menos heces u orina', true); return; }
-  const fh = $('panFechaHora').value ? new Date($('panFechaHora').value).toISOString() : new Date().toISOString();
-  const ok = await insertar('panales', { heces: h, orina: o, fecha_hora: fh });
-  if (ok) { $('panHeces').checked = false; $('panOrina').checked = false; setNowDefaults(); renderPanales(); }
+  const submitBtn = e.target.querySelector('button[type="submit"]') || e.submitter;
+  if (submitBtn) submitBtn.disabled = true;
+  try {
+    const fh = $('panFechaHora').value ? new Date($('panFechaHora').value).toISOString() : new Date().toISOString();
+    const ok = await insertar('panales', { heces: h, orina: o, fecha_hora: fh });
+    if (ok) { $('panHeces').checked = false; $('panOrina').checked = false; setNowDefaults(); renderPanales(); }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
 });
 
 $('panAhora').addEventListener('click', () => { $('panFechaHora').value = dtLocal(new Date()); });
@@ -1513,11 +1710,17 @@ $('panAhora').addEventListener('click', () => { $('panFechaHora').value = dtLoca
 $('formSueno').addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = $('suenoFecha').value, ini = $('suenoInicio').value, fin = $('suenoFin').value;
-  const dtIni = new Date(`${f}T${ini}`);
-  let dtFin = new Date(`${f}T${fin}`);
-  if (dtFin <= dtIni) dtFin = new Date(dtFin.getTime() + 86400000);
-  const ok = await insertar('sueno', { inicio: dtIni.toISOString(), fin: dtFin.toISOString() });
-  if (ok) { setNowDefaults(); renderSueno(); }
+  const submitBtn = e.target.querySelector('button[type="submit"]') || e.submitter;
+  if (submitBtn) submitBtn.disabled = true;
+  try {
+    const dtIni = new Date(`${f}T${ini}`);
+    let dtFin = new Date(`${f}T${fin}`);
+    if (dtFin <= dtIni) dtFin = new Date(dtFin.getTime() + 86400000);
+    const ok = await insertar('sueno', { inicio: dtIni.toISOString(), fin: dtFin.toISOString() });
+    if (ok) { setNowDefaults(); renderSueno(); }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
 });
 
 $('objetivoInput').addEventListener('change', () => {
@@ -1531,10 +1734,16 @@ $('lataInput').addEventListener('change', async () => {
 });
 
 $('abrirLataBtn').addEventListener('click', async () => {
-  const val = $('lataAbiertaInput').value;
-  const fecha = val ? new Date(val) : new Date();
-  const ok = await actualizarBebe({ lata_abierta_en: fecha.toISOString(), latas_usadas: (bebe?.latas_usadas || 0) + 1 });
-  if (ok) toast('🥫 Nueva lata registrada');
+  if ($('abrirLataBtn').disabled) return;
+  $('abrirLataBtn').disabled = true;
+  try {
+    const val = $('lataAbiertaInput').value;
+    const fecha = val ? new Date(val) : new Date();
+    const ok = await actualizarBebe({ lata_abierta_en: fecha.toISOString(), latas_usadas: (bebe?.latas_usadas || 0) + 1 });
+    if (ok) toast('🥫 Nueva lata registrada');
+  } finally {
+    $('abrirLataBtn').disabled = false;
+  }
 });
 
 // ---------- Bitácora ----------
@@ -1553,12 +1762,18 @@ $('formBitacora').addEventListener('submit', async (e) => {
   e.preventDefault();
   const titulo = $('bitTitulo').value.trim();
   if (!titulo) { toast('Escribe un título', true); return; }
-  const ok = await insertar('bitacora', {
-    titulo,
-    fecha: $('bitFecha').value || dayKey(new Date()),
-    notas: $('bitNotas').value.trim() || null,
-  });
-  if (ok) { $('bitTitulo').value = ''; $('bitNotas').value = ''; $('bitFecha').value = dayKey(new Date()); renderBitacora(); }
+  const submitBtn = e.target.querySelector('button[type="submit"]') || e.submitter;
+  if (submitBtn) submitBtn.disabled = true;
+  try {
+    const ok = await insertar('bitacora', {
+      titulo,
+      fecha: $('bitFecha').value || dayKey(new Date()),
+      notas: $('bitNotas').value.trim() || null,
+    });
+    if (ok) { $('bitTitulo').value = ''; $('bitNotas').value = ''; $('bitFecha').value = dayKey(new Date()); renderBitacora(); }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
 });
 
 // ---------- Juegos y Estimulación ----------
@@ -1683,25 +1898,31 @@ $('formJuegos').addEventListener('submit', async (e) => {
   e.preventDefault();
   const nombre = $('juegoNombre').value.trim();
   if (!nombre) { toast('Escribe el nombre del juego', true); return; }
-  detenerCrono();
-  const valores = {
-    nombre,
-    duracion_seg: juegoSeg || null,
-    observaciones: $('juegoObs').value.trim() || null,
-    fotos: juegoFotos,
-  };
-  if (juegoEditId) {
-    const { error } = await db.from('juegos').update(valores).eq('id', juegoEditId);
-    if (error) { toast(`Error: ${error.message}`, true); return; }
-    await loadData('juegos');
-    toast('Juego actualizado ✓');
-  } else {
-    valores.fecha = new Date().toISOString();
-    const ok = await insertar('juegos', valores);
-    if (!ok) return;
+  const submitBtn = $('juegoSubmit') || e.target.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+  try {
+    detenerCrono();
+    const valores = {
+      nombre,
+      duracion_seg: juegoSeg || null,
+      observaciones: $('juegoObs').value.trim() || null,
+      fotos: juegoFotos,
+    };
+    if (juegoEditId) {
+      const { error } = await db.from('juegos').update(valores).eq('id', juegoEditId);
+      if (error) { toast(`Error: ${error.message}`, true); return; }
+      await loadData('juegos');
+      toast('Juego actualizado ✓');
+    } else {
+      valores.fecha = new Date().toISOString();
+      const ok = await insertar('juegos', valores);
+      if (!ok) return;
+    }
+    limpiarJuegoForm();
+    renderJuegos();
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
-  limpiarJuegoForm();
-  renderJuegos();
 });
 
 // ---------- Edición Genérica de Registros ----------
@@ -1770,38 +1991,45 @@ $('editClose').addEventListener('click', () => $('editModal').classList.add('hid
 $('editModal').addEventListener('click', (e) => { if (e.target === $('editModal')) $('editModal').classList.add('hidden'); });
 
 $('editGuardar').addEventListener('click', async () => {
-  let patch = null;
-  if (editTabla === 'tomas') {
-    patch = { cantidad_ml: Number($('edLecheCant').value), fecha_hora: toISO($('edLecheFecha').value, $('edLecheHora').value) };
-  } else if (editTabla === 'vitaminas') {
-    patch = { gotas: Number($('edVitGotas').value), fecha_hora: toISO($('edVitFecha').value, $('edVitHora').value) };
-  } else if (editTabla === 'vitaminas_tipos') {
-    patch = { nombre: $('edVitNombre').value.trim(), gotas_default: Number($('edVitGotasDef').value) || 5 };
-  } else if (editTabla === 'vitaminas_tipos_log') {
-    patch = { fecha: $('edVitLogFecha').value, hora: $('edVitLogHora').value ? $('edVitLogHora').value + ':00' : null, gotas: Number($('edVitLogGotas').value) || null };
-  } else if (editTabla === 'panales') {
-    patch = { heces: $('edPanHeces').checked, orina: $('edPanOrina').checked, fecha_hora: toISO($('edPanFecha').value, $('edPanHora').value) };
-  } else if (editTabla === 'sueno') {
-    const f = $('edSuenoFecha').value, ini = $('edSuenoIni').value, fin = $('edSuenoFin').value;
-    const dIni = new Date(`${f}T${ini}`);
-    let dFin = fin ? new Date(`${f}T${fin}`) : null;
-    if (dFin && dFin <= dIni) dFin = new Date(dFin.getTime() + 86400000);
-    patch = { inicio: dIni.toISOString(), fin: dFin ? dFin.toISOString() : null };
-  } else if (editTabla === 'bitacora') {
-    patch = { titulo: $('edBitTitulo').value.trim(), fecha: $('edBitFecha').value, notas: $('edBitNotas').value.trim() || null };
-  }
-  if (!patch) return;
+  if ($('editGuardar').disabled) return;
+  $('editGuardar').disabled = true;
 
-  const { error } = await db.from(editTabla).update(patch).eq('id', editId);
-  if (error) { toast(`Error al actualizar: ${error.message}`, true); return; }
-  await loadData(editTabla);
-  statsDirty = true;
-  $('editModal').classList.add('hidden');
-  toast('Registro actualizado ✓');
-  if (typeof actualizarAlertasYBadge === 'function') {
-    await actualizarAlertasYBadge();
+  try {
+    let patch = null;
+    if (editTabla === 'tomas') {
+      patch = { cantidad_ml: Number($('edLecheCant').value), fecha_hora: toISO($('edLecheFecha').value, $('edLecheHora').value) };
+    } else if (editTabla === 'vitaminas') {
+      patch = { gotas: Number($('edVitGotas').value), fecha_hora: toISO($('edVitFecha').value, $('edVitHora').value) };
+    } else if (editTabla === 'vitaminas_tipos') {
+      patch = { nombre: $('edVitNombre').value.trim(), gotas_default: Number($('edVitGotasDef').value) || 5 };
+    } else if (editTabla === 'vitaminas_tipos_log') {
+      patch = { fecha: $('edVitLogFecha').value, hora: $('edVitLogHora').value ? $('edVitLogHora').value + ':00' : null, gotas: Number($('edVitLogGotas').value) || null };
+    } else if (editTabla === 'panales') {
+      patch = { heces: $('edPanHeces').checked, orina: $('edPanOrina').checked, fecha_hora: toISO($('edPanFecha').value, $('edPanHora').value) };
+    } else if (editTabla === 'sueno') {
+      const f = $('edSuenoFecha').value, ini = $('edSuenoIni').value, fin = $('edSuenoFin').value;
+      const dIni = new Date(`${f}T${ini}`);
+      let dFin = fin ? new Date(`${f}T${fin}`) : null;
+      if (dFin && dFin <= dIni) dFin = new Date(dFin.getTime() + 86400000);
+      patch = { inicio: dIni.toISOString(), fin: dFin ? dFin.toISOString() : null };
+    } else if (editTabla === 'bitacora') {
+      patch = { titulo: $('edBitTitulo').value.trim(), fecha: $('edBitFecha').value, notas: $('edBitNotas').value.trim() || null };
+    }
+    if (!patch) return;
+
+    const { error } = await db.from(editTabla).update(patch).eq('id', editId);
+    if (error) { toast(`Error al actualizar: ${error.message}`, true); return; }
+    await loadData(editTabla);
+    statsDirty = true;
+    $('editModal').classList.add('hidden');
+    toast('Registro actualizado ✓');
+    if (typeof actualizarAlertasYBadge === 'function') {
+      await actualizarAlertasYBadge();
+    }
+    renderTab(currentTab);
+  } finally {
+    $('editGuardar').disabled = false;
   }
-  renderTab(currentTab);
 });
 
 // ---------- Información del Bebé y Padres ----------
@@ -1849,17 +2077,23 @@ function renderInfoBebe() {
 
 $('formInfo').addEventListener('submit', async (e) => {
   e.preventDefault();
-  await actualizarBebe({
-    nombre: $('infoNombre').value.trim() || 'Mi bebé',
-    nombre_completo: $('infoNombreCompleto').value.trim() || null,
-    grupo_sanguineo: $('infoGrupo').value || null,
-    fecha_nacimiento: $('infoNacimiento').value || null,
-    peso_kg: Number($('infoPeso').value) > 0 ? Number($('infoPeso').value) : null,
-    talla_cm: Number($('infoTalla').value) > 0 ? Number($('infoTalla').value) : null,
-    alergias: $('infoAlergias').value.trim() || null,
-    rutinas: $('infoRutinas').value.trim() || null,
-  });
-  renderInfoBebe();
+  const btn = e.target.querySelector('button[type="submit"]');
+  if (btn) btn.disabled = true;
+  try {
+    await actualizarBebe({
+      nombre: $('infoNombre').value.trim() || 'Mi bebé',
+      nombre_completo: $('infoNombreCompleto').value.trim() || null,
+      grupo_sanguineo: $('infoGrupo').value || null,
+      fecha_nacimiento: $('infoNacimiento').value || null,
+      peso_kg: Number($('infoPeso').value) > 0 ? Number($('infoPeso').value) : null,
+      talla_cm: Number($('infoTalla').value) > 0 ? Number($('infoTalla').value) : null,
+      alergias: $('infoAlergias').value.trim() || null,
+      rutinas: $('infoRutinas').value.trim() || null,
+    });
+    renderInfoBebe();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 });
 
 $('infoFotoBtn').addEventListener('click', () => $('infoFoto').click());
@@ -1899,16 +2133,22 @@ $('parentClose').addEventListener('click', () => $('parentModal').classList.add(
 $('parentModal').addEventListener('click', (e) => { if (e.target === $('parentModal')) $('parentModal').classList.add('hidden'); });
 
 $('parentGuardar').addEventListener('click', async () => {
-  const { error } = await db.from('miembros').update({
-    nombre_completo: $('parentNombre').value.trim() || null,
-    telefono: $('parentTelefono').value.trim() || null,
-    correo_contacto: $('parentCorreo').value.trim() || null,
-    grupo_sanguineo: $('parentGrupo').value || null,
-  }).eq('user_id', usuario.id);
-  if (error) { toast(`Error: ${error.message}`, true); return; }
-  await loadData('miembros');
-  $('parentModal').classList.add('hidden');
-  toast('Guardado ✓');
+  const btn = $('parentGuardar');
+  btn.disabled = true;
+  try {
+    const { error } = await db.from('miembros').update({
+      nombre_completo: $('parentNombre').value.trim() || null,
+      telefono: $('parentTelefono').value.trim() || null,
+      correo_contacto: $('parentCorreo').value.trim() || null,
+      grupo_sanguineo: $('parentGrupo').value || null,
+    }).eq('user_id', usuario.id);
+    if (error) { toast(`Error: ${error.message}`, true); return; }
+    await loadData('miembros');
+    $('parentModal').classList.add('hidden');
+    toast('Guardado ✓');
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 // ---------- Configuración y Sincronización del Bebé ----------
@@ -2093,55 +2333,61 @@ $('swatchRow').addEventListener('click', (e) => {
 });
 
 $('cfgGuardar').addEventListener('click', async () => {
-  const nombre = $('cfgNombre').value.trim() || 'Mi bebé';
-  const paleta = document.querySelector('.swatch.selected')?.dataset?.palette || bebe.paleta || 'celeste';
-  const nuevoRol = document.querySelector('input[name="cfgRol"]:checked')?.value || miRol;
-  const patch = {
-    nombre,
-    paleta,
-    fecha_nacimiento: $('cfgNacimiento').value || null,
-    peso_kg: Number($('cfgPeso').value) > 0 ? Number($('cfgPeso').value) : null,
-    talla_cm: Number($('cfgTalla').value) > 0 ? Number($('cfgTalla').value) : null,
-  };
-  if ($('cfgFoto').dataset.nuevo) {
-    patch.foto_base64 = $('cfgFoto').dataset.nuevo;
-    delete $('cfgFoto').dataset.nuevo;
-  }
-  if (nuevoRol !== miRol) {
-    const { error: eRol } = await db.from('miembros').update({ rol: nuevoRol }).eq('user_id', usuario.id);
-    if (!eRol) miRol = nuevoRol;
-  }
-
-  // Guardar configuración de WhatsApp
-  if ($('cfgWspEnabled')) {
-    const rawTarget = $('cfgWspTarget').value.trim();
-    const parsedTargets = typeof normalizarDestinatarios === 'function'
-      ? normalizarDestinatarios(rawTarget).filter((t) => t.endsWith('@g.us'))
-      : ['120363414573336812@g.us'];
-    const target = parsedTargets.length > 0 ? parsedTargets.join(', ') : '120363414573336812@g.us';
-
-    const wspPatch = {
-      enabled: $('cfgWspEnabled').checked,
-      target,
-      notifyTomas: $('cfgWspTomas').checked,
-      notifyPanales: $('cfgWspPanales').checked,
-      notifyVitaminas: $('cfgWspVitaminas').checked,
-      notifySueno: $('cfgWspSueno').checked,
-      notifyAlertaHambre: $('cfgWspAlertHambre') ? $('cfgWspAlertHambre').checked : true,
-      notifyAlertaVitaminas: $('cfgWspAlertVits') ? $('cfgWspAlertVits').checked : true,
-      notifyAlertaFecas: $('cfgWspAlertFecas') ? $('cfgWspAlertFecas').checked : true,
-      notifyAlertaSueno: $('cfgWspAlertSueno') ? $('cfgWspAlertSueno').checked : true,
-      notifyAlertaPanal: $('cfgWspAlertPanal') ? $('cfgWspAlertPanal').checked : true,
-      notifyInformeDiario: $('cfgWspInformeDiario') ? $('cfgWspInformeDiario').checked : true,
+  const btn = $('cfgGuardar');
+  btn.disabled = true;
+  try {
+    const nombre = $('cfgNombre').value.trim() || 'Mi bebé';
+    const paleta = document.querySelector('.swatch.selected')?.dataset?.palette || bebe.paleta || 'celeste';
+    const nuevoRol = document.querySelector('input[name="cfgRol"]:checked')?.value || miRol;
+    const patch = {
+      nombre,
+      paleta,
+      fecha_nacimiento: $('cfgNacimiento').value || null,
+      peso_kg: Number($('cfgPeso').value) > 0 ? Number($('cfgPeso').value) : null,
+      talla_cm: Number($('cfgTalla').value) > 0 ? Number($('cfgTalla').value) : null,
     };
-    patch.whatsapp_config = wspPatch;
-    if (typeof saveWhatsAppConfig === 'function') {
-      await saveWhatsAppConfig(wspPatch, bebe?.id, db);
+    if ($('cfgFoto').dataset.nuevo) {
+      patch.foto_base64 = $('cfgFoto').dataset.nuevo;
+      delete $('cfgFoto').dataset.nuevo;
     }
-  }
+    if (nuevoRol !== miRol) {
+      const { error: eRol } = await db.from('miembros').update({ rol: nuevoRol }).eq('user_id', usuario.id);
+      if (!eRol) miRol = nuevoRol;
+    }
 
-  const ok = await actualizarBebe(patch);
-  if (ok) $('settingsModal').classList.add('hidden');
+    // Guardar configuración de WhatsApp
+    if ($('cfgWspEnabled')) {
+      const rawTarget = $('cfgWspTarget').value.trim();
+      const parsedTargets = typeof normalizarDestinatarios === 'function'
+        ? normalizarDestinatarios(rawTarget).filter((t) => t.endsWith('@g.us'))
+        : ['120363414573336812@g.us'];
+      const target = parsedTargets.length > 0 ? parsedTargets.join(', ') : '120363414573336812@g.us';
+
+      const wspPatch = {
+        enabled: $('cfgWspEnabled').checked,
+        target,
+        notifyTomas: $('cfgWspTomas').checked,
+        notifyPanales: $('cfgWspPanales').checked,
+        notifyVitaminas: $('cfgWspVitaminas').checked,
+        notifySueno: $('cfgWspSueno').checked,
+        notifyAlertaHambre: $('cfgWspAlertHambre') ? $('cfgWspAlertHambre').checked : true,
+        notifyAlertaVitaminas: $('cfgWspAlertVits') ? $('cfgWspAlertVits').checked : true,
+        notifyAlertaFecas: $('cfgWspAlertFecas') ? $('cfgWspAlertFecas').checked : true,
+        notifyAlertaSueno: $('cfgWspAlertSueno') ? $('cfgWspAlertSueno').checked : true,
+        notifyAlertaPanal: $('cfgWspAlertPanal') ? $('cfgWspAlertPanal').checked : true,
+        notifyInformeDiario: $('cfgWspInformeDiario') ? $('cfgWspInformeDiario').checked : true,
+      };
+      patch.whatsapp_config = wspPatch;
+      if (typeof saveWhatsAppConfig === 'function') {
+        await saveWhatsAppConfig(wspPatch, bebe?.id, db);
+      }
+    }
+
+    const ok = await actualizarBebe(patch);
+    if (ok) $('settingsModal').classList.add('hidden');
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 // ---------- Controladores Interactivos de WhatsApp Gateway ----------
@@ -2221,7 +2467,7 @@ async function iniciarSesionQRWhatsApp() {
       return;
     }
     await cargarCodigoQRWhatsApp();
-  }, 18000);
+  }, 45000); // 45s para permitir escaneo
 
   // Consulta el estado cada 3 segundos para detectar el momento exacto en que se empareja
   wspStatusInterval = setInterval(async () => {
@@ -2640,24 +2886,36 @@ function mostrarLinkError(msg) {
 
 $('formCrearBebe').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  if (btn) btn.disabled = true;
   $('linkError').classList.add('hidden');
-  const { data, error } = await db.rpc('crear_bebe', {
-    p_nombre: $('nuevoNombre').value.trim(),
-    p_rol: rolSeleccionado(),
-  });
-  if (error) { mostrarLinkError(error.message); return; }
-  iniciarApp(data, rolSeleccionado());
-  toast(`Código para vincular: ${data.codigo} (también está en ⚙️)`);
+  try {
+    const { data, error } = await db.rpc('crear_bebe', {
+      p_nombre: $('nuevoNombre').value.trim(),
+      p_rol: rolSeleccionado(),
+    });
+    if (error) { mostrarLinkError(error.message); return; }
+    iniciarApp(data, rolSeleccionado());
+    toast(`Código para vincular: ${data.codigo} (también está en ⚙️)`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 });
 
 $('formUnirse').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  if (btn) btn.disabled = true;
   $('linkError').classList.add('hidden');
-  const codigo = $('codigoInput').value.trim();
-  if (!codigo) { mostrarLinkError('Escribe el código del bebé'); return; }
-  const { data, error } = await db.rpc('unirse_bebe', { p_codigo: codigo, p_rol: rolSeleccionado() });
-  if (error) { mostrarLinkError(error.message); return; }
-  iniciarApp(data, rolSeleccionado());
+  try {
+    const codigo = $('codigoInput').value.trim();
+    if (!codigo) { mostrarLinkError('Escribe el código del bebé'); return; }
+    const { data, error } = await db.rpc('unirse_bebe', { p_codigo: codigo, p_rol: rolSeleccionado() });
+    if (error) { mostrarLinkError(error.message); return; }
+    iniciarApp(data, rolSeleccionado());
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 });
 
 $('linkLogout').addEventListener('click', () => db.auth.signOut());
@@ -2689,7 +2947,8 @@ function iniciarApp(b, rol) {
   activarTab(localStorage.getItem('tab') || 'stats');
   renderLecheResumen();
   iniciarAutoRefresh();
-  loadAll().then(() => {
+  loadAll().then(async () => {
+    await asegurarVitaminasPredeterminadas();
     if (typeof actualizarAlertasYBadge === 'function') {
       actualizarAlertasYBadge();
     }

@@ -699,7 +699,27 @@ input[type="date"], input[type="time"] { display: block; line-height: 48px; }
 .btn-primary:active, .btn-secondary:active, .btn-danger:active {
   transform: scale(0.97);
 }
-.btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-primary:disabled, .btn-secondary:disabled, .btn-danger:disabled, button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  transform: none !important;
+}
+
+.chip-add-vit {
+  font-size: 0.82rem;
+  padding: 6px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  transition: all 0.2s ease;
+}
+.chip-add-vit:hover {
+  border-color: var(--brand-accent);
+  color: var(--brand-accent);
+}
 
 .link-btn {
   background: none;

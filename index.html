@@ -248,11 +248,35 @@
           <div class="card" id="cardAlertaHambre" style="border-left:5px solid #199e70; transition:border-color 0.3s ease;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start;">
               <div>
-                <h3 style="margin:0 0 4px 0; font-size:0.95rem; font-weight:800;">🍼 Alimentación (Despierto > 2:30h / Durmiendo > 8h)</h3>
+                <h3 style="margin:0 0 4px 0; font-size:0.95rem; font-weight:800;">🍼 Alimentación (Despierto > 4:00h / Durmiendo > 8h)</h3>
                 <p id="txtAlertaHambre" style="font-size:0.82rem; color:var(--text); margin:0 0 4px 0;">Calculando tiempo desde última toma…</p>
-                <span id="subAlertaHambre" style="font-size:0.75rem; color:var(--muted);">Regla: alertar si pasan más de 2:30h despierto o más de 8h si está durmiendo.</span>
+                <span id="subAlertaHambre" style="font-size:0.75rem; color:var(--muted);">Regla: alertar si pasan más de 4:00h despierto o más de 8h si está durmiendo.</span>
               </div>
               <span id="badgeAlertaHambre" style="font-size:0.75rem; font-weight:700; padding:3px 8px; border-radius:8px; background:rgba(25, 158, 112, 0.15); color:#199e70;">Normal</span>
+            </div>
+          </div>
+
+          <!-- Regla: Hierro 08:00 hrs -->
+          <div class="card" id="cardAlertaHierro" style="border-left:5px solid #199e70; transition:border-color 0.3s ease;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+              <div>
+                <h3 style="margin:0 0 4px 0; font-size:0.95rem; font-weight:800;">🩸 Hierro Diario (08:00 hrs)</h3>
+                <p id="txtAlertaHierro" style="font-size:0.82rem; color:var(--text); margin:0 0 4px 0;">Consultando registros de hoy…</p>
+                <span id="subAlertaHierro" style="font-size:0.75rem; color:var(--muted);">Regla: alertar pasadas las 08:00 hrs si aún no toma su hierro.</span>
+              </div>
+              <span id="badgeAlertaHierro" style="font-size:0.75rem; font-weight:700; padding:3px 8px; border-radius:8px; background:rgba(25, 158, 112, 0.15); color:#199e70;">Normal</span>
+            </div>
+          </div>
+
+          <!-- Regla: Vitamina B12 17:30 hrs -->
+          <div class="card" id="cardAlertaB12" style="border-left:5px solid #199e70; transition:border-color 0.3s ease;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+              <div>
+                <h3 style="margin:0 0 4px 0; font-size:0.95rem; font-weight:800;">⚡ Vitamina B12 (17:30 hrs)</h3>
+                <p id="txtAlertaB12" style="font-size:0.82rem; color:var(--text); margin:0 0 4px 0;">Consultando registros de hoy…</p>
+                <span id="subAlertaB12" style="font-size:0.75rem; color:var(--muted);">Regla: alertar pasadas las 17:30 hrs si aún no toma su B12.</span>
+              </div>
+              <span id="badgeAlertaB12" style="font-size:0.75rem; font-weight:700; padding:3px 8px; border-radius:8px; background:rgba(25, 158, 112, 0.15); color:#199e70;">Normal</span>
             </div>
           </div>
 
@@ -260,9 +284,9 @@
           <div class="card" id="cardAlertaVitaminas" style="border-left:5px solid #199e70; transition:border-color 0.3s ease;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start;">
               <div>
-                <h3 style="margin:0 0 4px 0; font-size:0.95rem; font-weight:800;">💊 Vitaminas Diarias (Antes de 19:00 hrs)</h3>
+                <h3 style="margin:0 0 4px 0; font-size:0.95rem; font-weight:800;">💊 Vitaminas Diarias (Antes de 20:15 hrs)</h3>
                 <p id="txtAlertaVitaminas" style="font-size:0.82rem; color:var(--text); margin:0 0 4px 0;">Consultando registros de hoy…</p>
-                <span id="subAlertaVitaminas" style="font-size:0.75rem; color:var(--muted);">Regla: alertar pasadas las 19:00 hrs si aún no toma sus vitaminas.</span>
+                <span id="subAlertaVitaminas" style="font-size:0.75rem; color:var(--muted);">Regla: alertar pasadas las 20:15 hrs si aún no toma sus vitaminas.</span>
               </div>
               <span id="badgeAlertaVitaminas" style="font-size:0.75rem; font-weight:700; padding:3px 8px; border-radius:8px; background:rgba(25, 158, 112, 0.15); color:#199e70;">Normal</span>
             </div>
@@ -284,9 +308,9 @@
           <div class="card" id="cardAlertaSueno" style="border-left:5px solid #199e70; transition:border-color 0.3s ease;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start;">
               <div>
-                <h3 style="margin:0 0 4px 0; font-size:0.95rem; font-weight:800;">😴 Ventana de Sueño (Máx 1:40 horas despierto)</h3>
+                <h3 style="margin:0 0 4px 0; font-size:0.95rem; font-weight:800;">😴 Ventana de Sueño (Máx 2:00 horas despierto)</h3>
                 <p id="txtAlertaSueno" style="font-size:0.82rem; color:var(--text); margin:0 0 4px 0;">Calculando tiempo despierto…</p>
-                <span id="subAlertaSueno" style="font-size:0.75rem; color:var(--muted);">Regla: alertar si lleva más de 1:40 horas despierto sin siesta.</span>
+                <span id="subAlertaSueno" style="font-size:0.75rem; color:var(--muted);">Regla: alertar si lleva más de 2:00 horas despierto sin siesta.</span>
               </div>
               <span id="badgeAlertaSueno" style="font-size:0.75rem; font-weight:700; padding:3px 8px; border-radius:8px; background:rgba(25, 158, 112, 0.15); color:#199e70;">Normal</span>
             </div>
@@ -424,6 +448,19 @@
         </div>
       </section>
 
+      <!-- ========== PESTAÑA: COMIDAS (EN CONSTRUCCIÓN) ========== -->
+      <section id="tab-comidas" class="tab">
+        <span class="eyebrow-badge">★ Alimentación Complementaria</span>
+        <div class="card" style="text-align:center; padding:40px 20px;">
+          <div style="font-size:3rem; margin-bottom:12px;">🍽️</div>
+          <h2 style="margin:0 0 8px 0; font-size:1.4rem;">Comidas</h2>
+          <span style="display:inline-block; font-size:0.85rem; font-weight:700; padding:6px 14px; border-radius:20px; background:rgba(237, 161, 0, 0.15); color:#c98500; margin-bottom:12px;">🚧 En construcción</span>
+          <p style="color:var(--text-2); max-width:380px; margin:0 auto; font-size:0.9rem; line-height:1.5;">
+            Pronto podrás registrar y dar seguimiento a las papillas, sólidos, frutas y alimentación complementaria de tu bebé.
+          </p>
+        </div>
+      </section>
+
       <!-- ========== PESTAÑA 3: VITAMINAS ========== -->
       <section id="tab-vitaminas" class="tab">
         <span class="eyebrow-badge">★ Salud y Suplementos</span>
@@ -449,6 +486,12 @@
             <label>Gotas por defecto
               <input type="number" id="vitTipoGotas" step="any" inputmode="decimal" value="5">
             </label>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+            <span style="font-size:0.8rem; color:var(--text-2);">Sugerencias rápidas:</span>
+            <button type="button" class="chip-add-vit" data-nombre="Hierro" data-gotas="5">＋ Hierro (8:00)</button>
+            <button type="button" class="chip-add-vit" data-nombre="B12" data-gotas="5">＋ B12 (17:30)</button>
+            <button type="button" class="chip-add-vit" data-nombre="Vitamina D" data-gotas="5">＋ Vitamina D (20:15)</button>
           </div>
           <button type="submit" class="btn-primary">＋ Agregar a mi lista</button>
           <div id="vitTipoLista" class="table-wrap past-lista"></div>

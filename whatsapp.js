@@ -17,6 +17,8 @@ const DEFAULT_WSP_CONFIG = {
   notifyVitaminas: true,
   notifySueno: true,
   notifyAlertaHambre: true,
+  notifyAlertaHierro: true,
+  notifyAlertaB12: true,
   notifyAlertaVitaminas: true,
   notifyAlertaFecas: true,
   notifyAlertaSueno: true,
@@ -629,7 +631,7 @@ function construirMensajeWhatsApp(tipo, datos, contexto = {}) {
 
     case 'alerta_hambre': {
       const { hora } = fmtFechaHora(datos.ultimaFecha);
-      const tiempoTxt = fmtMinutos(datos.minutosTranscurridos || (datos.durmiendo ? 480 : 150));
+      const tiempoTxt = fmtMinutos(datos.minutosTranscurridos || (datos.durmiendo ? 480 : 240));
       const reitHeader = datos.reiteracion && datos.reiteracion > 1 ? ` (Recordatorio #${datos.reiteracion})` : '';
       const reitNota = datos.reiteracion && datos.reiteracion > 1
         ? `\n⏰ *Recordatorio:* Han pasado más de 15 minutos desde el aviso anterior y aún no se registra la toma de leche.`
@@ -646,7 +648,29 @@ function construirMensajeWhatsApp(tipo, datos, contexto = {}) {
       return `⚠️ *Alerta de Rutina: Hora de Comer*${reitHeader}\n` +
              `👶 *Bebé:* ${bebeNombre}\n` +
              `🍼 *Última toma:* hace ${tiempoTxt}${hora ? ` (a las ${hora})` : ''}\n` +
-             `📢 *Aviso:* Han transcurrido más de 2:30 horas desde su última toma de leche.${reitNota}`;
+             `📢 *Aviso:* Han transcurrido más de 4 horas desde su última toma de leche.${reitNota}`;
+    }
+
+    case 'alerta_hierro': {
+      const reitHeader = datos.reiteracion && datos.reiteracion > 1 ? ` (Recordatorio #${datos.reiteracion})` : '';
+      const reitNota = datos.reiteracion && datos.reiteracion > 1
+        ? `\n⏰ *Recordatorio:* Han pasado más de 15 minutos desde el aviso previo y sigue sin registrarse el hierro.`
+        : '';
+      return `🩸 *Alerta de Rutina: Hierro Diario*${reitHeader}\n` +
+             `👶 *Bebé:* ${bebeNombre}\n` +
+             `⏰ *Horario:* 08:00 hrs (Actual: ${datos.horaActual || 'pasadas 08:00'})\n` +
+             `📢 *Aviso:* Ya son pasadas las 08:00 hrs y aún no se registra la dosis de Hierro de hoy.${reitNota}`;
+    }
+
+    case 'alerta_b12': {
+      const reitHeader = datos.reiteracion && datos.reiteracion > 1 ? ` (Recordatorio #${datos.reiteracion})` : '';
+      const reitNota = datos.reiteracion && datos.reiteracion > 1
+        ? `\n⏰ *Recordatorio:* Han pasado más de 15 minutos desde el aviso previo y sigue sin registrarse la vitamina B12.`
+        : '';
+      return `⚡ *Alerta de Rutina: Vitamina B12 Diaria*${reitHeader}\n` +
+             `👶 *Bebé:* ${bebeNombre}\n` +
+             `⏰ *Horario:* 17:30 hrs (Actual: ${datos.horaActual || 'pasadas 17:30'})\n` +
+             `📢 *Aviso:* Ya son pasadas las 17:30 hrs y aún no se registra la dosis de Vitamina B12 de hoy.${reitNota}`;
     }
 
     case 'alerta_vitaminas': {
@@ -654,10 +678,10 @@ function construirMensajeWhatsApp(tipo, datos, contexto = {}) {
       const reitNota = datos.reiteracion && datos.reiteracion > 1
         ? `\n⏰ *Recordatorio:* Han pasado más de 15 minutos desde el aviso anterior y aún no se marcan sus vitaminas.`
         : '';
-      return `⚠️ *Alerta de Rutina: Vitaminas Pendientes*${reitHeader}\n` +
+      return `💊 *Alerta de Rutina: Vitaminas Pendientes*${reitHeader}\n` +
              `👶 *Bebé:* ${bebeNombre}\n` +
              `💊 *Estado:* Aún no se han administrado sus vitaminas de hoy.\n` +
-             `⏰ *Hora actual:* ${datos.horaActual || 'Pasadas las 19:00 hrs'}\n` +
+             `⏰ *Horario:* 20:15 hrs (Actual: ${datos.horaActual || 'pasadas las 20:15 hrs'})\n` +
              `📢 *Recordatorio:* Recuerda suministrar y marcar sus vitaminas diarias.${reitNota}`;
     }
 
@@ -672,11 +696,11 @@ function construirMensajeWhatsApp(tipo, datos, contexto = {}) {
 
     case 'alerta_sueno': {
       const { hora } = fmtFechaHora(datos.despertarFecha);
-      const tiempoTxt = fmtMinutos(datos.minutosDespierto || 100);
+      const tiempoTxt = fmtMinutos(datos.minutosDespierto || 120);
       return `⚠️ *Alerta de Rutina: Ventana de Sueño Superada*\n` +
              `👶 *Bebé:* ${bebeNombre}\n` +
              `☀️ *Despierto desde:* hace ${tiempoTxt} (despertó a las ${hora})\n` +
-             `📢 *Aviso:* Lleva más de 1:40 horas despierto. Es probable que esté sobrecansado y necesite iniciar su siesta.`;
+             `📢 *Aviso:* Lleva más de 2:00 horas despierto. Es probable que esté sobrecansado y necesite iniciar su siesta.`;
     }
 
     case 'alerta_panal': {
@@ -725,6 +749,8 @@ function enviarNotificacionWhatsApp(tipo, datos, contexto = {}) {
   if ((tipo === 'vitaminas' || tipo === 'vitaminas_tipos') && !cfg.notifyVitaminas) return;
   if ((tipo === 'sueno' || tipo === 'sueno_inicio' || tipo === 'sueno_fin') && !cfg.notifySueno) return;
   if (tipo === 'alerta_hambre' && !cfg.notifyAlertaHambre) return;
+  if (tipo === 'alerta_hierro' && !cfg.notifyAlertaHierro) return;
+  if (tipo === 'alerta_b12' && !cfg.notifyAlertaB12) return;
   if (tipo === 'alerta_vitaminas' && !cfg.notifyAlertaVitaminas) return;
   if (tipo === 'alerta_fecas' && !cfg.notifyAlertaFecas) return;
   if (tipo === 'alerta_sueno' && !cfg.notifyAlertaSueno) return;
@@ -852,6 +878,8 @@ const ALERT_RETRY_INTERVAL_MS = 15 * 60 * 1000;
 
 const ALERT_COOLDOWNS = {
   alerta_hambre: ALERT_RETRY_INTERVAL_MS,
+  alerta_hierro: ALERT_RETRY_INTERVAL_MS,
+  alerta_b12: ALERT_RETRY_INTERVAL_MS,
   alerta_vitaminas: ALERT_RETRY_INTERVAL_MS,
   alerta_panal: ALERT_RETRY_INTERVAL_MS,
   alerta_sueno: 120 * 60 * 1000,
@@ -859,19 +887,23 @@ const ALERT_COOLDOWNS = {
 };
 
 /**
- * Evalúa las 5 reglas proactivas de rutina pediátrica a partir del estado actual de datos en caché:
+ * Evalúa las reglas proactivas de rutina pediátrica a partir del estado actual de datos en caché:
  * 1. Toma de leche:
  *    - Si el bebé está durmiendo: alertar si no ha comido por más de 8 horas (>480 min).
- *    - Si está despierto: alertar si no ha comido por más de 2:30 horas (>150 min).
- * 2. Vitaminas diarias: pasadas las 19:00 hrs sin vitaminas registradas hoy.
- * 3. Fecas: más de 3 días (72 hrs) sin registrar deposiciones.
- * 4. Sueño: más de 1:40 horas despierto (>100 min).
- * 5. Cambio de pañal: más de 4 horas sin cambio de pañal (>240 min).
+ *    - Si está despierto: alertar si no ha comido por más de 4:00 horas (>240 min).
+ * 2. Hierro: a las 08:00 am si aún no se ha registrado hoy.
+ * 3. Vitamina B12: a las 17:30 pm si aún no se ha registrado hoy.
+ * 4. Vitaminas (Vitamina D / General): pasadas las 20:15 hrs si aún no se registran hoy.
+ * 5. Fecas: más de 3 días (72 hrs) sin registrar deposiciones.
+ * 6. Sueño: más de 2:00 horas despierto (>120 min).
+ * 7. Cambio de pañal: más de 4 horas sin cambio de pañal (>240 min).
  */
 function evaluarAlertasRutina(cache = {}) {
   const now = new Date();
   const res = {
     hambre: { activa: false, durmiendo: false, minsTranscurridos: 0, ultimaFecha: null, mensaje: 'Al día' },
+    hierro: { activa: false, tomadoHoy: false, horaActual: '', mensaje: 'Al día' },
+    b12: { activa: false, tomadoHoy: false, horaActual: '', mensaje: 'Al día' },
     vitaminas: { activa: false, tomadaHoy: false, horaActual: '', mensaje: 'Al día' },
     fecas: { activa: false, diasTranscurridos: 0, ultimaFecha: null, mensaje: 'Normal' },
     sueno: { activa: false, durmiendo: false, minsDespierto: 0, despertarFecha: null, mensaje: 'Normal' },
@@ -892,7 +924,7 @@ function evaluarAlertasRutina(cache = {}) {
   res.hambre.durmiendo = estaDurmiendo;
   res.panal.durmiendo = estaDurmiendo;
 
-  // 1. Alimentación (Durmiendo: > 8 hrs = 480 min / Despierto: > 2:30 hrs = 150 min)
+  // 1. Alimentación (Durmiendo: > 8 hrs = 480 min / Despierto: > 4:00 hrs = 240 min)
   const tomas = Array.isArray(cache.tomas) ? cache.tomas : [];
   if (tomas.length > 0) {
     const tomasOrdenadas = [...tomas].sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora));
@@ -912,10 +944,10 @@ function evaluarAlertasRutina(cache = {}) {
         res.hambre.mensaje = `Durmiendo 💤 (${fmtMinutos(mins)} sin comer, máx 8 hrs)`;
       }
     } else {
-      // Caso 2: Bebé despierto -> alertar si lleva más de 2:30 horas sin comer (>150 min)
-      if (mins >= 150) {
+      // Caso 2: Bebé despierto -> alertar si lleva más de 4:00 horas sin comer (>240 min)
+      if (mins >= 240) {
         res.hambre.activa = true;
-        res.hambre.mensaje = `Lleva ${fmtMinutos(mins)} sin comer (> 2:30 hrs)`;
+        res.hambre.mensaje = `Lleva ${fmtMinutos(mins)} sin comer (> 4 hrs)`;
       } else {
         res.hambre.activa = false;
         res.hambre.mensaje = `Última toma hace ${fmtMinutos(mins)}`;
@@ -925,7 +957,7 @@ function evaluarAlertasRutina(cache = {}) {
     res.hambre.mensaje = 'Sin tomas registradas';
   }
 
-  // 2. Vitaminas (pasadas las 19:00 hrs sin registrar hoy)
+  // Helpers de fecha y hora local
   const pad2 = (n) => String(n).padStart(2, '0');
   const toLocalDayKey = (d) => {
     if (!d) return '';
@@ -935,31 +967,84 @@ function evaluarAlertasRutina(cache = {}) {
   };
   const todayKey = toLocalDayKey(now);
   const horaActual = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+  const nowMinutosDelDia = now.getHours() * 60 + now.getMinutes();
+
+  res.hierro.horaActual = horaActual;
+  res.b12.horaActual = horaActual;
   res.vitaminas.horaActual = horaActual;
 
   const vitsSimple = Array.isArray(cache.vitaminas) ? cache.vitaminas : [];
   const vitsLog = Array.isArray(cache.vitaminas_tipos_log) ? cache.vitaminas_tipos_log : [];
-  // Revisar si se registró en la tabla simple de vitaminas hoy (respetando zona horaria local del dispositivo)
-  const tieneVitSimpleHoy = vitsSimple.some((r) => r.fecha_hora && toLocalDayKey(r.fecha_hora) === todayKey);
-  // Revisar si existe registro en la tabla de checklist de vitaminas de hoy (cualquier fila para hoy indica que fue tomada)
-  const tieneVitLogHoy = vitsLog.some((r) => r.fecha === todayKey);
-  const tomadaHoy = tieneVitSimpleHoy || tieneVitLogHoy;
-  res.vitaminas.tomadaHoy = tomadaHoy;
+  const vitsTipos = Array.isArray(cache.vitaminas_tipos) ? cache.vitaminas_tipos : [];
+  const mapaTipos = new Map(vitsTipos.map((t) => [String(t.id), t]));
 
-  if (tomadaHoy) {
-    res.vitaminas.activa = false;
-    res.vitaminas.mensaje = 'Vitaminas administradas hoy ✓';
+  const logsHoy = vitsLog.filter((r) => r.fecha === todayKey);
+
+  // 2. Hierro (08:00 AM)
+  const hierroTomado = logsHoy.some((l) => {
+    const tipo = mapaTipos.get(String(l.vitamina_id));
+    return tipo && (tipo.nombre || '').toLowerCase().includes('hierro');
+  });
+  res.hierro.tomadoHoy = hierroTomado;
+  if (hierroTomado) {
+    res.hierro.activa = false;
+    res.hierro.mensaje = 'Hierro administrado hoy ✓';
   } else {
-    if (now.getHours() >= 19) {
-      res.vitaminas.activa = true;
-      res.vitaminas.mensaje = `Pendiente pasada las 19:00 hrs (${horaActual})`;
+    // 08:00 AM = 480 minutos del día
+    if (nowMinutosDelDia >= 8 * 60) {
+      res.hierro.activa = true;
+      res.hierro.mensaje = `Pendiente pasada las 08:00 am (${horaActual})`;
     } else {
-      res.vitaminas.activa = false;
-      res.vitaminas.mensaje = 'Pendiente para hoy (antes de las 19:00)';
+      res.hierro.activa = false;
+      res.hierro.mensaje = 'Programado para las 08:00 am';
     }
   }
 
-  // 3. Fecas (más de 3 días sin deposiciones)
+  // 3. Vitamina B12 (17:30 PM)
+  const b12Tomado = logsHoy.some((l) => {
+    const tipo = mapaTipos.get(String(l.vitamina_id));
+    return tipo && (tipo.nombre || '').toLowerCase().includes('b12');
+  });
+  res.b12.tomadoHoy = b12Tomado;
+  if (b12Tomado) {
+    res.b12.activa = false;
+    res.b12.mensaje = 'B12 administrada hoy ✓';
+  } else {
+    // 17:30 PM = 17 * 60 + 30 = 1050 minutos del día
+    if (nowMinutosDelDia >= 17 * 60 + 30) {
+      res.b12.activa = true;
+      res.b12.mensaje = `Pendiente pasada las 17:30 hrs (${horaActual})`;
+    } else {
+      res.b12.activa = false;
+      res.b12.mensaje = 'Programado para las 17:30 hrs';
+    }
+  }
+
+  // 4. Vitaminas (Vitamina D / General a las 20:15 PM)
+  const tieneVitSimpleHoy = vitsSimple.some((r) => r.fecha_hora && toLocalDayKey(r.fecha_hora) === todayKey);
+  const tieneOtrasVitsLogHoy = logsHoy.some((l) => {
+    const tipo = mapaTipos.get(String(l.vitamina_id));
+    const nom = (tipo?.nombre || '').toLowerCase();
+    return !nom.includes('hierro') && !nom.includes('b12');
+  });
+  const tomadaGeneralHoy = tieneVitSimpleHoy || tieneOtrasVitsLogHoy || (logsHoy.length > 0 && vitsTipos.length <= 1);
+  res.vitaminas.tomadaHoy = tomadaGeneralHoy;
+
+  if (tomadaGeneralHoy) {
+    res.vitaminas.activa = false;
+    res.vitaminas.mensaje = 'Vitaminas administradas hoy ✓';
+  } else {
+    // 20:15 PM = 20 * 60 + 15 = 1215 minutos del día
+    if (nowMinutosDelDia >= 20 * 60 + 15) {
+      res.vitaminas.activa = true;
+      res.vitaminas.mensaje = `Pendiente pasada las 20:15 hrs (${horaActual})`;
+    } else {
+      res.vitaminas.activa = false;
+      res.vitaminas.mensaje = 'Programado para las 20:15 hrs';
+    }
+  }
+
+  // 5. Fecas (más de 3 días sin deposiciones)
   const panales = Array.isArray(cache.panales) ? cache.panales : [];
   const panalesConHeces = panales.filter((p) => p.heces).sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora));
   if (panalesConHeces.length > 0) {
@@ -979,7 +1064,7 @@ function evaluarAlertasRutina(cache = {}) {
     res.fecas.mensaje = 'Sin registros de fecas';
   }
 
-  // 4. Sueño (más de 1:40 horas despierto = 100 min)
+  // 6. Sueño (más de 2:00 horas despierto = 120 min)
   if (siestaActiva) {
     res.sueno.durmiendo = true;
     res.sueno.activa = false;
@@ -992,9 +1077,9 @@ function evaluarAlertasRutina(cache = {}) {
       const minsDespierto = Math.max(0, Math.floor(diffMs / 60000));
       res.sueno.minsDespierto = minsDespierto;
       res.sueno.despertarFecha = ultimoSueno.fin;
-      if (minsDespierto >= 100) {
+      if (minsDespierto >= 120) {
         res.sueno.activa = true;
-        res.sueno.mensaje = `Lleva ${fmtMinutos(minsDespierto)} despierto (> 1:40 hrs)`;
+        res.sueno.mensaje = `Lleva ${fmtMinutos(minsDespierto)} despierto (> 2:00 hrs)`;
       } else {
         res.sueno.mensaje = `Despierto hace ${fmtMinutos(minsDespierto)}`;
       }
@@ -1003,7 +1088,7 @@ function evaluarAlertasRutina(cache = {}) {
     }
   }
 
-  // 5. Cambio de pañal (más de 4 horas sin cambio = 240 min)
+  // 7. Cambio de pañal (más de 4 horas sin cambio = 240 min)
   // Regla especial: NO alertar si el bebé duerme entre las 20:00 y las 07:00 hrs
   const horaNum = now.getHours();
   const esHorarioNocturno = (horaNum >= 20 || horaNum < 7);
@@ -1032,6 +1117,8 @@ function evaluarAlertasRutina(cache = {}) {
   }
 
   res.conteoActivas = (res.hambre.activa ? 1 : 0) +
+                      (res.hierro.activa ? 1 : 0) +
+                      (res.b12.activa ? 1 : 0) +
                       (res.vitaminas.activa ? 1 : 0) +
                       (res.fecas.activa ? 1 : 0) +
                       (res.sueno.activa ? 1 : 0) +
@@ -1148,14 +1235,15 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
     const todayStr = `${nowObj.getFullYear()}-${pad(nowObj.getMonth() + 1)}-${pad(nowObj.getDate())}`;
     const hoyInicioIso = `${todayStr}T00:00:00`;
 
-    let tomasRes, suenoRes, panalesRes, vitsRes, vitLogRes, remoteStateInfo;
+    let tomasRes, suenoRes, panalesRes, vitsRes, vitLogRes, vitTiposRes, remoteStateInfo;
     try {
-      [tomasRes, suenoRes, panalesRes, vitsRes, vitLogRes, remoteStateInfo] = await Promise.all([
+      [tomasRes, suenoRes, panalesRes, vitsRes, vitLogRes, vitTiposRes, remoteStateInfo] = await Promise.all([
         dbClient.from('tomas').select('id, fecha_hora, cantidad_ml').eq('bebe_id', bebe.id).order('fecha_hora', { ascending: false }).limit(5),
         dbClient.from('sueno').select('id, inicio, fin').eq('bebe_id', bebe.id).order('inicio', { ascending: false }).limit(5),
         dbClient.from('panales').select('id, fecha_hora, heces, orina').eq('bebe_id', bebe.id).order('fecha_hora', { ascending: false }).limit(5),
         dbClient.from('vitaminas').select('id, fecha_hora, gotas').eq('bebe_id', bebe.id).gte('fecha_hora', hoyInicioIso).limit(5),
         dbClient.from('vitaminas_tipos_log').select('id, vitamina_id, fecha, hora, gotas').eq('bebe_id', bebe.id).eq('fecha', todayStr).limit(10),
+        dbClient.from('vitaminas_tipos').select('id, nombre, gotas_default').eq('bebe_id', bebe.id).limit(20),
         leerAlertStateRemoto(bebe.id, dbClient),
       ]);
     } catch (netErr) {
@@ -1183,6 +1271,9 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
     if (vitLogRes.data && Array.isArray(vitLogRes.data)) {
       cache.vitaminas_tipos_log = vitLogRes.data;
     }
+    if (vitTiposRes.data && Array.isArray(vitTiposRes.data)) {
+      cache.vitaminas_tipos = vitTiposRes.data;
+    }
 
     // 3. Evaluar reglas con datos remotos frescos y consolidados
     const alertas = evaluarAlertasRutina(cache);
@@ -1190,7 +1281,7 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
     // 4. DOBLE VERIFICACIÓN ATÓMICA DE UMBRALES (Sanity check final):
     const nowMs = Date.now();
 
-    // Verificación 1: Alimentación
+    // Verificación 1: Alimentación (Awake >= 240m, Asleep >= 480m)
     if (cache.tomas && cache.tomas.length > 0) {
       const diffMinToma = Math.max(0, Math.floor((nowMs - new Date(cache.tomas[0].fecha_hora).getTime()) / 60000));
       alertas.hambre.minsTranscurridos = diffMinToma;
@@ -1198,7 +1289,7 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
       if (alertas.hambre.durmiendo) {
         if (diffMinToma < 480) alertas.hambre.activa = false;
       } else {
-        if (diffMinToma < 150) alertas.hambre.activa = false;
+        if (diffMinToma < 240) alertas.hambre.activa = false;
       }
     }
 
@@ -1214,10 +1305,10 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
       }
     }
 
-    // Verificación 4: Sueño
+    // Verificación 4: Sueño (Awake >= 120m)
     if (alertas.sueno.durmiendo) {
       alertas.sueno.activa = false;
-    } else if (alertas.sueno.minsDespierto < 100) {
+    } else if (alertas.sueno.minsDespierto < 120) {
       alertas.sueno.activa = false;
     }
 
@@ -1230,13 +1321,28 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
       if (diffDiasFecas < 3) alertas.fecas.activa = false;
     }
 
-    // Verificación 2: Vitaminas
-    if (alertas.vitaminas.tomadaHoy || nowObj.getHours() < 19) {
+    // Minutos del día para validación horaria
+    const nowMinutosDelDiaVerif = nowObj.getHours() * 60 + nowObj.getMinutes();
+
+    // Verificación Hierro (08:00 hrs)
+    if (alertas.hierro.tomadoHoy || nowMinutosDelDiaVerif < 8 * 60) {
+      alertas.hierro.activa = false;
+    }
+
+    // Verificación B12 (17:30 hrs)
+    if (alertas.b12.tomadoHoy || nowMinutosDelDiaVerif < 17 * 60 + 30) {
+      alertas.b12.activa = false;
+    }
+
+    // Verificación 2: Vitaminas Diarias (20:15 hrs)
+    if (alertas.vitaminas.tomadaHoy || nowMinutosDelDiaVerif < 20 * 60 + 15) {
       alertas.vitaminas.activa = false;
     }
 
     // Recalcular conteo activo tras doble verificación
     alertas.conteoActivas = (alertas.hambre.activa ? 1 : 0) +
+                            (alertas.hierro.activa ? 1 : 0) +
+                            (alertas.b12.activa ? 1 : 0) +
                             (alertas.vitaminas.activa ? 1 : 0) +
                             (alertas.fecas.activa ? 1 : 0) +
                             (alertas.sueno.activa ? 1 : 0) +
@@ -1254,7 +1360,7 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
     let enviadas = 0;
     let stateChanged = false;
 
-    // 6. Configuración de las 5 reglas proactivas
+    // 6. Configuración de las reglas proactivas
     const reglas = [
       {
         key: 'alerta_hambre',
@@ -1265,6 +1371,24 @@ async function verificarYDespacharAlertasWhatsApp(cache = {}, contexto = {}) {
           minutosTranscurridos: alertas.hambre.minsTranscurridos,
           ultimaFecha: alertas.hambre.ultimaFecha,
           durmiendo: alertas.hambre.durmiendo,
+        }),
+      },
+      {
+        key: 'alerta_hierro',
+        activa: alertas.hierro.activa,
+        reiterar: true,
+        referencia: todayStr,
+        datos: () => ({
+          horaActual: alertas.hierro.horaActual,
+        }),
+      },
+      {
+        key: 'alerta_b12',
+        activa: alertas.b12.activa,
+        reiterar: true,
+        referencia: todayStr,
+        datos: () => ({
+          horaActual: alertas.b12.horaActual,
         }),
       },
       {
