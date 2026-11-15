@@ -73,7 +73,7 @@
   }
   </script>
 
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=2.7.0">
   <link rel="icon" type="image/png" sizes="512x512" href="logo.png">
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-180x180.png">
   <link rel="apple-touch-icon" sizes="512x512" href="apple-touch-icon.png">
@@ -448,17 +448,135 @@
         </div>
       </section>
 
-      <!-- ========== PESTAÑA: COMIDAS (EN CONSTRUCCIÓN) ========== -->
+      <!-- ========== PESTAÑA: COMIDAS (PLATO DINÁMICO Y ROTACIÓN SEMANAL) ========== -->
       <section id="tab-comidas" class="tab">
         <span class="eyebrow-badge">★ Alimentación Complementaria</span>
-        <div class="card" style="text-align:center; padding:40px 20px;">
-          <div style="font-size:3rem; margin-bottom:12px;">🍽️</div>
-          <h2 style="margin:0 0 8px 0; font-size:1.4rem;">Comidas</h2>
-          <span style="display:inline-block; font-size:0.85rem; font-weight:700; padding:6px 14px; border-radius:20px; background:rgba(237, 161, 0, 0.15); color:#c98500; margin-bottom:12px;">🚧 En construcción</span>
-          <p style="color:var(--text-2); max-width:380px; margin:0 auto; font-size:0.9rem; line-height:1.5;">
-            Pronto podrás registrar y dar seguimiento a las papillas, sólidos, frutas y alimentación complementaria de tu bebé.
-          </p>
+
+        <div class="dash-grid">
+          <div class="card dash-card">
+            <span class="stat-label">Ciclo semanal</span>
+            <span class="stat-value stat-value-sm" id="comidaSemanaActual">Semana 1</span>
+          </div>
+          <div class="card dash-card">
+            <span class="stat-label">Alimentos integrados</span>
+            <span class="stat-value stat-value-sm" id="comidaAlimentosProbados">0 / 58</span>
+          </div>
+          <div class="card dash-card">
+            <span class="stat-label">Grupo nuevo hoy</span>
+            <span class="stat-value stat-value-sm" id="comidaGrupoSugeridoHoy">🥦 Verdura</span>
+          </div>
+          <div class="card dash-card">
+            <span class="stat-label">Alergias detectadas</span>
+            <span class="stat-value stat-value-sm" id="comidaAlergiasDetectadas">0</span>
+          </div>
         </div>
+
+        <div class="card goal-card">
+          <div class="goal-row">
+            <div>
+              <span class="stat-label">Avance del catálogo</span>
+              <span class="stat-value stat-value-sm" id="comidaCatalogoStatus">0 ingredientes completados</span>
+            </div>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="comidaCatalogoBar"></div></div>
+        </div>
+
+        <form id="formComidaPlato" class="card form-card">
+          <div class="comida-header-actions">
+            <h2 style="margin:0;">🍽️ Armar plato del día</h2>
+            <button type="button" id="btnSugerirPlato" class="btn-secondary" style="padding:7px 12px; font-size:0.8rem;">🎲 Sugerir plato</button>
+          </div>
+
+          <div class="comida-rule-banner" id="comidaReglaBanner">
+            <span>💡</span>
+            <div id="comidaReglaTexto">
+              <strong>Regla clave:</strong> Introduce <strong>1 alimento nuevo por día</strong> rotando los 5 grupos y completa el plato con ingredientes ya probados (sin repetir los de la semana anterior).
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <label>Fecha
+              <input type="date" id="comidaFecha" required>
+            </label>
+            <label>Hora
+              <input type="time" id="comidaHora" required>
+            </label>
+            <label>Tiempo de comida
+              <select id="comidaTiempo">
+                <option value="Almuerzo">🍲 Almuerzo</option>
+                <option value="Desayuno">🥣 Desayuno</option>
+                <option value="Merienda">🍌 Merienda</option>
+                <option value="Cena">🌙 Cena</option>
+              </select>
+            </label>
+          </div>
+
+          <!-- Plato visual de 5 grupos -->
+          <div id="platoVisualSlots" class="plato-visual-grid"></div>
+
+          <!-- Panel de selección por grupo -->
+          <div id="platoSelectorGrupoWrap" class="comida-selector-box hidden">
+            <div class="comida-selector-head">
+              <strong id="platoSelectorTitulo" style="font-size:0.88rem;">Selecciona ingrediente</strong>
+              <button type="button" id="platoSelectorClose" class="icon-btn" style="padding:2px 8px;">✕</button>
+            </div>
+            <input type="search" id="platoSelectorSearch" placeholder="Buscar alimento en este grupo…">
+            <div id="platoSelectorOpciones" class="alimentos-grid"></div>
+          </div>
+
+          <p id="comidaAlimentoNuevoResumen" class="form-hint" style="margin:0;"></p>
+
+          <label class="field-label">Notas / preparación (textura, reacción, aceptación)
+            <textarea id="comidaNotas" rows="2" maxlength="500" placeholder="Ej: Textura blanda en trozos (BLW), buena aceptación…"></textarea>
+          </label>
+
+          <button type="submit" id="btnGuardarPlato" class="btn-primary">💾 Guardar plato del día</button>
+        </form>
+
+        <div class="card table-card">
+          <h2>Historial de platos</h2>
+          <p class="form-hint" style="margin-bottom:8px;">Toca un plato para ver sus ingredientes con imágenes y registrar si causó alergia.</p>
+          <div id="tablaComidas" class="table-wrap"></div>
+        </div>
+
+        <!-- Catálogo de alimentos con imágenes referenciales -->
+        <div class="card form-card">
+          <h2>🧺 Lista maestra de alimentos</h2>
+          <div id="comidaCatalogoFiltro" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+          <div id="comidaCatalogoGrid" class="alimentos-grid"></div>
+
+          <details style="margin-top:6px;">
+            <summary style="font-size:0.84rem; color:var(--brand-accent); cursor:pointer; font-weight:700;">＋ Agregar alimento personalizado al catálogo</summary>
+            <div id="formNuevoAlimentoCatalogo" style="margin-top:10px; display:flex; flex-direction:column; gap:10px;">
+              <div class="form-grid">
+                <label>Nombre
+                  <input type="text" id="nuevoAlimNombre" maxlength="50" placeholder="Ej: Quinoa roja">
+                </label>
+                <label>Grupo
+                  <select id="nuevoAlimGrupo">
+                    <option value="verdura">🥦 Verdura</option>
+                    <option value="fruta">🍌 Fruta</option>
+                    <option value="proteina">🫘 Proteína</option>
+                    <option value="grasa">🥑 Grasa saludable</option>
+                    <option value="cereal">🍚 Cereal / Tubérculo</option>
+                  </select>
+                </label>
+              </div>
+              <button type="button" id="btnAgregarAlimentoCat" class="btn-secondary">＋ Agregar a la lista</button>
+            </div>
+          </details>
+        </div>
+
+        <!-- Guías de referencia según infografías -->
+        <details class="card faq-card">
+          <summary>📖 Paso a paso y Nutrientes por Grupo</summary>
+          <div id="comidaGuiaNutrientes" class="faq-list"></div>
+        </details>
+
+        <details class="card faq-card">
+          <summary>🚫 Alimentos que NO se deben incluir</summary>
+          <div id="comidaProhibidosLista"></div>
+        </details>
       </section>
 
       <!-- ========== PESTAÑA 3: VITAMINAS ========== -->
@@ -543,6 +661,14 @@
           <div class="check-row">
             <label class="check-pill"><input type="checkbox" id="panHeces"> 💩 Heces</label>
             <label class="check-pill"><input type="checkbox" id="panOrina"> 💧 Orina</label>
+          </div>
+          <div id="bristolWrap" class="bristol-wrap hidden">
+            <div class="bristol-title">
+              <span>💩 Escala de Bristol Pediátrica</span>
+              <small>Selecciona tipo (1 al 7)</small>
+            </div>
+            <div id="bristolGrid" class="bristol-grid"></div>
+            <div id="bristolLeyenda" class="bristol-leyenda hidden"></div>
           </div>
           <label class="field-label">Fecha y hora
             <input type="datetime-local" id="panFechaHora">
@@ -971,14 +1097,49 @@
     </div>
   </div>
 
+  <!-- ==================== MODAL DE DETALLE DE COMIDA Y ALERGIAS ==================== -->
+  <div id="comidaModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="comidaModalTitulo">Detalle del plato</h2>
+        <button id="comidaModalClose" class="icon-btn">✕</button>
+      </div>
+      <div id="comidaModalMeta" style="font-size:0.84rem; color:var(--text-2); line-height:1.45;"></div>
+      <div id="comidaModalIngredientes" class="comida-modal-list"></div>
+
+      <div id="comidaModalAlergiaPanel" class="alergia-panel">
+        <h3>🚨 Panel de Reacción Alérgica</h3>
+        <p style="font-size:0.78rem; color:var(--text-2); margin:0;">Marca si algún alimento de este plato provocó reacción o intolerancia para alertarlo en futuras semanas:</p>
+        <div id="comidaModalAlergiaChecks" class="alergia-checks"></div>
+        <div class="field-label" style="gap:6px;">Síntomas observados
+          <div id="comidaModalSintomas" class="sintoma-chips">
+            <button type="button" class="sintoma-chip" data-sintoma="Sarpullido / Ronchas">🔴 Sarpullido / Ronchas</button>
+            <button type="button" class="sintoma-chip" data-sintoma="Enrojecimiento">😳 Enrojecimiento</button>
+            <button type="button" class="sintoma-chip" data-sintoma="Vómito / Reflujo">🤢 Vómito / Reflujo</button>
+            <button type="button" class="sintoma-chip" data-sintoma="Diarrea / Cólico">💩 Diarrea / Cólico</button>
+            <button type="button" class="sintoma-chip" data-sintoma="Hinchazón">🫧 Hinchazón</button>
+          </div>
+        </div>
+        <label class="field-label">Observaciones de reacción
+          <textarea id="comidaModalReaccionNotas" rows="2" maxlength="400" placeholder="Ej: Pequeñas ronchas alrededor de la boca 30 min después…"></textarea>
+        </label>
+      </div>
+
+      <div style="display:flex; gap:10px;">
+        <button id="comidaModalGuardar" class="btn-primary" style="flex:1;">Guardar evaluación</button>
+        <button id="comidaModalEliminar" class="btn-danger" style="flex:none; padding:0 16px;">🗑</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
-  <script src="config.js?v=2.6.1"></script>
-  <script src="whatsapp.js?v=2.6.1"></script>
-  <script src="app.js?v=2.6.1"></script>
+  <script src="config.js?v=2.7.0"></script>
+  <script src="whatsapp.js?v=2.7.0"></script>
+  <script src="app.js?v=2.7.0"></script>
 </body>
 </html>

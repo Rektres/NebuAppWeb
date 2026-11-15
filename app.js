@@ -155,6 +155,8 @@ function setNowDefaults() {
   if ($('suenoFin')) $('suenoFin').value = h;
   if ($('vitTipoFecha')) $('vitTipoFecha').value = f;
   if ($('vitTipoHora')) $('vitTipoHora').value = h;
+  if ($('comidaFecha')) $('comidaFecha').value = f;
+  if ($('comidaHora')) $('comidaHora').value = h;
 }
 
 // ---------- Estado ----------
@@ -225,6 +227,9 @@ async function eliminar(tabla, id) {
   if (!confirm('¿Eliminar este registro?')) return;
   const { error } = await db.from(tabla).delete().eq('id', id);
   if (error) { toast(`Error al eliminar: ${error.message}`, true); return; }
+  if (tabla === 'panales') {
+    await guardarBristolEnMapa(id, null);
+  }
   await loadData(tabla);
   statsDirty = true;
   if (typeof actualizarAlertasYBadge === 'function') {
@@ -641,9 +646,194 @@ async function asegurarVitaminasPredeterminadas() {
   }
 }
 
-// ---------- Pañales ----------
+// ---------- Pañales & Escala de Bristol Pediátrica ----------
+const FECHA_MIN_BRISTOL = '2026-11-15';
+const SYSTEM_BRISTOL_KEY = '__bristol_map__';
+
+const BRISTOL_DATA = [
+  {
+    tipo: 1,
+    corto: 'Bolitas duras',
+    color: '#81a855',
+    cara: '😣',
+    desc: 'Heces en bolas duras y separadas, como frutos secos.',
+    estado: 'Puede indicar estreñimiento. Tu peque puede tener dificultad para evacuar.',
+    tip: 'Qué falta para mejorar: Ofrecer más agua durante el día (según edad), sumar frutas laxantes ricas en agua y fibra (ciruela, pera, kiwi) y grasas saludables (palta, aceite de oliva).',
+    svg: '<svg viewBox="0 0 64 36"><circle cx="14" cy="14" r="5" fill="#7c4a26" stroke="#4e2c14" stroke-width="1.4"/><circle cx="29" cy="10" r="4.8" fill="#8b552c" stroke="#4e2c14" stroke-width="1.4"/><circle cx="44" cy="14" r="5" fill="#7c4a26" stroke="#4e2c14" stroke-width="1.4"/><circle cx="21" cy="25" r="4.6" fill="#6f4120" stroke="#4e2c14" stroke-width="1.4"/><circle cx="37" cy="25" r="5.2" fill="#8b552c" stroke="#4e2c14" stroke-width="1.4"/><circle cx="51" cy="24" r="4.5" fill="#7c4a26" stroke="#4e2c14" stroke-width="1.4"/></svg>',
+  },
+  {
+    tipo: 2,
+    corto: 'Bolas agrupadas',
+    color: '#58a782',
+    cara: '😕',
+    desc: 'Heces con forma alargada, pero con relieves, como bolas unidas.',
+    estado: 'Puede indicar estreñimiento leve o tránsito intestinal lento.',
+    tip: 'Qué falta para mejorar: Aumentar hidratación con agua, incorporar verduras verdes cocidas (espinaca, zapallo italiano), avena bien hidratada y ciruela/pera.',
+    svg: '<svg viewBox="0 0 64 36"><g fill="#8b552c" stroke="#4e2c14" stroke-width="1.3"><circle cx="14" cy="18" r="6.2"/><circle cx="23" cy="13" r="6"/><circle cx="24" cy="23" r="5.8"/><circle cx="33" cy="16" r="6.5"/><circle cx="42" cy="13" r="5.8"/><circle cx="42" cy="23" r="5.8"/><circle cx="51" cy="18" r="6"/></g></svg>',
+  },
+  {
+    tipo: 3,
+    corto: 'Con grietas',
+    color: '#5c95c2',
+    cara: '🙂',
+    desc: 'Heces con forma alargada, con grietas en la superficie.',
+    estado: 'Normal, pero podría mejorar su hidratación.',
+    tip: 'Qué falta para mejorar: Asegúrate de que beba suficiente agua a lo largo del día y mantén un buen aporte diario de verduras, frutas frescas y grasas saludables.',
+    svg: '<svg viewBox="0 0 64 36"><rect x="7" y="10" width="50" height="16" rx="8" fill="#935c31" stroke="#533015" stroke-width="1.5"/><path d="M16 11l3 5-2 4m11-10l-2 6 3 5m11-10l2 5-3 6m10-10l-2 5" fill="none" stroke="#4b2910" stroke-width="1.4" stroke-linecap="round"/></svg>',
+  },
+  {
+    tipo: 4,
+    corto: 'Lisa y suave',
+    color: '#9683c6',
+    cara: '😊',
+    desc: 'Heces con forma alargada como una salchicha, lisa y blanda.',
+    estado: '¡Ideal! Heces saludables y fáciles de evacuar.',
+    tip: 'Recomendación: ¡Excelente equilibrio digestivo! No le falta nada; mantén esta hidratación y la rotación variada de los 5 grupos de alimentos.',
+    svg: '<svg viewBox="0 0 64 36"><path d="M8 17c4-6 14-7 25-4 10 3 19 3 23 0 2 3 1 8-4 10-7 3-17 1-27-1-10-2-15 1-17-5z" fill="#a26839" stroke="#5c3618" stroke-width="1.5"/><path d="M15 16c9-2 17 0 27 2" fill="none" stroke="#c38856" stroke-width="1.5" stroke-linecap="round" opacity="0.65"/></svg>',
+  },
+  {
+    tipo: 5,
+    corto: 'Trozos blandos',
+    color: '#d9a441',
+    cara: '😐',
+    desc: 'Heces blandas y trozos separados o con bordes definidos.',
+    estado: 'Podría ser normal, pero vigila si se repite en varias deposiciones.',
+    tip: 'Qué ajustar: Si se vuelve frecuente, falta fibra soluble para dar mayor cohesión (avena cocida, plátano maduro, papa, zapallo amarillo o arroz).',
+    svg: '<svg viewBox="0 0 64 36"><path d="M11 12c4-2 8 1 7 5s-6 5-8 2 0-6 1-7zm17-2c5-1 8 3 6 7-2 3-7 3-8 0s-1-6 2-7zm17 3c5-2 10 2 8 6-2 3-8 3-10 0s0-5 2-6zm-26 11c5-2 9 1 8 5-2 4-8 3-9 0s-1-4 1-5zm20 1c4-2 8 1 7 5s-7 4-8 1 0-5 1-6z" fill="#b17440" stroke="#68401c" stroke-width="1.3"/></svg>',
+  },
+  {
+    tipo: 6,
+    corto: 'Trozos pegados',
+    color: '#df6f94',
+    cara: '😟',
+    desc: 'Heces blandas y trozos separados o con bordes pegados, tipo puré.',
+    estado: 'Puede indicar tránsito intestinal acelerado.',
+    tip: 'Qué falta para mejorar: Reforzar hidratación frecuente, ofrecer alimentos que den consistencia (arroz, papa, zanahoria o manzana cocida, plátano) y vigilar si algún alimento nuevo cayó pesado.',
+    svg: '<svg viewBox="0 0 64 36"><path d="M11 22c-3-4 2-9 7-8 2-4 9-5 13-2 4-3 11-2 13 2 5-1 10 3 7 8 2 4-3 7-8 6-4 3-10 2-13 0-4 3-10 2-13 0-5 1-9-2-6-6z" fill="#c08244" stroke="#75491e" stroke-width="1.4"/><circle cx="24" cy="18" r="2.2" fill="#8f5b29"/><circle cx="38" cy="19" r="2.4" fill="#8f5b29"/><circle cx="31" cy="23" r="1.8" fill="#8f5b29"/></svg>',
+  },
+  {
+    tipo: 7,
+    corto: 'Líquidas',
+    color: '#e05b6d',
+    cara: '😣',
+    desc: 'Heces líquidas, sin trozos sólidos.',
+    estado: 'Puede indicar diarrea. Requiere vigilancia e hidratación continua.',
+    tip: 'Qué hacer / falta: Prioriza hidratación constante (leche materna/fórmula habitual o agua), suspende temporalmente alimentos nuevos laxantes y consulta a tu pediatra si persiste, rechaza tomas o presenta fiebre.',
+    svg: '<svg viewBox="0 0 64 36"><path d="M12 18c-3-3 3-7 9-6 4-4 14-4 19-1 6-2 13 1 11 5 5 2 3 8-4 8-5 4-15 4-21 1-6 3-14 0-12-4-4 0-5-2-2-3z" fill="#d39c4c" stroke="#8b5f1e" stroke-width="1.4"/><circle cx="19" cy="18" r="2" fill="#e9bd72"/><circle cx="36" cy="20" r="2.5" fill="#e9bd72"/><circle cx="48" cy="13" r="2.2" fill="#d39c4c"/></svg>',
+  },
+];
+
+let selectedBristol = null;
+
+function fechaIsoLocal(val) {
+  if (!val) return '';
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val) && !val.includes('T') && !val.includes('Z')) {
+    return val.slice(0, 10);
+  }
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? '' : dayKey(d);
+}
+
+function aplicaBristol(fechaVal) {
+  const f = fechaIsoLocal(fechaVal);
+  return Boolean(f && f >= FECHA_MIN_BRISTOL);
+}
+
+function leerBristolMap() {
+  const rec = (cache.bitacora || []).find((r) => r.titulo === SYSTEM_BRISTOL_KEY);
+  if (!rec?.notas) return {};
+  try {
+    const parsed = JSON.parse(rec.notas);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function guardarBristolEnMapa(panalId, bristolVal) {
+  if (!bebe?.id || panalId == null) return;
+  const mapa = { ...leerBristolMap() };
+  if (bristolVal >= 1 && bristolVal <= 7) {
+    mapa[String(panalId)] = Number(bristolVal);
+  } else {
+    delete mapa[String(panalId)];
+  }
+  const notasStr = JSON.stringify(mapa);
+  const today = dayKey(new Date());
+  const rec = (cache.bitacora || []).find((r) => r.titulo === SYSTEM_BRISTOL_KEY);
+  if (rec?.id) {
+    await db.from('bitacora').update({ notas: notasStr, fecha: today }).eq('id', rec.id);
+  } else {
+    await db.from('bitacora').insert({ bebe_id: bebe.id, titulo: SYSTEM_BRISTOL_KEY, fecha: today, notas: notasStr });
+  }
+  await loadData('bitacora');
+
+  // Sincronización opcional en columna nativa si fue migrada
+  try {
+    await db.from('panales').update({ bristol: bristolVal || null }).eq('id', panalId);
+  } catch {}
+}
+
+function renderBristolSelector(containerGrid, containerLeyenda, valorActual, onSelect) {
+  if (!containerGrid) return;
+  containerGrid.innerHTML = BRISTOL_DATA.map((b) => `
+    <button type="button" class="bristol-btn${Number(valorActual) === b.tipo ? ' selected' : ''}" data-bristol="${b.tipo}" style="--bristol-color:${b.color}">
+      <span class="bristol-num">${b.tipo}</span>
+      <span class="bristol-ico">${b.svg}</span>
+      <span class="bristol-lbl">
+        <strong>${b.corto}</strong>
+        <span>${b.desc}</span>
+      </span>
+      <span class="bristol-face" aria-hidden="true">${b.cara}</span>
+    </button>
+  `).join('');
+
+  const bSel = BRISTOL_DATA.find((b) => b.tipo === Number(valorActual));
+  if (containerLeyenda) {
+    if (bSel) {
+      containerLeyenda.style.setProperty('--bristol-color', bSel.color);
+      containerLeyenda.innerHTML = `
+        <div class="bristol-leyenda-head">
+          <span>${bSel.cara}</span>
+          <span>Tipo ${bSel.tipo} — ${bSel.corto}: ${bSel.estado}</span>
+        </div>
+        <div class="bristol-tip">💡 <strong>Tip práctico:</strong> ${bSel.tip}</div>
+      `;
+      containerLeyenda.classList.remove('hidden');
+    } else {
+      containerLeyenda.innerHTML = '';
+      containerLeyenda.classList.add('hidden');
+    }
+  }
+
+  containerGrid.onclick = (e) => {
+    const btn = e.target.closest('.bristol-btn');
+    if (!btn) return;
+    const val = Number(btn.dataset.bristol);
+    onSelect(val);
+    renderBristolSelector(containerGrid, containerLeyenda, val, onSelect);
+  };
+}
+
+function actualizarVisibilidadBristolForm() {
+  const wrap = $('bristolWrap');
+  if (!wrap) return;
+  const esHeces = $('panHeces')?.checked;
+  const fhVal = $('panFechaHora')?.value || dtLocal(new Date());
+  const mostrar = Boolean(esHeces && aplicaBristol(fhVal));
+  wrap.classList.toggle('hidden', !mostrar);
+  if (mostrar) {
+    renderBristolSelector($('bristolGrid'), $('bristolLeyenda'), selectedBristol, (v) => {
+      selectedBristol = v;
+    });
+  } else {
+    selectedBristol = null;
+  }
+}
+
 function renderPanales() {
   const rows = cache.panales || [];
+  const bristolMap = leerBristolMap();
   if (!rows.length) {
     $('ultimoCambio').textContent = '—';
     $('ultimaFeca').textContent = 'Sin registros';
@@ -665,12 +855,18 @@ function renderPanales() {
     ['Hora', 'Detalle'],
     groupByDay(rows, 'fecha_hora'),
     (r) => {
-      const tipos = [r.heces && '💩 Heces', r.orina && '💧 Orina'].filter(Boolean).join(' · ') || '—';
+      const bVal = (r.heces && aplicaBristol(r.fecha_hora)) ? (r.bristol || bristolMap[String(r.id)] || null) : null;
+      const bInfo = bVal ? BRISTOL_DATA.find((b) => b.tipo === Number(bVal)) : null;
+      const bristolBadge = bInfo
+        ? `<span class="bristol-badge" style="--bristol-color:${bInfo.color}" title="${escapeHtml(bInfo.estado)}">${bInfo.svg} Bristol ${bInfo.tipo}: ${escapeHtml(bInfo.corto)}</span>`
+        : '';
+      const tipos = [r.heces && `💩 Heces${bristolBadge}`, r.orina && '💧 Orina'].filter(Boolean).join(' · ') || '—';
       return `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${tipos}</td>${accionesTd('panales', r.id)}</tr>`;
     },
     (rs) => `💩 ${rs.filter((r) => r.heces).length} · 💧 ${rs.filter((r) => r.orina).length}`,
     (rs) => `💩 ${rs.filter((r) => r.heces).length} · 💧 ${rs.filter((r) => r.orina).length}`
   );
+  actualizarVisibilidadBristolForm();
 }
 
 // ---------- Sueño ----------
@@ -1384,9 +1580,947 @@ function renderTabbar() {
   $('tabbar').innerHTML = html;
 }
 
-function renderComidas() {
-  // Pestaña en construcción
+// ---------- Módulo de Comidas: Plato Dinámico Semanal, Catálogo con Imágenes e Historial + Alergias ----------
+const SYSTEM_COMIDA_PLATO = '__comida_plato__';
+const SYSTEM_COMIDA_CUSTOM = '__comida_custom__';
+
+const GRUPOS_COMIDA = [
+  {
+    key: 'verdura',
+    nombre: 'Verdura',
+    icono: '🥦',
+    color: '#2d6a4f',
+    nutrientes: 'Vitamina C (tomate, brócoli, pimentón, limón), Vitamina A (espinaca, acelga, pimentón, zapallo, zanahoria), Hierro (espinaca, acelga, kale)',
+    tip: 'Frutas y verduras se pueden introducir en pequeñas cantidades en todas las comidas. La vitamina C duplica la absorción de hierro.',
+  },
+  {
+    key: 'fruta',
+    nombre: 'Fruta',
+    icono: '🍌',
+    color: '#f4a261',
+    nutrientes: 'Fibra, agua y Vitamina C',
+    tip: 'Combinar frutas ricas en vitamina C con fuentes de hierro para mejorar su absorción.',
+  },
+  {
+    key: 'proteina',
+    nombre: 'Proteína',
+    icono: '🫘',
+    color: '#4a7c59',
+    nutrientes: 'Proteínas, Hierro, Zinc',
+    tip: 'Ofrecer diariamente, siempre en almuerzo y cena.',
+  },
+  {
+    key: 'grasa',
+    nombre: 'Grasa saludable',
+    icono: '🥑',
+    color: '#588157',
+    nutrientes: 'Calorías y grasas ricas en Omega 3 (chía, linaza, canola, nueces, cáñamo y pescados grasos como jurel)',
+    tip: 'Todas las comidas deben contener fuentes de grasas saludables.',
+  },
+  {
+    key: 'cereal',
+    nombre: 'Cereal / Tubérculo',
+    icono: '🍚',
+    color: '#9c7a44',
+    nutrientes: 'Energía (carbohidratos complejos)',
+    tip: 'Es clave en el aporte de calorías diariamente; se integran en todos los tiempos de comidas.',
+  },
+];
+
+const CATALOGO_ALIMENTOS_BASE = [
+  // 1. Verduras (13)
+  { id: 'brocoli', nombre: 'Brócoli', grupo: 'verdura', forma: 'brocoli', c1: '#2e8b57', c2: '#74c69d' },
+  { id: 'zanahoria', nombre: 'Zanahoria cocida', grupo: 'verdura', forma: 'zanahoria', c1: '#f97316', c2: '#22c55e' },
+  { id: 'espinaca', nombre: 'Espinaca', grupo: 'verdura', forma: 'hoja', c1: '#15803d', c2: '#4ade80' },
+  { id: 'zapallo', nombre: 'Zapallo', grupo: 'verdura', forma: 'zapallo', c1: '#ea580c', c2: '#fb923c' },
+  { id: 'coliflor', nombre: 'Coliflor', grupo: 'verdura', forma: 'brocoli', c1: '#e2e8f0', c2: '#4ade80' },
+  { id: 'beterraga', nombre: 'Beterraga', grupo: 'verdura', forma: 'bulbo', c1: '#881337', c2: '#be185d' },
+  { id: 'tomate', nombre: 'Tomate', grupo: 'verdura', forma: 'tomate', c1: '#ef4444', c2: '#22c55e' },
+  { id: 'zapallo_italiano', nombre: 'Zapallo italiano', grupo: 'verdura', forma: 'calabacin', c1: '#16a34a', c2: '#bbf7d0' },
+  { id: 'acelga', nombre: 'Acelga', grupo: 'verdura', forma: 'hoja', c1: '#166534', c2: '#e2e8f0' },
+  { id: 'pimenton', nombre: 'Pimentón', grupo: 'verdura', forma: 'pimenton', c1: '#dc2626', c2: '#22c55e' },
+  { id: 'bruselas', nombre: 'Bruselas', grupo: 'verdura', forma: 'bolitas', c1: '#4d7c0f', c2: '#bef264' },
+  { id: 'kale', nombre: 'Kale', grupo: 'verdura', forma: 'hoja', c1: '#14532d', c2: '#86efac' },
+  { id: 'porotos_verdes', nombre: 'Porotos verdes', grupo: 'verdura', forma: 'vainas', c1: '#22c55e', c2: '#15803d' },
+
+  // 2. Frutas (13)
+  { id: 'platano', nombre: 'Plátano', grupo: 'fruta', forma: 'platano', c1: '#facc15', c2: '#fef08a' },
+  { id: 'naranja', nombre: 'Naranja', grupo: 'fruta', forma: 'citrico', c1: '#f97316', c2: '#fed7aa' },
+  { id: 'frutilla', nombre: 'Frutilla', grupo: 'fruta', forma: 'frutilla', c1: '#e11d48', c2: '#22c55e' },
+  { id: 'manzana', nombre: 'Manzana cocida', grupo: 'fruta', forma: 'manzana', c1: '#ef4444', c2: '#fef3c7' },
+  { id: 'arandanos', nombre: 'Arándanos', grupo: 'fruta', forma: 'berries', c1: '#3730a3', c2: '#6366f1' },
+  { id: 'mandarina', nombre: 'Mandarina', grupo: 'fruta', forma: 'citrico', c1: '#fb923c', c2: '#ffedd5' },
+  { id: 'kiwi', nombre: 'Kiwi', grupo: 'fruta', forma: 'kiwi', c1: '#65a30d', c2: '#a16207' },
+  { id: 'ciruela', nombre: 'Ciruela', grupo: 'fruta', forma: 'fruta_redonda', c1: '#6b21a8', c2: '#a855f7' },
+  { id: 'pera', nombre: 'Pera', grupo: 'fruta', forma: 'pera', c1: '#a3e635', c2: '#65a30d' },
+  { id: 'durazno', nombre: 'Durazno', grupo: 'fruta', forma: 'fruta_redonda', c1: '#fb7185', c2: '#fdba74' },
+  { id: 'damasco', nombre: 'Damasco', grupo: 'fruta', forma: 'fruta_redonda', c1: '#f59e0b', c2: '#fde68a' },
+  { id: 'uvas', nombre: 'Uvas molidas', grupo: 'fruta', forma: 'uvas', c1: '#7e22ce', c2: '#22c55e' },
+  { id: 'limon', nombre: 'Limón (gotas)', grupo: 'fruta', forma: 'citrico', c1: '#eab308', c2: '#fef9c3' },
+
+  // 3. Proteínas (11)
+  { id: 'lentejas', nombre: 'Lentejas', grupo: 'proteina', forma: 'legumbres', c1: '#92400e', c2: '#d97706' },
+  { id: 'garbanzos', nombre: 'Garbanzos', grupo: 'proteina', forma: 'legumbres', c1: '#d97706', c2: '#fde68a' },
+  { id: 'tofu', nombre: 'Tofu', grupo: 'proteina', forma: 'cubos', c1: '#f8fafc', c2: '#cbd5e1' },
+  { id: 'porotos', nombre: 'Porotos', grupo: 'proteina', forma: 'frijol', c1: '#7f1d1d', c2: '#b91c1c' },
+  { id: 'soya', nombre: 'Soya texturizada', grupo: 'proteina', forma: 'granos', c1: '#b45309', c2: '#fcd34d' },
+  { id: 'seitan', nombre: 'Seitán', grupo: 'proteina', forma: 'filete', c1: '#9a3412', c2: '#c2410c' },
+  { id: 'huevo', nombre: 'Huevo cocido', grupo: 'proteina', forma: 'huevo', c1: '#fef3c7', c2: '#f59e0b' },
+  { id: 'pollo', nombre: 'Pollo', grupo: 'proteina', forma: 'ave', c1: '#fdba74', c2: '#fed7aa' },
+  { id: 'carne', nombre: 'Vacuno / Carne', grupo: 'proteina', forma: 'filete', c1: '#b91c1c', c2: '#fca5a5' },
+  { id: 'pescado', nombre: 'Pescado / Jurel', grupo: 'proteina', forma: 'pez', c1: '#fb7185', c2: '#cbd5e1' },
+  { id: 'mariscos', nombre: 'Mariscos cocidos', grupo: 'proteina', forma: 'marisco', c1: '#f97316', c2: '#fed7aa' },
+
+  // 4. Grasas saludables (9)
+  { id: 'palta', nombre: 'Palta', grupo: 'grasa', forma: 'palta', c1: '#65a30d', c2: '#78350f' },
+  { id: 'aceite_oliva', nombre: 'Aceite de oliva', grupo: 'grasa', forma: 'botella', c1: '#84cc16', c2: '#ecfccb' },
+  { id: 'aceite_canola', nombre: 'Aceite de canola', grupo: 'grasa', forma: 'botella', c1: '#eab308', c2: '#fef9c3' },
+  { id: 'mant_mani', nombre: 'Mantequilla de maní', grupo: 'grasa', forma: 'frasco', c1: '#b45309', c2: '#fde68a' },
+  { id: 'mant_almendra', nombre: 'Mantequilla de almendras', grupo: 'grasa', forma: 'frasco', c1: '#92400e', c2: '#fed7aa' },
+  { id: 'pesto', nombre: 'Pesto de albahaca', grupo: 'grasa', forma: 'frasco', c1: '#15803d', c2: '#86efac' },
+  { id: 'chia', nombre: 'Chía hidratada / aceite', grupo: 'grasa', forma: 'semillas', c1: '#475569', c2: '#94a3b8' },
+  { id: 'linaza', nombre: 'Linaza molida / aceite', grupo: 'grasa', forma: 'semillas', c1: '#92400e', c2: '#d97706' },
+  { id: 'canamo', nombre: 'Semillas de cáñamo', grupo: 'grasa', forma: 'semillas', c1: '#854d0e', c2: '#bef264' },
+
+  // 5. Cereales / Tubérculos (13)
+  { id: 'arroz', nombre: 'Arroz', grupo: 'cereal', forma: 'bowl', c1: '#f8fafc', c2: '#ef4444' },
+  { id: 'papa', nombre: 'Papa', grupo: 'cereal', forma: 'papa', c1: '#d97706', c2: '#fde68a' },
+  { id: 'fideos', nombre: 'Fideos', grupo: 'cereal', forma: 'fideos', c1: '#fbbf24', c2: '#fef3c7' },
+  { id: 'avena', nombre: 'Avena', grupo: 'cereal', forma: 'bowl', c1: '#d6d3d1', c2: '#a8a29e' },
+  { id: 'quinoa', nombre: 'Quinoa', grupo: 'cereal', forma: 'granos', c1: '#eab308', c2: '#fef08a' },
+  { id: 'camote', nombre: 'Camote', grupo: 'cereal', forma: 'camote', c1: '#ea580c', c2: '#c2410c' },
+  { id: 'yuca', nombre: 'Yuca', grupo: 'cereal', forma: 'camote', c1: '#78350f', c2: '#f5f5f4' },
+  { id: 'arvejas', nombre: 'Arvejas', grupo: 'cereal', forma: 'bolitas', c1: '#22c55e', c2: '#16a34a' },
+  { id: 'habas', nombre: 'Habas', grupo: 'cereal', forma: 'frijol', c1: '#4d7c0f', c2: '#a3e635' },
+  { id: 'pan', nombre: 'Pan sin sal', grupo: 'cereal', forma: 'pan', c1: '#d97706', c2: '#fef3c7' },
+  { id: 'maiz', nombre: 'Maíz / Choclo', grupo: 'cereal', forma: 'choclo', c1: '#facc15', c2: '#22c55e' },
+  { id: 'amaranto', nombre: 'Amaranto', grupo: 'cereal', forma: 'granos', c1: '#f59e0b', c2: '#fef3c7' },
+  { id: 'platano_verde', nombre: 'Plátano verde', grupo: 'cereal', forma: 'platano', c1: '#65a30d', c2: '#bef264' },
+];
+
+const ALIMENTOS_PROHIBIDOS = [
+  { nombre: 'Sal', motivo: 'Sobrecarga renal', forma: 'sal', c1: '#cbd5e1', c2: '#94a3b8' },
+  { nombre: 'Azúcar y endulzantes', motivo: 'Daño dental, malos hábitos', forma: 'dulce', c1: '#f43f5e', c2: '#fbbf24' },
+  { nombre: 'Miel (< 2 años)', motivo: 'Riesgo de botulismo', forma: 'miel', c1: '#d97706', c2: '#fbbf24' },
+  { nombre: 'Jugos de fruta', motivo: 'Desplazan nutrientes', forma: 'jugo', c1: '#22c55e', c2: '#f97316' },
+  { nombre: 'Leche de vaca / bebidas vegetales', motivo: 'Bloquea absorción de hierro', forma: 'vaso', c1: '#e0f2fe', c2: '#93c5fd' },
+  { nombre: 'Cacao', motivo: 'Estimulante, no apto', forma: 'cacao', c1: '#78350f', c2: '#db2777' },
+  { nombre: 'Té, café, mate e infusiones', motivo: 'Bloquean absorción de hierro', forma: 'taza', c1: '#64748b', c2: '#65a30d' },
+  { nombre: 'Alimentos ultraprocesados', motivo: 'Exceso de sodio y aditivos', forma: 'fritas', c1: '#ef4444', c2: '#facc15' },
+  { nombre: 'Uvas y tomates cherry (enteros)', motivo: 'Riesgo de atragantamiento', forma: 'uvas', c1: '#7e22ce', c2: '#22c55e' },
+  { nombre: 'Zanahoria y manzana crudas (en trozos)', motivo: 'Riesgo de atragantamiento', forma: 'zanahoria', c1: '#f97316', c2: '#22c55e' },
+  { nombre: 'Frutos secos enteros', motivo: 'Riesgo de atragantamiento', forma: 'nuez', c1: '#78350f', c2: '#a16207' },
+];
+
+const svgUriCache = new Map();
+
+function dibujoFormaSvg(forma, c1, c2, nombre) {
+  switch (forma) {
+    case 'brocoli':
+      return `<rect x="20" y="25" width="8" height="14" rx="3" fill="${c2}"/><circle cx="17" cy="20" r="8" fill="${c1}"/><circle cx="31" cy="20" r="8" fill="${c1}"/><circle cx="24" cy="14" r="9" fill="${c1}"/>`;
+    case 'zanahoria':
+      return `<path d="M18 13l-4-6m6 5l2-7m-1 8l5-4" stroke="${c2}" stroke-width="2.5" stroke-linecap="round"/><path d="M16 14c5-2 10 2 14 14 3 7 4 11 2 12-2 1-11-9-16-20-1-3-1-5 0-6z" fill="${c1}"/>`;
+    case 'hoja':
+      return `<path d="M24 39V22" stroke="#14532d" stroke-width="2.5" stroke-linecap="round"/><path d="M24 9c9 3 13 11 10 19-2 6-10 7-10 7s-8-1-10-7c-3-8 1-16 10-19z" fill="${c1}"/><path d="M24 14v18M24 21l5-4M24 26l-5-4" stroke="${c2}" stroke-width="1.8" stroke-linecap="round"/>`;
+    case 'zapallo':
+      return `<path d="M24 11v-3" stroke="#15803d" stroke-width="3" stroke-linecap="round"/><ellipse cx="17" cy="25" rx="7" ry="12" fill="${c1}"/><ellipse cx="31" cy="25" rx="7" ry="12" fill="${c1}"/><ellipse cx="24" cy="25" rx="7" ry="13" fill="${c2}"/>`;
+    case 'bulbo':
+      return `<path d="M24 14l-5-7m5 7V6m0 8l5-7" stroke="#22c55e" stroke-width="2.4" stroke-linecap="round"/><circle cx="24" cy="26" r="11" fill="${c1}"/><path d="M24 37l-1 4" stroke="${c2}" stroke-width="2" stroke-linecap="round"/>`;
+    case 'tomate':
+      return `<circle cx="24" cy="26" r="12" fill="${c1}"/><path d="M19 15l5 3 5-3-3 4 4 2-6-1-6 1 4-2z" fill="${c2}"/>`;
+    case 'calabacin':
+      return `<rect x="10" y="18" width="28" height="12" rx="6" transform="rotate(-18 24 24)" fill="${c1}"/><circle cx="35" cy="18" r="2.5" fill="${c2}"/>`;
+    case 'pimenton':
+      return `<path d="M24 12v-3" stroke="${c2}" stroke-width="3" stroke-linecap="round"/><rect x="13" y="14" width="22" height="22" rx="8" fill="${c1}"/><path d="M20 15v20m8-20v20" stroke="#7f1d1d" stroke-width="1.2" opacity="0.4"/>`;
+    case 'bolitas':
+      return `<circle cx="17" cy="21" r="6" fill="${c1}"/><circle cx="30" cy="20" r="6" fill="${c2}"/><circle cx="24" cy="30" r="6" fill="${c1}"/>`;
+    case 'vainas':
+      return `<path d="M12 29c6-10 15-14 25-11" fill="none" stroke="${c1}" stroke-width="5" stroke-linecap="round"/><path d="M14 34c7-8 16-10 23-6" fill="none" stroke="${c2}" stroke-width="4.5" stroke-linecap="round"/>`;
+    case 'platano':
+      return `<path d="M12 30c6 5 18 3 23-7 2-5 1-10-1-13-2 7-9 13-22 20z" fill="${c1}" stroke="#ca8a04" stroke-width="1.2"/>`;
+    case 'citrico':
+      return `<circle cx="24" cy="24" r="13" fill="${c1}"/><circle cx="24" cy="24" r="10" fill="${c2}" opacity="0.85"/><path d="M24 14v20M14 24h20M17 17l14 14M31 17L17 31" stroke="${c1}" stroke-width="1.5"/>`;
+    case 'frutilla':
+      return `<path d="M16 14h16l-8 5z" fill="${c2}"/><path d="M14 18c0 10 6 20 10 20s10-10 10-20c0-3-4-4-10-4s-10 1-10 4z" fill="${c1}"/><circle cx="20" cy="22" r="1.1" fill="#fef08a"/><circle cx="28" cy="22" r="1.1" fill="#fef08a"/><circle cx="24" cy="28" r="1.1" fill="#fef08a"/><circle cx="21" cy="32" r="1" fill="#fef08a"/>`;
+    case 'manzana':
+      return `<path d="M24 13v-4l4-2" stroke="#15803d" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M24 14c-6-3-12 2-11 11 1 8 6 13 11 11 5 2 10-3 11-11 1-9-5-14-11-11z" fill="${c1}"/><ellipse cx="20" cy="22" rx="2.5" ry="5" fill="${c2}" opacity="0.4"/>`;
+    case 'berries':
+      return `<circle cx="18" cy="27" r="6.5" fill="${c1}"/><circle cx="30" cy="27" r="6.5" fill="${c2}"/><circle cx="24" cy="18" r="6.5" fill="${c1}"/><circle cx="24" cy="15" r="1.5" fill="#c7d2fe"/>`;
+    case 'kiwi':
+      return `<circle cx="24" cy="24" r="13" fill="${c2}"/><circle cx="24" cy="24" r="10.5" fill="${c1}"/><ellipse cx="24" cy="24" rx="4" ry="3" fill="#ecfccb"/>`;
+    case 'fruta_redonda':
+      return `<path d="M24 12v-4" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round"/><circle cx="24" cy="25" r="12" fill="${c1}"/><circle cx="20" cy="21" r="3.5" fill="${c2}" opacity="0.5"/>`;
+    case 'pera':
+      return `<path d="M24 10v-3" stroke="#78350f" stroke-width="2.2" stroke-linecap="round"/><path d="M24 10c4 0 5 5 7 9 3 4 4 10 0 14-3 3-11 3-14 0-4-4-3-10 0-14 2-4 3-9 7-9z" fill="${c1}"/>`;
+    case 'uvas':
+      return `<path d="M24 11V7l4-2" stroke="${c2}" stroke-width="2" fill="none"/><circle cx="20" cy="17" r="4.5" fill="${c1}"/><circle cx="28" cy="17" r="4.5" fill="${c1}"/><circle cx="16" cy="24" r="4.5" fill="${c1}"/><circle cx="24" cy="24" r="4.5" fill="${c1}"/><circle cx="32" cy="24" r="4.5" fill="${c1}"/><circle cx="20" cy="31" r="4.5" fill="${c1}"/><circle cx="28" cy="31" r="4.5" fill="${c1}"/><circle cx="24" cy="37" r="4.2" fill="${c1}"/>`;
+    case 'legumbres':
+      return `<ellipse cx="16" cy="21" rx="5.5" ry="4.5" fill="${c1}"/><ellipse cx="30" cy="20" rx="5.5" ry="4.5" fill="${c2}"/><ellipse cx="22" cy="30" rx="5.5" ry="4.5" fill="${c1}"/><ellipse cx="32" cy="30" rx="5" ry="4" fill="${c2}"/>`;
+    case 'cubos':
+      return `<rect x="11" y="18" width="14" height="14" rx="2.5" fill="${c1}" stroke="${c2}" stroke-width="1.5"/><rect x="23" y="13" width="14" height="14" rx="2.5" fill="${c1}" stroke="${c2}" stroke-width="1.5"/>`;
+    case 'frijol':
+      return `<path d="M14 22c-2-5 4-9 8-6 3 2 3 8-1 10-3 2-6-1-7-4z" fill="${c1}"/><path d="M25 25c-2-5 4-9 8-6 3 2 3 8-1 10-3 2-6-1-7-4z" fill="${c2}"/>`;
+    case 'granos':
+      return `<circle cx="16" cy="20" r="3.5" fill="${c1}"/><circle cx="25" cy="16" r="3.5" fill="${c2}"/><circle cx="33" cy="22" r="3.5" fill="${c1}"/><circle cx="20" cy="29" r="3.5" fill="${c2}"/><circle cx="29" cy="31" r="3.5" fill="${c1}"/><circle cx="23" cy="23" r="3" fill="${c1}"/>`;
+    case 'filete':
+      return `<path d="M11 22c0-7 8-10 17-9 7 1 11 5 10 11-1 7-7 11-16 11-7 0-11-5-11-13z" fill="${c1}"/><path d="M16 20c4-2 9-1 12 2" stroke="${c2}" stroke-width="2" fill="none" stroke-linecap="round"/>`;
+    case 'huevo':
+      return `<ellipse cx="24" cy="24" rx="11" ry="14" fill="${c1}" stroke="#e2e8f0" stroke-width="1.2"/><circle cx="24" cy="26" r="6" fill="${c2}"/>`;
+    case 'ave':
+      return `<path d="M13 24c0-7 7-11 14-9 4 1 6 5 4 9l8 6-3 3-8-5c-7 4-15 2-15-4z" fill="${c1}"/><circle cx="37" cy="31" r="2.2" fill="${c2}"/>`;
+    case 'pez':
+      return `<path d="M10 24c5-8 16-9 23-3l6-4v14l-6-4c-7 6-18 5-23-3z" fill="${c1}"/><circle cx="17" cy="23" r="1.6" fill="#0f172a"/><path d="M22 20v8M27 21v6" stroke="${c2}" stroke-width="1.5"/>`;
+    case 'marisco':
+      return `<path d="M15 28c-3-7 3-14 11-14 7 0 11 6 8 12-2 4-7 4-9 2" fill="none" stroke="${c1}" stroke-width="6" stroke-linecap="round"/><circle cx="28" cy="18" r="1.5" fill="${c2}"/>`;
+    case 'palta':
+      return `<path d="M24 9c5 0 10 8 10 17 0 7-4 12-10 12s-10-5-10-12c0-9 5-17 10-17z" fill="${c1}"/><ellipse cx="24" cy="25" rx="7" ry="10" fill="#bef264"/><circle cx="24" cy="28" r="4.8" fill="${c2}"/>`;
+    case 'botella':
+      return `<rect x="21" y="8" width="6" height="6" rx="1" fill="#ca8a04"/><path d="M20 14h8l4 7v15a3 3 0 0 1-3 3H19a3 3 0 0 1-3-3V21l4-7z" fill="${c1}"/><rect x="19" y="24" width="10" height="8" rx="1.5" fill="${c2}"/>`;
+    case 'frasco':
+      return `<rect x="16" y="10" width="16" height="5" rx="2" fill="#475569"/><rect x="14" y="15" width="20" height="22" rx="4" fill="${c1}"/><rect x="17" y="21" width="14" height="9" rx="2" fill="${c2}"/>`;
+    case 'semillas':
+      return `<ellipse cx="18" cy="19" rx="3" ry="4.5" transform="rotate(-20 18 19)" fill="${c1}"/><ellipse cx="28" cy="18" rx="3" ry="4.5" transform="rotate(25 28 18)" fill="${c2}"/><ellipse cx="22" cy="30" rx="3" ry="4.5" transform="rotate(15 22 30)" fill="${c1}"/><ellipse cx="31" cy="29" rx="3" ry="4.5" transform="rotate(-15 31 29)" fill="${c2}"/>`;
+    case 'bowl':
+      return `<ellipse cx="24" cy="21" rx="13" ry="7" fill="${c1}"/><path d="M10 22h28c-1 10-7 15-14 15S11 32 10 22z" fill="${c2}"/>`;
+    case 'papa':
+      return `<ellipse cx="24" cy="24" rx="14" ry="10" transform="rotate(-12 24 24)" fill="${c1}"/><circle cx="19" cy="22" r="1.5" fill="${c2}"/><circle cx="29" cy="26" r="1.5" fill="${c2}"/>`;
+    case 'fideos':
+      return `<path d="M12 21c6-6 12 6 18 0s8 6 6 6M12 28c6-6 12 6 18 0s8 6 6 6" fill="none" stroke="${c1}" stroke-width="3.5" stroke-linecap="round"/>`;
+    case 'camote':
+      return `<path d="M10 28c3-9 18-15 28-8-3 9-18 15-28 8z" fill="${c1}"/><path d="M16 25l16-3" stroke="${c2}" stroke-width="2" stroke-linecap="round"/>`;
+    case 'pan':
+      return `<path d="M14 21c-2-5 3-10 10-10s12 5 10 10v13H14V21z" fill="${c1}"/><path d="M17 22c-1-3 2-7 7-7s8 4 7 7v9H17v-9z" fill="${c2}"/>`;
+    case 'choclo':
+      return `<ellipse cx="24" cy="22" rx="7" ry="13" fill="${c1}"/><path d="M16 25c2 8 6 11 8 11s6-3 8-11c-4 3-12 3-16 0z" fill="${c2}"/>`;
+    case 'sal':
+      return `<rect x="17" y="10" width="14" height="5" rx="2" fill="${c2}"/><path d="M16 15h16l2 22H14l2-22z" fill="${c1}"/>`;
+    case 'dulce':
+      return `<path d="M11 24l6-4v8l-6-4zm26 0l-6-4v8l6-4z" fill="${c2}"/><circle cx="24" cy="24" r="8" fill="${c1}"/>`;
+    case 'miel':
+      return `<path d="M16 15h16v18a4 4 0 0 1-4 4h-8a4 4 0 0 1-4-4V15z" fill="${c1}"/><rect x="14" y="11" width="20" height="4" rx="2" fill="${c2}"/>`;
+    case 'jugo':
+      return `<path d="M28 8l-3 7" stroke="#facc15" stroke-width="2.5" stroke-linecap="round"/><rect x="15" y="15" width="18" height="22" rx="3" fill="${c1}"/><circle cx="24" cy="26" r="5" fill="${c2}"/>`;
+    case 'vaso':
+      return `<path d="M15 12h18l-2 24H17L15 12z" fill="${c2}"/><path d="M16 18h16l-1.5 17h-13L16 18z" fill="${c1}"/>`;
+    case 'cacao':
+      return `<rect x="15" y="11" width="18" height="26" rx="2" fill="${c1}"/><path d="M15 24h18v13H15z" fill="${c2}"/>`;
+    case 'taza':
+      return `<path d="M13 18h18v12a6 6 0 0 1-6 6h-6a6 6 0 0 1-6-6V18z" fill="${c1}"/><path d="M31 20h3a3 3 0 0 1 0 6h-3" fill="none" stroke="${c1}" stroke-width="2.5"/><path d="M18 14v-3m6 3v-4m6 4v-3" stroke="${c2}" stroke-width="2" stroke-linecap="round"/>`;
+    case 'fritas':
+      return `<path d="M17 11v12m5-14v14m5-13v13m4-11v11" stroke="${c2}" stroke-width="3" stroke-linecap="round"/><path d="M14 20h20l-2 16H16l-2-16z" fill="${c1}"/>`;
+    case 'nuez':
+      return `<path d="M14 25c0-8 5-13 10-13s10 5 10 13c0 5-4 8-10 8s-10-3-10-8z" fill="${c1}"/><path d="M14 25h20" stroke="${c2}" stroke-width="2"/>`;
+    default: {
+      const ch = escapeHtml((nombre || '?').trim().charAt(0).toUpperCase() || 'A');
+      return `<circle cx="24" cy="24" r="13" fill="${c1}" opacity="0.22"/><circle cx="24" cy="24" r="10" fill="${c1}"/><text x="24" y="29" text-anchor="middle" font-size="14" font-family="sans-serif" font-weight="800" fill="#fff">${ch}</text>`;
+    }
+  }
 }
+
+function alimentoSvgDataUri(alimento) {
+  const key = `${alimento?.id || alimento?.nombre}_${alimento?.forma || 'custom'}_${alimento?.c1 || ''}`;
+  if (svgUriCache.has(key)) return svgUriCache.get(key);
+  const gInfo = GRUPOS_COMIDA.find((g) => g.key === alimento?.grupo);
+  const c1 = alimento?.c1 || gInfo?.color || '#3987e5';
+  const c2 = alimento?.c2 || '#e2e8f0';
+  const body = dibujoFormaSvg(alimento?.forma || 'custom', c1, c2, alimento?.nombre || '');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">${body}</svg>`;
+  const uri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  svgUriCache.set(key, uri);
+  return uri;
+}
+
+let comidaDraftPlato = { verdura: null, fruta: null, proteina: null, grasa: null, cereal: null };
+let comidaGrupoActivo = null;
+let comidaCatalogoFiltroGrupo = 'todos';
+let comidaModalId = null;
+
+function leerComidaCustom() {
+  const rec = (cache.bitacora || []).find((r) => r.titulo === SYSTEM_COMIDA_CUSTOM);
+  const base = { customFoods: [], manualProbados: [], manualAlergias: {} };
+  if (!rec?.notas) return base;
+  try {
+    const parsed = JSON.parse(rec.notas);
+    return {
+      customFoods: Array.isArray(parsed.customFoods) ? parsed.customFoods : [],
+      manualProbados: Array.isArray(parsed.manualProbados) ? parsed.manualProbados : [],
+      manualAlergias: (parsed.manualAlergias && typeof parsed.manualAlergias === 'object') ? parsed.manualAlergias : {},
+    };
+  } catch {
+    return base;
+  }
+}
+
+async function guardarComidaCustom(dataObj) {
+  if (!bebe?.id) return;
+  const notasStr = JSON.stringify(dataObj);
+  const today = dayKey(new Date());
+  const rec = (cache.bitacora || []).find((r) => r.titulo === SYSTEM_COMIDA_CUSTOM);
+  if (rec?.id) {
+    await db.from('bitacora').update({ notas: notasStr, fecha: today }).eq('id', rec.id);
+  } else {
+    await db.from('bitacora').insert({ bebe_id: bebe.id, titulo: SYSTEM_COMIDA_CUSTOM, fecha: today, notas: notasStr });
+  }
+  await loadData('bitacora');
+}
+
+function obtenerCatalogoAlimentos() {
+  const custom = leerComidaCustom().customFoods;
+  const mapa = new Map();
+  for (const a of CATALOGO_ALIMENTOS_BASE) mapa.set(a.id, a);
+  for (const c of custom) {
+    if (c?.id && c?.nombre && c?.grupo) mapa.set(c.id, c);
+  }
+  return Array.from(mapa.values());
+}
+
+function leerPlatosComida() {
+  const rows = (cache.bitacora || []).filter((r) => r.titulo === SYSTEM_COMIDA_PLATO);
+  const platos = [];
+  for (const r of rows) {
+    try {
+      const p = JSON.parse(r.notas || '{}');
+      platos.push({
+        id: r.id,
+        fecha: p.fecha || r.fecha,
+        hora: p.hora || '12:00',
+        tiempo: p.tiempo || 'Almuerzo',
+        ingredientes: p.ingredientes || {},
+        alimentoNuevo: p.alimentoNuevo || null,
+        alimentoNuevoGrupo: p.alimentoNuevoGrupo || null,
+        reacciones: Array.isArray(p.reacciones) ? p.reacciones : [],
+        sintomas: Array.isArray(p.sintomas) ? p.sintomas : [],
+        reaccionNotas: p.reaccionNotas || '',
+        notas: p.notas || '',
+      });
+    } catch {}
+  }
+  return platos.sort((a, b) => {
+    const fCmp = (b.fecha || '').localeCompare(a.fecha || '');
+    if (fCmp !== 0) return fCmp;
+    return (b.hora || '').localeCompare(a.hora || '');
+  });
+}
+
+function calcularContextoComidas(fechaSel) {
+  const catalogo = obtenerCatalogoAlimentos();
+  const catalogoMap = new Map(catalogo.map((a) => [a.id, a]));
+  const custom = leerComidaCustom();
+  const platos = leerPlatosComida();
+  const platosAsc = [...platos].sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '') || (a.hora || '').localeCompare(b.hora || ''));
+
+  const fechaRef = fechaSel || dayKey(new Date());
+  const fechas = platosAsc.map((p) => p.fecha).filter(Boolean);
+  const fechaInicio = fechas.length ? fechas.reduce((min, f) => (f < min ? f : min), fechaRef) : fechaRef;
+
+  const diasEntre = (f1, f2) => Math.round((new Date(f2 + 'T12:00') - new Date(f1 + 'T12:00')) / 86400000);
+  const semanaDe = (f) => Math.max(1, Math.floor(diasEntre(fechaInicio, f) / 7) + 1);
+  const semanaActual = semanaDe(fechaRef);
+
+  const probadosHistoricos = new Set(custom.manualProbados);
+  const alergiasMap = new Map();
+  for (const [id, info] of Object.entries(custom.manualAlergias || {})) {
+    if (info) alergiasMap.set(id, info);
+  }
+
+  const usadosPorSemana = new Map();
+  const platosHoy = [];
+  let totalNuevosHistorico = 0;
+
+  for (const p of platosAsc) {
+    const sem = semanaDe(p.fecha);
+    if (!usadosPorSemana.has(sem)) usadosPorSemana.set(sem, new Set());
+    const setSem = usadosPorSemana.get(sem);
+    Object.values(p.ingredientes || {}).forEach((id) => {
+      if (id) {
+        probadosHistoricos.add(id);
+        setSem.add(id);
+      }
+    });
+    if (p.alimentoNuevo) totalNuevosHistorico++;
+    if (p.fecha === fechaRef) platosHoy.push(p);
+    for (const alId of (p.reacciones || [])) {
+      alergiasMap.set(alId, { fecha: p.fecha, sintomas: p.sintomas || [], notas: p.reaccionNotas || '' });
+    }
+  }
+
+  const usadosSemanaAnterior = semanaActual > 1 ? (usadosPorSemana.get(semanaActual - 1) || new Set()) : new Set();
+  const usadosEstaSemana = usadosPorSemana.get(semanaActual) || new Set();
+  const yaHayNuevoHoy = platosHoy.some((p) => Boolean(p.alimentoNuevo));
+  const grupoSugerido = GRUPOS_COMIDA[totalNuevosHistorico % GRUPOS_COMIDA.length];
+
+  // Si el grupo en turno ya tiene todos probados, buscar primer grupo con alimentos sin probar
+  const pendientesPorGrupo = (gk) => catalogo.filter((a) => a.grupo === gk && !probadosHistoricos.has(a.id));
+  const grupoRealSugerido = pendientesPorGrupo(grupoSugerido.key).length
+    ? grupoSugerido
+    : (GRUPOS_COMIDA.find((g) => pendientesPorGrupo(g.key).length > 0) || grupoSugerido);
+
+  // Determinar qué ingredientes están bloqueados por la regla semanal por grupo
+  const bloqueadosPorGrupo = {};
+  for (const g of GRUPOS_COMIDA) {
+    const delGrupo = catalogo.filter((a) => a.grupo === g.key && !alergiasMap.has(a.id));
+    const disponiblesNoSemanaAnt = delGrupo.filter((a) => !usadosSemanaAnterior.has(a.id));
+    bloqueadosPorGrupo[g.key] = disponiblesNoSemanaAnt.length > 0 ? usadosSemanaAnterior : new Set();
+  }
+
+  return {
+    catalogo,
+    catalogoMap,
+    platos,
+    fechaInicio,
+    fechaRef,
+    semanaActual,
+    probadosHistoricos,
+    alergiasMap,
+    usadosSemanaAnterior,
+    usadosEstaSemana,
+    bloqueadosPorGrupo,
+    yaHayNuevoHoy,
+    grupoSugerido: grupoRealSugerido,
+  };
+}
+
+function renderPlatoVisualSlots(ctx) {
+  const slotsWrap = $('platoVisualSlots');
+  if (!slotsWrap) return;
+
+  let alimentoNuevoEnDraft = null;
+  let cantNuevosDraft = 0;
+
+  slotsWrap.innerHTML = GRUPOS_COMIDA.map((g) => {
+    const idSel = comidaDraftPlato[g.key];
+    const item = idSel ? ctx.catalogoMap.get(idSel) : null;
+    const activo = comidaGrupoActivo === g.key;
+    let badge = '';
+    if (item) {
+      const esAlergia = ctx.alergiasMap.has(item.id);
+      const esNuevo = !ctx.probadosHistoricos.has(item.id);
+      if (esNuevo) {
+        cantNuevosDraft++;
+        alimentoNuevoEnDraft = { item, grupo: g };
+      }
+      if (esAlergia) badge = '<span class="plato-slot-tag alergia">🚨 Alergia</span>';
+      else if (esNuevo) badge = '<span class="plato-slot-tag nuevo">✨ Nuevo</span>';
+    }
+    return `
+      <button type="button" class="plato-slot${activo ? ' active' : ''}" data-grupo="${g.key}" style="--grupo-color:${g.color}">
+        <div class="plato-slot-head">
+          <span>${g.icono} ${g.nombre}</span>
+          ${badge}
+        </div>
+        ${item ? `
+          <div class="plato-slot-body">
+            <img class="alimento-thumb" src="${alimentoSvgDataUri(item)}" alt="${escapeHtml(item.nombre)}">
+            <strong style="font-size:0.82rem; color:var(--text); line-height:1.2;">${escapeHtml(item.nombre)}</strong>
+          </div>
+        ` : `<div class="plato-slot-empty">＋ Elegir ${g.nombre.toLowerCase()}</div>`}
+      </button>
+    `;
+  }).join('');
+
+  const resumenEl = $('comidaAlimentoNuevoResumen');
+  if (resumenEl) {
+    if (ctx.yaHayNuevoHoy && cantNuevosDraft > 0) {
+      resumenEl.innerHTML = '⚠️ Ya registraste un alimento nuevo hoy. Quita el alimento nuevo del plato o cambia a uno ya probado.';
+      resumenEl.style.color = '#ef4444';
+    } else if (alimentoNuevoEnDraft) {
+      resumenEl.innerHTML = `✨ Alimento nuevo de hoy: <strong>${escapeHtml(alimentoNuevoEnDraft.item.nombre)}</strong> (${alimentoNuevoEnDraft.grupo.nombre}). El resto completa el plato sin repetir la semana anterior.`;
+      resumenEl.style.color = '#199e70';
+    } else {
+      resumenEl.innerHTML = `💡 Toca <strong>${ctx.grupoSugerido.icono} ${ctx.grupoSugerido.nombre}</strong> para introducir 1 alimento nuevo hoy, o usa <strong>🎲 Sugerir plato</strong>.`;
+      resumenEl.style.color = 'var(--text-2)';
+    }
+  }
+}
+
+function renderSelectorGrupoComida(ctx) {
+  const wrap = $('platoSelectorGrupoWrap');
+  if (!wrap) return;
+  if (!comidaGrupoActivo) {
+    wrap.classList.add('hidden');
+    return;
+  }
+  const gInfo = GRUPOS_COMIDA.find((g) => g.key === comidaGrupoActivo);
+  if (!gInfo) return;
+
+  wrap.classList.remove('hidden');
+  $('platoSelectorTitulo').textContent = `${gInfo.icono} Elige ${gInfo.nombre} (Semana ${ctx.semanaActual})`;
+  const search = ($('platoSelectorSearch')?.value || '').trim().toLowerCase();
+  const bloqueados = ctx.bloqueadosPorGrupo[gInfo.key] || new Set();
+
+  // Revisar si otro slot del draft ya tiene un alimento nuevo
+  const otroNuevoEnDraft = Object.entries(comidaDraftPlato).some(
+    ([gk, id]) => gk !== gInfo.key && id && !ctx.probadosHistoricos.has(id)
+  );
+
+  const items = ctx.catalogo
+    .filter((a) => a.grupo === gInfo.key && (!search || a.nombre.toLowerCase().includes(search)))
+    .sort((a, b) => {
+      const aBloq = bloqueados.has(a.id) ? 1 : 0;
+      const bBloq = bloqueados.has(b.id) ? 1 : 0;
+      if (aBloq !== bBloq) return aBloq - bBloq;
+      const aProb = ctx.probadosHistoricos.has(a.id) ? 1 : 0;
+      const bProb = ctx.probadosHistoricos.has(b.id) ? 1 : 0;
+      return aProb - bProb; // Priorizar nuevos primero si están permitidos
+    });
+
+  const quitarBtn = comidaDraftPlato[gInfo.key]
+    ? '<button type="button" class="alimento-item" data-pick-alimento=""><span>✕</span><div class="alimento-info"><strong>Vaciar sección</strong><small>Dejar sin ingrediente</small></div></button>'
+    : '';
+
+  $('platoSelectorOpciones').innerHTML = quitarBtn + items.map((a) => {
+    const seleccionado = comidaDraftPlato[gInfo.key] === a.id;
+    const bloqSemana = bloqueados.has(a.id);
+    const esNuevo = !ctx.probadosHistoricos.has(a.id);
+    const esAlergia = ctx.alergiasMap.has(a.id);
+    const bloqReglaNuevo = esNuevo && (ctx.yaHayNuevoHoy || otroNuevoEnDraft);
+    const disabled = bloqSemana || bloqReglaNuevo;
+
+    let sub = '✓ Ya integrado';
+    if (esAlergia) sub = '🚨 Causó alergia';
+    else if (bloqSemana) sub = '🔒 Semana anterior';
+    else if (bloqReglaNuevo) sub = '🔒 Máx 1 nuevo/día';
+    else if (esNuevo) sub = '✨ Nuevo (por probar)';
+
+    return `
+      <button type="button" class="alimento-item${seleccionado ? ' selected' : ''}${disabled ? ' bloqueado' : ''}${esAlergia ? ' alergia' : ''}" data-pick-alimento="${a.id}" ${disabled ? 'disabled' : ''}>
+        <img class="alimento-thumb" src="${alimentoSvgDataUri(a)}" alt="${escapeHtml(a.nombre)}">
+        <div class="alimento-info">
+          <strong>${escapeHtml(a.nombre)}</strong>
+          <small>${sub}</small>
+        </div>
+      </button>
+    `;
+  }).join('');
+}
+
+function renderCatalogoComidas(ctx) {
+  const filtroWrap = $('comidaCatalogoFiltro');
+  const gridWrap = $('comidaCatalogoGrid');
+  if (!filtroWrap || !gridWrap) return;
+
+  filtroWrap.innerHTML = [
+    `<button type="button" class="chip-filter${comidaCatalogoFiltroGrupo === 'todos' ? ' active' : ''}" data-cat-grupo="todos">Todos (${ctx.catalogo.length})</button>`,
+    ...GRUPOS_COMIDA.map((g) => {
+      const cnt = ctx.catalogo.filter((a) => a.grupo === g.key).length;
+      return `<button type="button" class="chip-filter${comidaCatalogoFiltroGrupo === g.key ? ' active' : ''}" data-cat-grupo="${g.key}">${g.icono} ${g.nombre} (${cnt})</button>`;
+    }),
+  ].join('');
+
+  const list = ctx.catalogo.filter((a) => comidaCatalogoFiltroGrupo === 'todos' || a.grupo === comidaCatalogoFiltroGrupo);
+  gridWrap.innerHTML = list.map((a) => {
+    const probado = ctx.probadosHistoricos.has(a.id);
+    const alergia = ctx.alergiasMap.has(a.id);
+    const usadoSemAnt = ctx.usadosSemanaAnterior.has(a.id);
+    let estado = '⏳ Pendiente';
+    if (alergia) estado = '🚨 Alergia detectada';
+    else if (usadoSemAnt) estado = '🔒 Usado sem. anterior';
+    else if (probado) estado = '✓ Probado / Integrado';
+    return `
+      <button type="button" class="alimento-item${probado ? ' selected' : ''}${alergia ? ' alergia' : ''}" data-toggle-cat="${a.id}" title="Toca para marcar/desmarcar como ya probado antes de usar la app">
+        <img class="alimento-thumb" src="${alimentoSvgDataUri(a)}" alt="${escapeHtml(a.nombre)}">
+        <div class="alimento-info">
+          <strong>${escapeHtml(a.nombre)}</strong>
+          <small>${estado}</small>
+        </div>
+      </button>
+    `;
+  }).join('');
+}
+
+function renderGuiasComidas() {
+  const guia = $('comidaGuiaNutrientes');
+  if (guia && !guia.dataset.rendered) {
+    guia.dataset.rendered = '1';
+    guia.innerHTML = `
+      <div class="faq-item">
+        <strong>Paso a paso para iniciar</strong>
+        <p><strong>Paso N°1:</strong> Todos los días integra 1 alimento nuevo por grupo intentando armar un plato completo.<br>
+        <strong>Paso N°2:</strong> Repite el orden (Verdura → Fruta → Proteína → Grasa → Cereal/Tubérculo), siempre integrando 1 alimento nuevo por día y completando con alimentos ya probados.<br>
+        <strong>Regla clave:</strong> Nunca 2 alimentos nuevos el mismo día. Así detectas posibles reacciones alérgicas.</p>
+      </div>
+      ${GRUPOS_COMIDA.map((g) => `
+        <div class="faq-item" style="border-left:4px solid ${g.color};">
+          <strong>${g.icono} ${g.nombre}</strong>
+          <p><strong>Nutrientes clave:</strong> ${g.nutrientes}<br><strong>Tip práctico:</strong> ${g.tip}</p>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  const proh = $('comidaProhibidosLista');
+  if (proh && !proh.dataset.rendered) {
+    proh.dataset.rendered = '1';
+    proh.innerHTML = `
+      <div class="prohibidos-grid">
+        ${ALIMENTOS_PROHIBIDOS.map((p) => `
+          <div class="prohibido-card">
+            <img class="alimento-thumb" src="${alimentoSvgDataUri({ id: 'proh_' + p.forma, nombre: p.nombre, forma: p.forma, c1: p.c1, c2: p.c2 })}" alt="${escapeHtml(p.nombre)}">
+            <div>
+              <strong>${escapeHtml(p.nombre)}</strong>
+              <small>⚠️ ${escapeHtml(p.motivo)}</small>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <p class="form-hint" style="margin-top:10px;">💡 Frutos secos, maní, zanahoria y manzana <strong>SÍ se pueden ofrecer</strong> si se modifica la textura (molidos, cocidos, untables).</p>
+    `;
+  }
+}
+
+function renderComidas() {
+  if (!$('tab-comidas')) return;
+  if ($('comidaFecha') && !$('comidaFecha').value) $('comidaFecha').value = dayKey(new Date());
+  if ($('comidaHora') && !$('comidaHora').value) $('comidaHora').value = fmtTime(new Date());
+
+  const fechaSel = $('comidaFecha')?.value || dayKey(new Date());
+  const ctx = calcularContextoComidas(fechaSel);
+
+  const probadosCount = ctx.catalogo.filter((a) => ctx.probadosHistoricos.has(a.id)).length;
+  const totalCat = ctx.catalogo.length || 1;
+  const pct = Math.min(100, Math.round((probadosCount / totalCat) * 100));
+
+  if ($('comidaSemanaActual')) $('comidaSemanaActual').textContent = `Semana ${ctx.semanaActual}`;
+  if ($('comidaAlimentosProbados')) $('comidaAlimentosProbados').textContent = `${probadosCount} / ${totalCat}`;
+  if ($('comidaGrupoSugeridoHoy')) $('comidaGrupoSugeridoHoy').textContent = `${ctx.grupoSugerido.icono} ${ctx.grupoSugerido.nombre}`;
+  if ($('comidaAlergiasDetectadas')) $('comidaAlergiasDetectadas').textContent = String(ctx.alergiasMap.size);
+  if ($('comidaCatalogoStatus')) $('comidaCatalogoStatus').textContent = `${probadosCount} de ${totalCat} ingredientes integrados (${pct}%)`;
+  if ($('comidaCatalogoBar')) $('comidaCatalogoBar').style.width = `${pct}%`;
+
+  const bloqueadosNombres = Array.from(ctx.usadosSemanaAnterior)
+    .map((id) => ctx.catalogoMap.get(id)?.nombre)
+    .filter(Boolean);
+  if ($('comidaReglaTexto')) {
+    if (ctx.semanaActual > 1 && bloqueadosNombres.length > 0) {
+      $('comidaReglaTexto').innerHTML = `<strong>Rotación Semana ${ctx.semanaActual}:</strong> No se pueden repetir ingredientes de la semana anterior (${bloqueadosNombres.slice(0, 6).map(escapeHtml).join(', ')}${bloqueadosNombres.length > 6 ? '…' : ''}) hasta completar el catálogo. Introduce 1 alimento nuevo por día.`;
+    } else {
+      $('comidaReglaTexto').innerHTML = '<strong>Regla clave (Semana 1):</strong> Introduce <strong>1 alimento nuevo por día</strong> rotando los 5 grupos. Nunca 2 alimentos nuevos el mismo día para detectar reacciones.';
+    }
+  }
+
+  renderPlatoVisualSlots(ctx);
+  renderSelectorGrupoComida(ctx);
+  renderCatalogoComidas(ctx);
+  renderGuiasComidas();
+
+  $('tablaComidas').innerHTML = tablaHTML(
+    ['Hora / Comida', 'Plato e ingredientes'],
+    groupByDay(ctx.platos, 'fecha'),
+    (p) => {
+      const pills = GRUPOS_COMIDA.map((g) => {
+        const id = p.ingredientes?.[g.key];
+        if (!id) return '';
+        const item = ctx.catalogoMap.get(id) || { id, nombre: id, grupo: g.key };
+        const esNuevo = p.alimentoNuevo === id;
+        const esAlergia = (p.reacciones || []).includes(id);
+        return `<span class="comida-ing-pill${esNuevo ? ' nuevo' : ''}${esAlergia ? ' alergia' : ''}"><img class="alimento-thumb-sm" src="${alimentoSvgDataUri(item)}" alt=""> ${escapeHtml(item.nombre)}${esNuevo ? ' ✨' : ''}${esAlergia ? ' 🚨' : ''}</span>`;
+      }).filter(Boolean).join('');
+
+      const alergiaBadge = (p.reacciones || []).length
+        ? `<span class="plato-slot-tag alergia" style="margin-left:4px;">🚨 Alergia (${p.reacciones.length})</span>`
+        : '';
+
+      return `<tr>
+        <td class="comida-hist-row" data-comida-id="${p.id}" style="cursor:pointer;"><strong>${escapeHtml((p.hora || '12:00').slice(0, 5))}</strong><br><small style="color:var(--text-2);">${escapeHtml(p.tiempo)}</small></td>
+        <td class="comida-hist-row" data-comida-id="${p.id}" style="cursor:pointer;"><div class="comida-ing-mini">${pills || '—'}${alergiaBadge}</div></td>
+        <td><div class="acciones-cell"><button type="button" class="comida-hist-btn" data-comida-id="${p.id}" title="Ver detalle y alergias">👁️ Ver</button><button type="button" class="del-btn" data-tabla="bitacora" data-id="${p.id}" aria-label="Eliminar">🗑</button></div></td>
+      </tr>`;
+    },
+    (rows) => `${rows.length} plato${rows.length > 1 ? 's' : ''}`,
+    (rows) => `${rows.length} plato${rows.length > 1 ? 's' : ''}`
+  );
+}
+
+function sugerirPlatoDelDia() {
+  const fechaSel = $('comidaFecha')?.value || dayKey(new Date());
+  const ctx = calcularContextoComidas(fechaSel);
+  const nuevoDraft = { verdura: null, fruta: null, proteina: null, grasa: null, cereal: null };
+  let yaPusoNuevo = ctx.yaHayNuevoHoy;
+
+  for (const g of GRUPOS_COMIDA) {
+    const bloqueados = ctx.bloqueadosPorGrupo[g.key] || new Set();
+    const candidatos = ctx.catalogo.filter((a) => a.grupo === g.key && !ctx.alergiasMap.has(a.id) && !bloqueados.has(a.id));
+    const nuevos = candidatos.filter((a) => !ctx.probadosHistoricos.has(a.id));
+    const probados = candidatos.filter((a) => ctx.probadosHistoricos.has(a.id));
+
+    if (!yaPusoNuevo && g.key === ctx.grupoSugerido.key && nuevos.length > 0) {
+      nuevoDraft[g.key] = nuevos[0].id;
+      yaPusoNuevo = true;
+    } else if (probados.length > 0) {
+      // Priorizar los que no se han usado esta semana todavía para variar cada día
+      const noUsadosEstaSem = probados.filter((a) => !ctx.usadosEstaSemana.has(a.id));
+      const pool = noUsadosEstaSem.length > 0 ? noUsadosEstaSem : probados;
+      nuevoDraft[g.key] = pool[Math.floor(Math.random() * pool.length)].id;
+    } else if (!yaPusoNuevo && nuevos.length > 0) {
+      nuevoDraft[g.key] = nuevos[0].id;
+      yaPusoNuevo = true;
+    }
+  }
+
+  comidaDraftPlato = nuevoDraft;
+  comidaGrupoActivo = null;
+  renderComidas();
+  toast('Plato sugerido según ciclo semanal ✓');
+}
+
+function abrirComidaModal(id) {
+  const ctx = calcularContextoComidas($('comidaFecha')?.value || dayKey(new Date()));
+  const plato = ctx.platos.find((p) => String(p.id) === String(id));
+  if (!plato) return;
+  comidaModalId = plato.id;
+
+  $('comidaModalTitulo').textContent = `🍽️ ${plato.tiempo} — ${fmtDayLabel(plato.fecha)}`;
+  $('comidaModalMeta').innerHTML = `
+    <strong>Fecha:</strong> ${plato.fecha} · <strong>Hora:</strong> ${(plato.hora || '12:00').slice(0, 5)}
+    ${plato.notas ? `<br><strong>Notas:</strong> ${escapeHtml(plato.notas)}` : ''}
+  `;
+
+  const ingRows = [];
+  const checkRows = [];
+
+  for (const g of GRUPOS_COMIDA) {
+    const foodId = plato.ingredientes?.[g.key];
+    if (!foodId) continue;
+    const item = ctx.catalogoMap.get(foodId) || { id: foodId, nombre: foodId, grupo: g.key };
+    const esNuevo = plato.alimentoNuevo === foodId;
+    const marcadoAlergia = (plato.reacciones || []).includes(foodId);
+
+    ingRows.push(`
+      <div class="comida-modal-row">
+        <div class="comida-modal-row-left">
+          <img class="alimento-thumb" src="${alimentoSvgDataUri(item)}" alt="${escapeHtml(item.nombre)}">
+          <div>
+            <strong style="font-size:0.88rem; display:block;">${escapeHtml(item.nombre)}</strong>
+            <small style="color:var(--text-2);">${g.icono} ${g.nombre}</small>
+          </div>
+        </div>
+        ${esNuevo ? '<span class="plato-slot-tag nuevo">✨ Alimento nuevo</span>' : '<span class="plato-slot-tag" style="background:var(--surface); color:var(--text-2);">✓ Integrado</span>'}
+      </div>
+    `);
+
+    checkRows.push(`
+      <label class="alergia-check-item">
+        <span style="display:flex; align-items:center; gap:8px;">
+          <img class="alimento-thumb-sm" src="${alimentoSvgDataUri(item)}" alt="">
+          <span><strong>${escapeHtml(item.nombre)}</strong> <small style="color:var(--muted);">(${g.nombre})</small></span>
+        </span>
+        <input type="checkbox" class="alergia-food-chk" value="${escapeHtml(foodId)}" ${marcadoAlergia ? 'checked' : ''}>
+      </label>
+    `);
+  }
+
+  $('comidaModalIngredientes').innerHTML = ingRows.length ? ingRows.join('') : '<p class="empty-msg">Sin ingredientes</p>';
+  $('comidaModalAlergiaChecks').innerHTML = checkRows.length ? checkRows.join('') : '<p class="empty-msg">Sin ingredientes</p>';
+  $('comidaModalReaccionNotas').value = plato.reaccionNotas || '';
+
+  const sintomasSet = new Set(plato.sintomas || []);
+  document.querySelectorAll('#comidaModalSintomas .sintoma-chip').forEach((chip) => {
+    chip.classList.toggle('active', sintomasSet.has(chip.dataset.sintoma));
+  });
+
+  $('comidaModal').classList.remove('hidden');
+}
+
+// Eventos interactivos del Módulo de Comidas
+$('comidaFecha')?.addEventListener('change', () => renderComidas());
+$('btnSugerirPlato')?.addEventListener('click', sugerirPlatoDelDia);
+$('platoSelectorClose')?.addEventListener('click', () => {
+  comidaGrupoActivo = null;
+  renderComidas();
+});
+$('platoSelectorSearch')?.addEventListener('input', () => {
+  const ctx = calcularContextoComidas($('comidaFecha')?.value || dayKey(new Date()));
+  renderSelectorGrupoComida(ctx);
+});
+
+$('platoVisualSlots')?.addEventListener('click', (e) => {
+  const slot = e.target.closest('.plato-slot');
+  if (!slot) return;
+  const g = slot.dataset.grupo;
+  comidaGrupoActivo = comidaGrupoActivo === g ? null : g;
+  if ($('platoSelectorSearch')) $('platoSelectorSearch').value = '';
+  const ctx = calcularContextoComidas($('comidaFecha')?.value || dayKey(new Date()));
+  renderPlatoVisualSlots(ctx);
+  renderSelectorGrupoComida(ctx);
+});
+
+$('platoSelectorOpciones')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.alimento-item');
+  if (!btn || btn.disabled || !comidaGrupoActivo) return;
+  const alId = btn.dataset.pickAlimento;
+  comidaDraftPlato[comidaGrupoActivo] = alId || null;
+  comidaGrupoActivo = null;
+  renderComidas();
+});
+
+$('comidaCatalogoFiltro')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.chip-filter');
+  if (!btn) return;
+  comidaCatalogoFiltroGrupo = btn.dataset.catGrupo || 'todos';
+  const ctx = calcularContextoComidas($('comidaFecha')?.value || dayKey(new Date()));
+  renderCatalogoComidas(ctx);
+});
+
+$('comidaCatalogoGrid')?.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-toggle-cat]');
+  if (!btn || btn.disabled) return;
+  const alId = btn.dataset.toggleCat;
+  btn.disabled = true;
+  try {
+    const custom = leerComidaCustom();
+    const idx = custom.manualProbados.indexOf(alId);
+    if (idx >= 0) {
+      custom.manualProbados.splice(idx, 1);
+      toast('Desmarcado de integrados manualmente');
+    } else {
+      custom.manualProbados.push(alId);
+      toast('Marcado como ya integrado ✓');
+    }
+    await guardarComidaCustom(custom);
+    renderComidas();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('btnAgregarAlimentoCat')?.addEventListener('click', async () => {
+  const nombre = ($('nuevoAlimNombre')?.value || '').trim();
+  const grupo = $('nuevoAlimGrupo')?.value || 'verdura';
+  if (!nombre) { toast('Escribe el nombre del alimento', true); return; }
+  const btn = $('btnAgregarAlimentoCat');
+  btn.disabled = true;
+  try {
+    const id = 'custom_' + nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_');
+    const custom = leerComidaCustom();
+    if (obtenerCatalogoAlimentos().some((a) => a.id === id || a.nombre.toLowerCase() === nombre.toLowerCase())) {
+      toast('Ese alimento ya existe en el catálogo', true);
+      return;
+    }
+    custom.customFoods.push({ id, nombre, grupo, forma: 'custom' });
+    await guardarComidaCustom(custom);
+    $('nuevoAlimNombre').value = '';
+    toast(`"${nombre}" agregado al catálogo ✓`);
+    renderComidas();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('formComidaPlato')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fecha = $('comidaFecha').value || dayKey(new Date());
+  const hora = $('comidaHora').value || fmtTime(new Date());
+  const tiempo = $('comidaTiempo').value || 'Almuerzo';
+  const notas = ($('comidaNotas').value || '').trim();
+  const seleccion = Object.values(comidaDraftPlato).filter(Boolean);
+  if (!seleccion.length) { toast('Agrega al menos 1 alimento al plato', true); return; }
+
+  const ctx = calcularContextoComidas(fecha);
+  const nuevosEnPlato = Object.entries(comidaDraftPlato)
+    .filter(([, id]) => id && !ctx.probadosHistoricos.has(id));
+
+  if (ctx.yaHayNuevoHoy && nuevosEnPlato.length > 0) {
+    toast('Regla clave: Ya probó 1 alimento nuevo hoy. Usa ingredientes ya integrados.', true);
+    return;
+  }
+  if (nuevosEnPlato.length > 1) {
+    toast('Regla clave: Nunca 2 alimentos nuevos el mismo día.', true);
+    return;
+  }
+
+  const submitBtn = $('btnGuardarPlato') || e.target.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+  try {
+    const payloadPlato = {
+      fecha,
+      hora,
+      tiempo,
+      ingredientes: { ...comidaDraftPlato },
+      alimentoNuevo: nuevosEnPlato[0]?.[1] || null,
+      alimentoNuevoGrupo: nuevosEnPlato[0]?.[0] || null,
+      reacciones: [],
+      sintomas: [],
+      reaccionNotas: '',
+      notas,
+    };
+    const ok = await insertar('bitacora', {
+      titulo: SYSTEM_COMIDA_PLATO,
+      fecha,
+      notas: JSON.stringify(payloadPlato),
+    });
+    if (ok) {
+      comidaDraftPlato = { verdura: null, fruta: null, proteina: null, grasa: null, cereal: null };
+      comidaGrupoActivo = null;
+      $('comidaNotas').value = '';
+      renderComidas();
+    }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+});
+
+document.addEventListener('click', (e) => {
+  const delBtn = e.target.closest('.del-btn');
+  if (delBtn) return;
+  const histTarget = e.target.closest('[data-comida-id]');
+  if (histTarget && histTarget.dataset.comidaId) {
+    abrirComidaModal(histTarget.dataset.comidaId);
+  }
+});
+
+$('comidaModalClose')?.addEventListener('click', () => $('comidaModal').classList.add('hidden'));
+$('comidaModal')?.addEventListener('click', (e) => { if (e.target === $('comidaModal')) $('comidaModal').classList.add('hidden'); });
+
+$('comidaModalSintomas')?.addEventListener('click', (e) => {
+  const chip = e.target.closest('.sintoma-chip');
+  if (chip) chip.classList.toggle('active');
+});
+
+$('comidaModalGuardar')?.addEventListener('click', async () => {
+  const reg = (cache.bitacora || []).find((r) => String(r.id) === String(comidaModalId));
+  if (!reg) return;
+  const btn = $('comidaModalGuardar');
+  btn.disabled = true;
+  try {
+    const plato = JSON.parse(reg.notas || '{}');
+    const reacciones = Array.from(document.querySelectorAll('.alergia-food-chk:checked')).map((chk) => chk.value);
+    const sintomas = Array.from(document.querySelectorAll('#comidaModalSintomas .sintoma-chip.active')).map((c) => c.dataset.sintoma);
+    const reaccionNotas = ($('comidaModalReaccionNotas').value || '').trim();
+
+    plato.reacciones = reacciones;
+    plato.sintomas = sintomas;
+    plato.reaccionNotas = reaccionNotas;
+
+    const { error } = await db.from('bitacora').update({ notas: JSON.stringify(plato) }).eq('id', reg.id);
+    if (error) { toast(`Error: ${error.message}`, true); return; }
+
+    // Sincronizar alergias detectadas en ficha clínica del bebé si se agregaron nuevas
+    if (reacciones.length > 0 && bebe) {
+      const catMap = new Map(obtenerCatalogoAlimentos().map((a) => [a.id, a.nombre]));
+      const nombresReacc = reacciones.map((id) => catMap.get(id) || id);
+      const actual = (bebe.alergias || '').trim();
+      const faltantes = nombresReacc.filter((n) => !actual.toLowerCase().includes(n.toLowerCase()));
+      if (faltantes.length > 0) {
+        const nuevoTxt = actual ? `${actual}, ${faltantes.join(', ')}` : faltantes.join(', ');
+        await db.from('bebes').update({ alergias: nuevoTxt }).eq('id', bebe.id);
+        bebe.alergias = nuevoTxt;
+      }
+    }
+
+    await loadData('bitacora');
+    $('comidaModal').classList.add('hidden');
+    toast('Evaluación de alergias guardada ✓');
+    renderComidas();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('comidaModalEliminar')?.addEventListener('click', async () => {
+  if (!comidaModalId) return;
+  $('comidaModal').classList.add('hidden');
+  await eliminar('bitacora', comidaModalId);
+});
 
 function renderAlertas() {
   if (typeof evaluarAlertasRutina !== 'function') return;
@@ -1690,22 +2824,49 @@ $('formVitaminaTipo').addEventListener('submit', async (e) => {
   }
 });
 
+$('panHeces').addEventListener('change', actualizarVisibilidadBristolForm);
+$('panFechaHora').addEventListener('change', actualizarVisibilidadBristolForm);
+
 $('formPanales').addEventListener('submit', async (e) => {
   e.preventDefault();
   const h = $('panHeces').checked, o = $('panOrina').checked;
   if (!h && !o) { toast('Marca al menos heces u orina', true); return; }
+  const fhVal = $('panFechaHora').value;
+  const fh = fhVal ? new Date(fhVal).toISOString() : new Date().toISOString();
+  const requiereBristol = h && aplicaBristol(fh);
+  if (requiereBristol && !selectedBristol) {
+    toast('Selecciona el tipo en la Escala de Bristol (1 al 7)', true);
+    return;
+  }
+
   const submitBtn = e.target.querySelector('button[type="submit"]') || e.submitter;
   if (submitBtn) submitBtn.disabled = true;
   try {
-    const fh = $('panFechaHora').value ? new Date($('panFechaHora').value).toISOString() : new Date().toISOString();
+    const bristolElegido = requiereBristol ? selectedBristol : null;
     const ok = await insertar('panales', { heces: h, orina: o, fecha_hora: fh });
-    if (ok) { $('panHeces').checked = false; $('panOrina').checked = false; setNowDefaults(); renderPanales(); }
+    if (ok) {
+      if (bristolElegido) {
+        const targetMs = new Date(fh).getTime();
+        const nuevoReg = (cache.panales || []).find((r) => Math.abs(new Date(r.fecha_hora).getTime() - targetMs) < 3000 && r.heces);
+        if (nuevoReg?.id) {
+          await guardarBristolEnMapa(nuevoReg.id, bristolElegido);
+        }
+      }
+      $('panHeces').checked = false;
+      $('panOrina').checked = false;
+      selectedBristol = null;
+      setNowDefaults();
+      renderPanales();
+    }
   } finally {
     if (submitBtn) submitBtn.disabled = false;
   }
 });
 
-$('panAhora').addEventListener('click', () => { $('panFechaHora').value = dtLocal(new Date()); });
+$('panAhora').addEventListener('click', () => {
+  $('panFechaHora').value = dtLocal(new Date());
+  actualizarVisibilidadBristolForm();
+});
 
 $('formSueno').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -1925,7 +3086,23 @@ $('formJuegos').addEventListener('submit', async (e) => {
   }
 });
 
-// ---------- Edición Genérica de Registros ----------
+let editBristolVal = null;
+
+function refrescarBristolModalEdicion() {
+  const wrap = $('edBristolWrap');
+  if (!wrap) return;
+  const f = $('edPanFecha')?.value || '';
+  const h = $('edPanHeces')?.checked;
+  const mostrar = Boolean(h && f >= FECHA_MIN_BRISTOL);
+  wrap.classList.toggle('hidden', !mostrar);
+  if (mostrar) {
+    renderBristolSelector($('edBristolGrid'), $('edBristolLeyenda'), editBristolVal, (v) => {
+      editBristolVal = v;
+    });
+  } else {
+    editBristolVal = null;
+  }
+}
 let editTabla = null;
 let editId = null;
 
@@ -1969,9 +3146,20 @@ function abrirEdicion(tabla, id) {
       <label>Gotas<input type="number" id="edVitLogGotas" step="any" inputmode="decimal" value="${reg.gotas ?? 5}"></label>`;
   } else if (tabla === 'panales') {
     const d = new Date(reg.fecha_hora);
+    const fechaStr = dayKey(d);
+    const mapB = leerBristolMap();
+    editBristolVal = (reg.heces && fechaStr >= FECHA_MIN_BRISTOL) ? (reg.bristol || mapB[String(reg.id)] || null) : null;
     c.innerHTML = `
       <div class="check-row"><label class="check-pill"><input type="checkbox" id="edPanHeces" ${reg.heces ? 'checked' : ''}> 💩 Heces</label><label class="check-pill"><input type="checkbox" id="edPanOrina" ${reg.orina ? 'checked' : ''}> 💧 Orina</label></div>
-      <div class="fila-2"><label>Fecha<input type="date" id="edPanFecha" value="${dayKey(d)}"></label><label>Hora<input type="time" id="edPanHora" value="${fmtTime(d)}"></label></div>`;
+      <div class="fila-2"><label>Fecha<input type="date" id="edPanFecha" value="${fechaStr}"></label><label>Hora<input type="time" id="edPanHora" value="${fmtTime(d)}"></label></div>
+      <div id="edBristolWrap" class="bristol-wrap hidden">
+        <div class="bristol-title"><span>💩 Escala de Bristol Pediátrica</span><small>Tipo (1 al 7)</small></div>
+        <div id="edBristolGrid" class="bristol-grid"></div>
+        <div id="edBristolLeyenda" class="bristol-leyenda hidden"></div>
+      </div>`;
+    $('edPanHeces').addEventListener('change', refrescarBristolModalEdicion);
+    $('edPanFecha').addEventListener('change', refrescarBristolModalEdicion);
+    refrescarBristolModalEdicion();
   } else if (tabla === 'sueno') {
     const dIni = new Date(reg.inicio);
     const dFin = reg.fin ? new Date(reg.fin) : null;
@@ -2005,7 +3193,13 @@ $('editGuardar').addEventListener('click', async () => {
     } else if (editTabla === 'vitaminas_tipos_log') {
       patch = { fecha: $('edVitLogFecha').value, hora: $('edVitLogHora').value ? $('edVitLogHora').value + ':00' : null, gotas: Number($('edVitLogGotas').value) || null };
     } else if (editTabla === 'panales') {
-      patch = { heces: $('edPanHeces').checked, orina: $('edPanOrina').checked, fecha_hora: toISO($('edPanFecha').value, $('edPanHora').value) };
+      const fPan = $('edPanFecha').value;
+      const hPan = $('edPanHeces').checked;
+      if (hPan && fPan >= FECHA_MIN_BRISTOL && !editBristolVal) {
+        toast('Selecciona el tipo en la Escala de Bristol (1 al 7)', true);
+        return;
+      }
+      patch = { heces: hPan, orina: $('edPanOrina').checked, fecha_hora: toISO(fPan, $('edPanHora').value) };
     } else if (editTabla === 'sueno') {
       const f = $('edSuenoFecha').value, ini = $('edSuenoIni').value, fin = $('edSuenoFin').value;
       const dIni = new Date(`${f}T${ini}`);
@@ -2019,6 +3213,11 @@ $('editGuardar').addEventListener('click', async () => {
 
     const { error } = await db.from(editTabla).update(patch).eq('id', editId);
     if (error) { toast(`Error al actualizar: ${error.message}`, true); return; }
+    if (editTabla === 'panales') {
+      const fPan = $('edPanFecha').value;
+      const bGuardar = (patch.heces && fPan >= FECHA_MIN_BRISTOL) ? editBristolVal : null;
+      await guardarBristolEnMapa(editId, bGuardar);
+    }
     await loadData(editTabla);
     statsDirty = true;
     $('editModal').classList.add('hidden');

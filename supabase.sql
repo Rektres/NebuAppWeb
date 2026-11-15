@@ -84,6 +84,7 @@ create table panales (
   fecha_hora timestamptz not null,
   heces boolean not null default false,
   orina boolean not null default false,
+  bristol integer check (bristol between 1 and 7),
   created_at timestamptz default now()
 );
 
