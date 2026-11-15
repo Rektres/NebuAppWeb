@@ -494,6 +494,14 @@
             </div>
           </div>
 
+          <!-- Leyenda de simbología nutricional al final del nombre -->
+          <div class="comida-leyenda-badges" aria-label="Simbología nutricional">
+            <span class="nutri-badge-pill">🌾 Alto en fibra</span>
+            <span class="nutri-badge-pill">🦷 Alto en calcio</span>
+            <span class="nutri-badge-pill">🌿 Alto en hierro</span>
+            <span class="nutri-badge-pill alerta">❗ Alérgeno</span>
+          </div>
+
           <div class="form-grid">
             <label>Fecha
               <input type="date" id="comidaFecha" required>
@@ -522,6 +530,18 @@
             </div>
             <input type="search" id="platoSelectorSearch" placeholder="Buscar alimento en este grupo…">
             <div id="platoSelectorOpciones" class="alimentos-grid"></div>
+          </div>
+
+          <!-- Selector de Aliños Opcionales -->
+          <div class="alinos-opcionales-box">
+            <div class="alinos-opcionales-head">
+              <div>
+                <strong>🧂 Aliños y hierbas aromáticas <span class="alinos-opt-tag">Opcional</span></strong>
+                <small>Decisión libre en cada plato: puedes agregar uno, varios o ninguno.</small>
+              </div>
+              <button type="button" id="btnLimpiarAlinos" class="btn-secondary hidden" style="padding:4px 9px; font-size:0.72rem;">Limpiar aliños</button>
+            </div>
+            <div id="platoAlinosGrid" class="alinos-grid"></div>
           </div>
 
           <p id="comidaAlimentoNuevoResumen" class="form-hint" style="margin:0;"></p>
@@ -559,8 +579,15 @@
                     <option value="proteina">🫘 Proteína</option>
                     <option value="grasa">🥑 Grasa saludable</option>
                     <option value="cereal">🍚 Cereal / Tubérculo</option>
+                    <option value="alino">🧂 Aliño (opcional)</option>
                   </select>
                 </label>
+              </div>
+              <div class="check-row" style="flex-wrap:wrap; gap:6px;">
+                <label class="check-pill" style="font-size:0.78rem; padding:6px 10px;"><input type="checkbox" id="nuevoAlimFibra"> 🌾 Alto en fibra</label>
+                <label class="check-pill" style="font-size:0.78rem; padding:6px 10px;"><input type="checkbox" id="nuevoAlimCalcio"> 🦷 Alto en calcio</label>
+                <label class="check-pill" style="font-size:0.78rem; padding:6px 10px;"><input type="checkbox" id="nuevoAlimHierro"> 🌿 Alto en hierro</label>
+                <label class="check-pill" style="font-size:0.78rem; padding:6px 10px;"><input type="checkbox" id="nuevoAlimAlergeno"> ❗ Alérgeno</label>
               </div>
               <button type="button" id="btnAgregarAlimentoCat" class="btn-secondary">＋ Agregar a la lista</button>
             </div>
@@ -1138,8 +1165,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
-  <script src="config.js?v=2.7.0"></script>
-  <script src="whatsapp.js?v=2.7.0"></script>
-  <script src="app.js?v=2.7.0"></script>
+  <script src="config.js?v=2.8.0"></script>
+  <script src="whatsapp.js?v=2.8.0"></script>
+  <script src="app.js?v=2.8.0"></script>
 </body>
 </html>

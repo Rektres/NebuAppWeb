@@ -1627,76 +1627,182 @@ const GRUPOS_COMIDA = [
   },
 ];
 
-const CATALOGO_ALIMENTOS_BASE = [
-  // 1. Verduras (13)
-  { id: 'brocoli', nombre: 'Brócoli', grupo: 'verdura', forma: 'brocoli', c1: '#2e8b57', c2: '#74c69d' },
-  { id: 'zanahoria', nombre: 'Zanahoria cocida', grupo: 'verdura', forma: 'zanahoria', c1: '#f97316', c2: '#22c55e' },
-  { id: 'espinaca', nombre: 'Espinaca', grupo: 'verdura', forma: 'hoja', c1: '#15803d', c2: '#4ade80' },
-  { id: 'zapallo', nombre: 'Zapallo', grupo: 'verdura', forma: 'zapallo', c1: '#ea580c', c2: '#fb923c' },
-  { id: 'coliflor', nombre: 'Coliflor', grupo: 'verdura', forma: 'brocoli', c1: '#e2e8f0', c2: '#4ade80' },
-  { id: 'beterraga', nombre: 'Beterraga', grupo: 'verdura', forma: 'bulbo', c1: '#881337', c2: '#be185d' },
-  { id: 'tomate', nombre: 'Tomate', grupo: 'verdura', forma: 'tomate', c1: '#ef4444', c2: '#22c55e' },
-  { id: 'zapallo_italiano', nombre: 'Zapallo italiano', grupo: 'verdura', forma: 'calabacin', c1: '#16a34a', c2: '#bbf7d0' },
-  { id: 'acelga', nombre: 'Acelga', grupo: 'verdura', forma: 'hoja', c1: '#166534', c2: '#e2e8f0' },
-  { id: 'pimenton', nombre: 'Pimentón', grupo: 'verdura', forma: 'pimenton', c1: '#dc2626', c2: '#22c55e' },
-  { id: 'bruselas', nombre: 'Bruselas', grupo: 'verdura', forma: 'bolitas', c1: '#4d7c0f', c2: '#bef264' },
-  { id: 'kale', nombre: 'Kale', grupo: 'verdura', forma: 'hoja', c1: '#14532d', c2: '#86efac' },
-  { id: 'porotos_verdes', nombre: 'Porotos verdes', grupo: 'verdura', forma: 'vainas', c1: '#22c55e', c2: '#15803d' },
+function normalizarItemAlimento(item) {
+  const base = String(item.nombreBase || item.nombre || '')
+    .replace(/[\s🌾🦷🌿❗]+$/gu, '')
+    .trim();
+  const iconos = [
+    item.fibra ? '🌾' : '',
+    item.calcio ? '🦷' : '',
+    item.hierro ? '🌿' : '',
+    item.alergeno ? '❗' : '',
+  ].filter(Boolean).join('');
+  return {
+    ...item,
+    nombreBase: base,
+    nombre: iconos ? `${base} ${iconos}` : base,
+  };
+}
 
-  // 2. Frutas (13)
-  { id: 'platano', nombre: 'Plátano', grupo: 'fruta', forma: 'platano', c1: '#facc15', c2: '#fef08a' },
-  { id: 'naranja', nombre: 'Naranja', grupo: 'fruta', forma: 'citrico', c1: '#f97316', c2: '#fed7aa' },
-  { id: 'frutilla', nombre: 'Frutilla', grupo: 'fruta', forma: 'frutilla', c1: '#e11d48', c2: '#22c55e' },
-  { id: 'manzana', nombre: 'Manzana cocida', grupo: 'fruta', forma: 'manzana', c1: '#ef4444', c2: '#fef3c7' },
+const CATALOGO_ALIMENTOS_RAW = [
+  // 1. Verduras (26 alimentos según tabla maestra)
+  { id: 'acelga', nombre: 'Acelga', grupo: 'verdura', forma: 'hoja', c1: '#166534', c2: '#e2e8f0', calcio: true, hierro: true },
+  { id: 'albahaca_verdura', nombre: 'Albahaca', grupo: 'verdura', forma: 'hierba', c1: '#16a34a', c2: '#86efac', calcio: true, hierro: true },
+  { id: 'alcachofa', nombre: 'Alcachofa', grupo: 'verdura', forma: 'alcachofa', c1: '#4d7c0f', c2: '#a3e635', fibra: true, hierro: true },
+  { id: 'apio', nombre: 'Apio', grupo: 'verdura', forma: 'esparrago', c1: '#65a30d', c2: '#bef264', fibra: true },
+  { id: 'berenjena', nombre: 'Berenjena', grupo: 'verdura', forma: 'berenjena', c1: '#581c87', c2: '#22c55e' },
+  { id: 'beterraga', nombre: 'Beterraga', grupo: 'verdura', forma: 'bulbo', c1: '#881337', c2: '#be185d', fibra: true },
+  { id: 'brocoli', nombre: 'Brócoli', grupo: 'verdura', forma: 'brocoli', c1: '#2e8b57', c2: '#74c69d', fibra: true, calcio: true, hierro: true },
+  { id: 'bruselas', nombre: 'Bruselas', grupo: 'verdura', forma: 'bolitas', c1: '#4d7c0f', c2: '#bef264', fibra: true, hierro: true },
+  { id: 'cebolla', nombre: 'Cebolla', grupo: 'verdura', forma: 'bulbo', c1: '#d97706', c2: '#fef3c7' },
+  { id: 'champinon', nombre: 'Champiñón', grupo: 'verdura', forma: 'hongo', c1: '#d6d3d1', c2: '#78716c' },
+  { id: 'cilantro_verdura', nombre: 'Cilantro', grupo: 'verdura', forma: 'hierba', c1: '#15803d', c2: '#4ade80', hierro: true },
+  { id: 'coliflor', nombre: 'Coliflor', grupo: 'verdura', forma: 'brocoli', c1: '#e2e8f0', c2: '#4ade80', fibra: true },
+  { id: 'esparrago', nombre: 'Espárrago', grupo: 'verdura', forma: 'esparrago', c1: '#15803d', c2: '#86efac', fibra: true, hierro: true },
+  { id: 'espinaca', nombre: 'Espinaca', grupo: 'verdura', forma: 'hoja', c1: '#15803d', c2: '#4ade80', calcio: true, hierro: true },
+  { id: 'kale', nombre: 'Kale', grupo: 'verdura', forma: 'hoja', c1: '#14532d', c2: '#86efac', calcio: true, hierro: true },
+  { id: 'lechuga', nombre: 'Lechuga', grupo: 'verdura', forma: 'alcachofa', c1: '#4ade80', c2: '#bbf7d0' },
+  { id: 'pepino', nombre: 'Pepino', grupo: 'verdura', forma: 'calabacin', c1: '#15803d', c2: '#bbf7d0' },
+  { id: 'perejil_verdura', nombre: 'Perejil', grupo: 'verdura', forma: 'hierba', c1: '#166534', c2: '#86efac', hierro: true },
+  { id: 'pimenton', nombre: 'Pimentón', grupo: 'verdura', forma: 'pimenton', c1: '#dc2626', c2: '#22c55e' },
+  { id: 'porotos_verdes', nombre: 'Poroto Verde', grupo: 'verdura', forma: 'vainas', c1: '#22c55e', c2: '#15803d', fibra: true, hierro: true },
+  { id: 'puerro', nombre: 'Puerro', grupo: 'verdura', forma: 'esparrago', c1: '#4d7c0f', c2: '#f1f5f9', fibra: true, calcio: true },
+  { id: 'rabanos', nombre: 'Rábanos', grupo: 'verdura', forma: 'bulbo', c1: '#e11d48', c2: '#fecdd3' },
+  { id: 'repollo', nombre: 'Repollo', grupo: 'verdura', forma: 'alcachofa', c1: '#65a30d', c2: '#d9f99d', fibra: true },
+  { id: 'tomate', nombre: 'Tomate', grupo: 'verdura', forma: 'tomate', c1: '#ef4444', c2: '#22c55e' },
+  { id: 'zanahoria', nombre: 'Zanahoria', grupo: 'verdura', forma: 'zanahoria', c1: '#f97316', c2: '#22c55e' },
+  { id: 'zapallo', nombre: 'Zapallo Camote', grupo: 'verdura', forma: 'zapallo', c1: '#ea580c', c2: '#fb923c' },
+  { id: 'zapallo_italiano', nombre: 'Zapallo Italiano', grupo: 'verdura', forma: 'calabacin', c1: '#16a34a', c2: '#bbf7d0' },
+
+  // 2. Frutas (35 alimentos según tabla maestra y tabla de fibra/calcio)
   { id: 'arandanos', nombre: 'Arándanos', grupo: 'fruta', forma: 'berries', c1: '#3730a3', c2: '#6366f1' },
-  { id: 'mandarina', nombre: 'Mandarina', grupo: 'fruta', forma: 'citrico', c1: '#fb923c', c2: '#ffedd5' },
-  { id: 'kiwi', nombre: 'Kiwi', grupo: 'fruta', forma: 'kiwi', c1: '#65a30d', c2: '#a16207' },
-  { id: 'ciruela', nombre: 'Ciruela', grupo: 'fruta', forma: 'fruta_redonda', c1: '#6b21a8', c2: '#a855f7' },
-  { id: 'pera', nombre: 'Pera', grupo: 'fruta', forma: 'pera', c1: '#a3e635', c2: '#65a30d' },
-  { id: 'durazno', nombre: 'Durazno', grupo: 'fruta', forma: 'fruta_redonda', c1: '#fb7185', c2: '#fdba74' },
+  { id: 'cereza', nombre: 'Cereza', grupo: 'fruta', forma: 'cereza', c1: '#be123c', c2: '#22c55e' },
+  { id: 'chirimoya', nombre: 'Chirimoya', grupo: 'fruta', forma: 'alcachofa', c1: '#4d7c0f', c2: '#fef9c3' },
+  { id: 'ciruela', nombre: 'Ciruela', grupo: 'fruta', forma: 'fruta_redonda', c1: '#6b21a8', c2: '#a855f7', fibra: true },
+  { id: 'ciruela_hidratada', nombre: 'Ciruela hidratada', grupo: 'fruta', forma: 'fruta_redonda', c1: '#4c1d95', c2: '#7e22ce', fibra: true },
   { id: 'damasco', nombre: 'Damasco', grupo: 'fruta', forma: 'fruta_redonda', c1: '#f59e0b', c2: '#fde68a' },
-  { id: 'uvas', nombre: 'Uvas molidas', grupo: 'fruta', forma: 'uvas', c1: '#7e22ce', c2: '#22c55e' },
+  { id: 'datiles', nombre: 'Dátiles', grupo: 'fruta', forma: 'semillas', c1: '#78350f', c2: '#b45309', fibra: true, calcio: true },
+  { id: 'durazno', nombre: 'Durazno Conservero', grupo: 'fruta', forma: 'fruta_redonda', c1: '#f97316', c2: '#fde047' },
+  { id: 'durazno_peludo', nombre: 'Durazno Peludo', grupo: 'fruta', forma: 'fruta_redonda', c1: '#fb7185', c2: '#fdba74' },
+  { id: 'durazno_platano', nombre: 'Durazno Plátano', grupo: 'fruta', forma: 'fruta_redonda', c1: '#facc15', c2: '#fb7185' },
+  { id: 'frambuesas', nombre: 'Frambuesas', grupo: 'fruta', forma: 'berries', c1: '#e11d48', c2: '#fb7185', fibra: true },
+  { id: 'frutilla', nombre: 'Frutilla', grupo: 'fruta', forma: 'frutilla', c1: '#e11d48', c2: '#22c55e' },
+  { id: 'guinda', nombre: 'Guinda', grupo: 'fruta', forma: 'cereza', c1: '#881337', c2: '#16a34a' },
+  { id: 'higo', nombre: 'Higo', grupo: 'fruta', forma: 'pera', c1: '#581c87', c2: '#f43f5e', fibra: true, calcio: true },
+  { id: 'kiwi', nombre: 'Kiwi', grupo: 'fruta', forma: 'kiwi', c1: '#65a30d', c2: '#a16207', fibra: true },
+  { id: 'mandarina', nombre: 'Mandarina', grupo: 'fruta', forma: 'citrico', c1: '#fb923c', c2: '#ffedd5' },
+  { id: 'mango', nombre: 'Mango', grupo: 'fruta', forma: 'pera', c1: '#f59e0b', c2: '#ef4444' },
+  { id: 'manzana', nombre: 'Manzana Roja', grupo: 'fruta', forma: 'manzana', c1: '#ef4444', c2: '#fef3c7', fibra: true },
+  { id: 'manzana_verde', nombre: 'Manzana Verde', grupo: 'fruta', forma: 'manzana', c1: '#65a30d', c2: '#ecfccb', fibra: true },
+  { id: 'manzana_cascara', nombre: 'Manzana con cáscara', grupo: 'fruta', forma: 'manzana', c1: '#dc2626', c2: '#86efac', fibra: true },
+  { id: 'melon_calameno', nombre: 'Melón Calameño', grupo: 'fruta', forma: 'sandia', c1: '#fb923c', c2: '#4d7c0f' },
+  { id: 'melon_tuna', nombre: 'Melón Tuna', grupo: 'fruta', forma: 'sandia', c1: '#bef264', c2: '#15803d' },
+  { id: 'membrillo', nombre: 'Membrillo', grupo: 'fruta', forma: 'pera', c1: '#eab308', c2: '#fef08a', fibra: true },
+  { id: 'moras', nombre: 'Moras', grupo: 'fruta', forma: 'berries', c1: '#312e81', c2: '#4c1d95', fibra: true },
+  { id: 'naranja', nombre: 'Naranja', grupo: 'fruta', forma: 'citrico', c1: '#f97316', c2: '#fed7aa', fibra: true, calcio: true },
+  { id: 'papaya', nombre: 'Papaya', grupo: 'fruta', forma: 'sandia', c1: '#f97316', c2: '#facc15' },
+  { id: 'pepino_dulce', nombre: 'Pepino Dulce', grupo: 'fruta', forma: 'pera', c1: '#fde047', c2: '#9333ea' },
+  { id: 'pera', nombre: 'Pera', grupo: 'fruta', forma: 'pera', c1: '#a3e635', c2: '#65a30d', fibra: true },
+  { id: 'pera_piel', nombre: 'Pera con piel', grupo: 'fruta', forma: 'pera', c1: '#65a30d', c2: '#bef264', fibra: true },
+  { id: 'pina', nombre: 'Piña', grupo: 'fruta', forma: 'pina', c1: '#eab308', c2: '#16a34a' },
+  { id: 'platano', nombre: 'Plátano', grupo: 'fruta', forma: 'platano', c1: '#facc15', c2: '#fef08a' },
+  { id: 'sandia', nombre: 'Sandía', grupo: 'fruta', forma: 'sandia', c1: '#ef4444', c2: '#16a34a' },
+  { id: 'tuna', nombre: 'Tuna', grupo: 'fruta', forma: 'pina', c1: '#84cc16', c2: '#f97316', fibra: true },
+  { id: 'uvas', nombre: 'Uva', grupo: 'fruta', forma: 'uvas', c1: '#7e22ce', c2: '#22c55e' },
   { id: 'limon', nombre: 'Limón (gotas)', grupo: 'fruta', forma: 'citrico', c1: '#eab308', c2: '#fef9c3' },
 
-  // 3. Proteínas (11)
-  { id: 'lentejas', nombre: 'Lentejas', grupo: 'proteina', forma: 'legumbres', c1: '#92400e', c2: '#d97706' },
-  { id: 'garbanzos', nombre: 'Garbanzos', grupo: 'proteina', forma: 'legumbres', c1: '#d97706', c2: '#fde68a' },
-  { id: 'tofu', nombre: 'Tofu', grupo: 'proteina', forma: 'cubos', c1: '#f8fafc', c2: '#cbd5e1' },
-  { id: 'porotos', nombre: 'Porotos', grupo: 'proteina', forma: 'frijol', c1: '#7f1d1d', c2: '#b91c1c' },
-  { id: 'soya', nombre: 'Soya texturizada', grupo: 'proteina', forma: 'granos', c1: '#b45309', c2: '#fcd34d' },
-  { id: 'seitan', nombre: 'Seitán', grupo: 'proteina', forma: 'filete', c1: '#9a3412', c2: '#c2410c' },
-  { id: 'huevo', nombre: 'Huevo cocido', grupo: 'proteina', forma: 'huevo', c1: '#fef3c7', c2: '#f59e0b' },
-  { id: 'pollo', nombre: 'Pollo', grupo: 'proteina', forma: 'ave', c1: '#fdba74', c2: '#fed7aa' },
-  { id: 'carne', nombre: 'Vacuno / Carne', grupo: 'proteina', forma: 'filete', c1: '#b91c1c', c2: '#fca5a5' },
-  { id: 'pescado', nombre: 'Pescado / Jurel', grupo: 'proteina', forma: 'pez', c1: '#fb7185', c2: '#cbd5e1' },
-  { id: 'mariscos', nombre: 'Mariscos cocidos', grupo: 'proteina', forma: 'marisco', c1: '#f97316', c2: '#fed7aa' },
+  // 3. Proteínas (18 alimentos: incluye Huevo Duro y todas las legumbres/proteínas de la tabla)
+  { id: 'arvejas_amarillas', nombre: 'Arvejas Amarillas', grupo: 'proteina', forma: 'legumbres', c1: '#eab308', c2: '#fef08a', fibra: true, hierro: true },
+  { id: 'arvejas_verdes', nombre: 'Arvejas Verdes', grupo: 'proteina', forma: 'bolitas', c1: '#16a34a', c2: '#86efac', fibra: true, hierro: true },
+  { id: 'soya', nombre: 'Carne de Soya', grupo: 'proteina', forma: 'granos', c1: '#b45309', c2: '#fcd34d', fibra: true, calcio: true, hierro: true, alergeno: true },
+  { id: 'garbanzos', nombre: 'Garbanzos', grupo: 'proteina', forma: 'legumbres', c1: '#d97706', c2: '#fde68a', fibra: true, calcio: true, hierro: true },
+  { id: 'huevo', nombre: 'Huevo Duro', grupo: 'proteina', forma: 'huevo', c1: '#fef3c7', c2: '#f59e0b', hierro: true, alergeno: true },
+  { id: 'lentejas', nombre: 'Lentejas Café', grupo: 'proteina', forma: 'legumbres', c1: '#92400e', c2: '#d97706', fibra: true, hierro: true },
+  { id: 'lentejas_negras', nombre: 'Lentejas Negras', grupo: 'proteina', forma: 'legumbres', c1: '#1e293b', c2: '#64748b', fibra: true, hierro: true },
+  { id: 'lentejas_rojas', nombre: 'Lentejas Rojas', grupo: 'proteina', forma: 'legumbres', c1: '#ea580c', c2: '#fdba74', fibra: true, hierro: true },
+  { id: 'porotos', nombre: 'Porotos Allados', grupo: 'proteina', forma: 'frijol', c1: '#b45309', c2: '#fde68a', fibra: true, hierro: true },
+  { id: 'porotos_blancos', nombre: 'Porotos Blancos', grupo: 'proteina', forma: 'frijol', c1: '#f1f5f9', c2: '#cbd5e1', fibra: true, calcio: true, hierro: true },
+  { id: 'porotos_negros', nombre: 'Porotos Negros', grupo: 'proteina', forma: 'frijol', c1: '#1e293b', c2: '#475569', fibra: true, calcio: true, hierro: true },
+  { id: 'porotos_rojos', nombre: 'Porotos Rojos', grupo: 'proteina', forma: 'frijol', c1: '#991b1b', c2: '#ef4444', fibra: true, hierro: true },
+  { id: 'seitan', nombre: 'Seitán', grupo: 'proteina', forma: 'filete', c1: '#9a3412', c2: '#c2410c', hierro: true, alergeno: true },
+  { id: 'tofu', nombre: 'Tofu', grupo: 'proteina', forma: 'cubos', c1: '#f8fafc', c2: '#cbd5e1', calcio: true, hierro: true, alergeno: true },
+  { id: 'pollo', nombre: 'Pollo', grupo: 'proteina', forma: 'ave', c1: '#fdba74', c2: '#fed7aa', hierro: true },
+  { id: 'carne', nombre: 'Vacuno / Carne', grupo: 'proteina', forma: 'filete', c1: '#b91c1c', c2: '#fca5a5', hierro: true },
+  { id: 'pescado', nombre: 'Pescado / Jurel', grupo: 'proteina', forma: 'pez', c1: '#fb7185', c2: '#cbd5e1', hierro: true, alergeno: true },
+  { id: 'mariscos', nombre: 'Mariscos cocidos', grupo: 'proteina', forma: 'marisco', c1: '#f97316', c2: '#fed7aa', hierro: true, alergeno: true },
 
-  // 4. Grasas saludables (9)
+  // 4. Grasas saludables (24 alimentos según tabla maestra y tabla de fibra/calcio/alérgenos)
+  { id: 'aceite_canola', nombre: 'Aceite de Canola', grupo: 'grasa', forma: 'botella', c1: '#eab308', c2: '#fef9c3' },
+  { id: 'aceite_chia', nombre: 'Aceite de Chía', grupo: 'grasa', forma: 'botella', c1: '#ca8a04', c2: '#fef08a' },
+  { id: 'aceite_linaza', nombre: 'Aceite de Linaza', grupo: 'grasa', forma: 'botella', c1: '#d97706', c2: '#fde68a' },
+  { id: 'almendra', nombre: 'Almendra', grupo: 'grasa', forma: 'nuez', c1: '#92400e', c2: '#fed7aa', fibra: true, calcio: true, hierro: true, alergeno: true },
+  { id: 'aceite_oliva', nombre: 'AOEV', grupo: 'grasa', forma: 'botella', c1: '#84cc16', c2: '#ecfccb' },
+  { id: 'avellana', nombre: 'Avellana', grupo: 'grasa', forma: 'nuez', c1: '#78350f', c2: '#d97706', calcio: true, hierro: true, alergeno: true },
+  { id: 'avellana_europea', nombre: 'Avellana Europea', grupo: 'grasa', forma: 'nuez', c1: '#854d0e', c2: '#fde047', calcio: true, hierro: true, alergeno: true },
+  { id: 'castana_caju', nombre: 'Castaña de Cajú', grupo: 'grasa', forma: 'nuez', c1: '#d97706', c2: '#fef3c7', hierro: true, alergeno: true },
+  { id: 'chia', nombre: 'Chía', grupo: 'grasa', forma: 'semillas', c1: '#475569', c2: '#94a3b8', fibra: true, calcio: true, hierro: true },
+  { id: 'chia_hidratada', nombre: 'Chía hidratada', grupo: 'grasa', forma: 'semillas', c1: '#334155', c2: '#cbd5e1', fibra: true, calcio: true, hierro: true },
+  { id: 'linaza', nombre: 'Linaza', grupo: 'grasa', forma: 'semillas', c1: '#92400e', c2: '#d97706', fibra: true, hierro: true },
+  { id: 'mant_almendra', nombre: 'Mant. de Almendra', grupo: 'grasa', forma: 'frasco', c1: '#92400e', c2: '#fed7aa', calcio: true, hierro: true, alergeno: true },
+  { id: 'mant_mani', nombre: 'Mant. de Maní', grupo: 'grasa', forma: 'frasco', c1: '#b45309', c2: '#fde68a', hierro: true, alergeno: true },
+  { id: 'nuez', nombre: 'Nuez', grupo: 'grasa', forma: 'nuez', c1: '#78350f', c2: '#b45309', calcio: true, hierro: true, alergeno: true },
   { id: 'palta', nombre: 'Palta', grupo: 'grasa', forma: 'palta', c1: '#65a30d', c2: '#78350f' },
-  { id: 'aceite_oliva', nombre: 'Aceite de oliva', grupo: 'grasa', forma: 'botella', c1: '#84cc16', c2: '#ecfccb' },
-  { id: 'aceite_canola', nombre: 'Aceite de canola', grupo: 'grasa', forma: 'botella', c1: '#eab308', c2: '#fef9c3' },
-  { id: 'mant_mani', nombre: 'Mantequilla de maní', grupo: 'grasa', forma: 'frasco', c1: '#b45309', c2: '#fde68a' },
-  { id: 'mant_almendra', nombre: 'Mantequilla de almendras', grupo: 'grasa', forma: 'frasco', c1: '#92400e', c2: '#fed7aa' },
-  { id: 'pesto', nombre: 'Pesto de albahaca', grupo: 'grasa', forma: 'frasco', c1: '#15803d', c2: '#86efac' },
-  { id: 'chia', nombre: 'Chía hidratada / aceite', grupo: 'grasa', forma: 'semillas', c1: '#475569', c2: '#94a3b8' },
-  { id: 'linaza', nombre: 'Linaza molida / aceite', grupo: 'grasa', forma: 'semillas', c1: '#92400e', c2: '#d97706' },
-  { id: 'canamo', nombre: 'Semillas de cáñamo', grupo: 'grasa', forma: 'semillas', c1: '#854d0e', c2: '#bef264' },
+  { id: 'pepitas_zapallo', nombre: 'Pepitas de Zapallo', grupo: 'grasa', forma: 'semillas', c1: '#4d7c0f', c2: '#bef264', hierro: true },
+  { id: 'pesto', nombre: 'Pesto de albahaca', grupo: 'grasa', forma: 'frasco', c1: '#15803d', c2: '#86efac', calcio: true, hierro: true },
+  { id: 'pistacho', nombre: 'Pistacho', grupo: 'grasa', forma: 'nuez', c1: '#65a30d', c2: '#fde68a', calcio: true, hierro: true, alergeno: true },
+  { id: 'semillas_girasol', nombre: 'Semillas de girasol', grupo: 'grasa', forma: 'semillas', c1: '#eab308', c2: '#78350f', hierro: true },
+  { id: 'sesamo', nombre: 'Sésamo', grupo: 'grasa', forma: 'semillas', c1: '#d97706', c2: '#fef3c7', calcio: true, hierro: true },
+  { id: 'sesamo_tostado', nombre: 'Sésamo tostado', grupo: 'grasa', forma: 'semillas', c1: '#b45309', c2: '#fde68a', calcio: true, hierro: true },
+  { id: 'tahini', nombre: 'Tahini', grupo: 'grasa', forma: 'frasco', c1: '#d6d3d1', c2: '#a8a29e', calcio: true, hierro: true },
+  { id: 'canamo', nombre: 'Semillas de cáñamo', grupo: 'grasa', forma: 'semillas', c1: '#854d0e', c2: '#bef264', hierro: true },
+  { id: 'bebida_vegetal_fort', nombre: 'Bebida vegetal fortificada', grupo: 'grasa', forma: 'vaso', c1: '#f8fafc', c2: '#93c5fd', calcio: true },
 
-  // 5. Cereales / Tubérculos (13)
+  // 5. Cereales / Tubérculos (26 alimentos según tabla maestra y tabla de fibra/calcio/alérgenos)
+  { id: 'amaranto', nombre: 'Amaranto', grupo: 'cereal', forma: 'granos', c1: '#f59e0b', c2: '#fef3c7', fibra: true, calcio: true, hierro: true },
   { id: 'arroz', nombre: 'Arroz', grupo: 'cereal', forma: 'bowl', c1: '#f8fafc', c2: '#ef4444' },
-  { id: 'papa', nombre: 'Papa', grupo: 'cereal', forma: 'papa', c1: '#d97706', c2: '#fde68a' },
-  { id: 'fideos', nombre: 'Fideos', grupo: 'cereal', forma: 'fideos', c1: '#fbbf24', c2: '#fef3c7' },
-  { id: 'avena', nombre: 'Avena', grupo: 'cereal', forma: 'bowl', c1: '#d6d3d1', c2: '#a8a29e' },
-  { id: 'quinoa', nombre: 'Quinoa', grupo: 'cereal', forma: 'granos', c1: '#eab308', c2: '#fef08a' },
+  { id: 'arroz_integral', nombre: 'Arroz integral', grupo: 'cereal', forma: 'bowl', c1: '#d6d3d1', c2: '#b45309', fibra: true },
+  { id: 'arvejas', nombre: 'Arvejas', grupo: 'cereal', forma: 'bolitas', c1: '#22c55e', c2: '#16a34a', fibra: true, hierro: true },
+  { id: 'avena', nombre: 'Avena', grupo: 'cereal', forma: 'bowl', c1: '#d6d3d1', c2: '#a8a29e', fibra: true, hierro: true },
+  { id: 'avena_integral', nombre: 'Avena integral', grupo: 'cereal', forma: 'bowl', c1: '#a8a29e', c2: '#78716c', fibra: true, hierro: true },
+  { id: 'burgol', nombre: 'Burgol', grupo: 'cereal', forma: 'granos', c1: '#d97706', c2: '#fde68a', fibra: true, alergeno: true },
   { id: 'camote', nombre: 'Camote', grupo: 'cereal', forma: 'camote', c1: '#ea580c', c2: '#c2410c' },
-  { id: 'yuca', nombre: 'Yuca', grupo: 'cereal', forma: 'camote', c1: '#78350f', c2: '#f5f5f4' },
-  { id: 'arvejas', nombre: 'Arvejas', grupo: 'cereal', forma: 'bolitas', c1: '#22c55e', c2: '#16a34a' },
-  { id: 'habas', nombre: 'Habas', grupo: 'cereal', forma: 'frijol', c1: '#4d7c0f', c2: '#a3e635' },
-  { id: 'pan', nombre: 'Pan sin sal', grupo: 'cereal', forma: 'pan', c1: '#d97706', c2: '#fef3c7' },
-  { id: 'maiz', nombre: 'Maíz / Choclo', grupo: 'cereal', forma: 'choclo', c1: '#facc15', c2: '#22c55e' },
-  { id: 'amaranto', nombre: 'Amaranto', grupo: 'cereal', forma: 'granos', c1: '#f59e0b', c2: '#fef3c7' },
+  { id: 'cebada', nombre: 'Cebada', grupo: 'cereal', forma: 'granos', c1: '#ca8a04', c2: '#fef08a', fibra: true, alergeno: true },
+  { id: 'centeno', nombre: 'Centeno', grupo: 'cereal', forma: 'granos', c1: '#78350f', c2: '#d97706', fibra: true, alergeno: true },
+  { id: 'maiz', nombre: 'Choclo', grupo: 'cereal', forma: 'choclo', c1: '#facc15', c2: '#22c55e', fibra: true },
+  { id: 'cuscus', nombre: 'Cuscús', grupo: 'cereal', forma: 'granos', c1: '#fbbf24', c2: '#fef3c7', alergeno: true },
+  { id: 'fideos', nombre: 'Fideo', grupo: 'cereal', forma: 'fideos', c1: '#fbbf24', c2: '#fef3c7', alergeno: true },
+  { id: 'fideos_integral', nombre: 'Fideos integral', grupo: 'cereal', forma: 'fideos', c1: '#b45309', c2: '#fde68a', fibra: true, alergeno: true },
+  { id: 'habas', nombre: 'Habas', grupo: 'cereal', forma: 'frijol', c1: '#4d7c0f', c2: '#a3e635', fibra: true, hierro: true },
+  { id: 'mijo', nombre: 'Mijo', grupo: 'cereal', forma: 'granos', c1: '#eab308', c2: '#fef9c3', hierro: true },
+  { id: 'mote', nombre: 'Mote', grupo: 'cereal', forma: 'granos', c1: '#f59e0b', c2: '#fef3c7', fibra: true, alergeno: true },
+  { id: 'papa', nombre: 'Papa', grupo: 'cereal', forma: 'papa', c1: '#d97706', c2: '#fde68a' },
   { id: 'platano_verde', nombre: 'Plátano verde', grupo: 'cereal', forma: 'platano', c1: '#65a30d', c2: '#bef264' },
+  { id: 'polenta', nombre: 'Polenta', grupo: 'cereal', forma: 'bowl', c1: '#facc15', c2: '#ca8a04' },
+  { id: 'porotos_granados', nombre: 'Porotos granados', grupo: 'cereal', forma: 'frijol', c1: '#f97316', c2: '#fef3c7', fibra: true, hierro: true },
+  { id: 'quinoa', nombre: 'Quinoa', grupo: 'cereal', forma: 'granos', c1: '#eab308', c2: '#fef08a', fibra: true, hierro: true },
+  { id: 'semola', nombre: 'Sémola', grupo: 'cereal', forma: 'bowl', c1: '#fde68a', c2: '#f59e0b', alergeno: true },
+  { id: 'trigo_sarraceno', nombre: 'Trigo Sarraceno', grupo: 'cereal', forma: 'granos', c1: '#92400e', c2: '#fcd34d', fibra: true, hierro: true },
+  { id: 'yuca', nombre: 'Yuca', grupo: 'cereal', forma: 'camote', c1: '#78350f', c2: '#f5f5f4' },
+  { id: 'pan', nombre: 'Pan sin sal', grupo: 'cereal', forma: 'pan', c1: '#d97706', c2: '#fef3c7', alergeno: true },
+
+  // 6. Aliños opcionales (14 aliños según tabla maestra — opcionales en cada plato)
+  { id: 'alino_comino', nombre: 'Comino', grupo: 'alino', forma: 'especia', c1: '#92400e', c2: '#d97706', opcional: true },
+  { id: 'alino_oregano', nombre: 'Orégano', grupo: 'alino', forma: 'hierba', c1: '#15803d', c2: '#86efac', opcional: true },
+  { id: 'alino_albahaca', nombre: 'Albahaca', grupo: 'alino', forma: 'hierba', c1: '#16a34a', c2: '#bbf7d0', opcional: true },
+  { id: 'alino_ajo', nombre: 'Ajo', grupo: 'alino', forma: 'ajo', c1: '#f8fafc', c2: '#cbd5e1', opcional: true },
+  { id: 'alino_canela', nombre: 'Canela', grupo: 'alino', forma: 'especia', c1: '#9a3412', c2: '#fdba74', opcional: true },
+  { id: 'alino_cebolla_polvo', nombre: 'Cebolla en polvo', grupo: 'alino', forma: 'especia', c1: '#eab308', c2: '#fef9c3', opcional: true },
+  { id: 'alino_cilantro', nombre: 'Cilantro', grupo: 'alino', forma: 'hierba', c1: '#16a34a', c2: '#4ade80', opcional: true },
+  { id: 'alino_curcuma', nombre: 'Cúrcuma', grupo: 'alino', forma: 'especia', c1: '#f59e0b', c2: '#fde047', opcional: true },
+  { id: 'alino_eneldo', nombre: 'Eneldo', grupo: 'alino', forma: 'hierba', c1: '#4d7c0f', c2: '#bef264', opcional: true },
+  { id: 'alino_laurel', nombre: 'Laurel', grupo: 'alino', forma: 'hoja', c1: '#166534', c2: '#86efac', opcional: true },
+  { id: 'alino_perejil', nombre: 'Perejil', grupo: 'alino', forma: 'hierba', c1: '#15803d', c2: '#86efac', opcional: true },
+  { id: 'alino_paprika', nombre: 'Paprika', grupo: 'alino', forma: 'especia', c1: '#dc2626', c2: '#fca5a5', opcional: true },
+  { id: 'alino_romero', nombre: 'Romero', grupo: 'alino', forma: 'hierba', c1: '#14532d', c2: '#4ade80', opcional: true },
+  { id: 'alino_tomillo', nombre: 'Tomillo', grupo: 'alino', forma: 'hierba', c1: '#3f6212', c2: '#a3e635', opcional: true },
 ];
+
+const CATALOGO_ALIMENTOS_BASE = CATALOGO_ALIMENTOS_RAW.map(normalizarItemAlimento);
 
 const ALIMENTOS_PROHIBIDOS = [
   { nombre: 'Sal', motivo: 'Sobrecarga renal', forma: 'sal', c1: '#cbd5e1', c2: '#94a3b8' },
@@ -1722,6 +1828,16 @@ function dibujoFormaSvg(forma, c1, c2, nombre) {
       return `<path d="M18 13l-4-6m6 5l2-7m-1 8l5-4" stroke="${c2}" stroke-width="2.5" stroke-linecap="round"/><path d="M16 14c5-2 10 2 14 14 3 7 4 11 2 12-2 1-11-9-16-20-1-3-1-5 0-6z" fill="${c1}"/>`;
     case 'hoja':
       return `<path d="M24 39V22" stroke="#14532d" stroke-width="2.5" stroke-linecap="round"/><path d="M24 9c9 3 13 11 10 19-2 6-10 7-10 7s-8-1-10-7c-3-8 1-16 10-19z" fill="${c1}"/><path d="M24 14v18M24 21l5-4M24 26l-5-4" stroke="${c2}" stroke-width="1.8" stroke-linecap="round"/>`;
+    case 'hierba':
+      return `<path d="M24 39V14M24 28l-8-7M24 22l8-7" stroke="${c1}" stroke-width="2.4" stroke-linecap="round"/><ellipse cx="15" cy="19" rx="5" ry="3" transform="rotate(-30 15 19)" fill="${c1}"/><ellipse cx="33" cy="14" rx="5" ry="3" transform="rotate(30 33 14)" fill="${c2}"/><ellipse cx="24" cy="12" rx="4" ry="6" fill="${c1}"/>`;
+    case 'alcachofa':
+      return `<circle cx="24" cy="26" r="12" fill="${c1}"/><path d="M16 22c4-5 12-5 16 0M15 28c5-4 13-4 18 0" stroke="${c2}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`;
+    case 'esparrago':
+      return `<rect x="17" y="12" width="5" height="26" rx="2.5" fill="${c1}"/><rect x="26" y="14" width="5" height="24" rx="2.5" fill="${c2}"/><path d="M17 14l2.5-5 2.5 5zM26 16l2.5-5 2.5 5z" fill="${c1}"/>`;
+    case 'berenjena':
+      return `<path d="M26 11c-2-3 2-5 4-3" stroke="${c2}" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M22 13c7 0 11 9 9 18-2 6-8 8-13 5-5-3-4-11 0-17 1-3 2-6 4-6z" fill="${c1}"/>`;
+    case 'hongo':
+      return `<rect x="19" y="24" width="10" height="13" rx="3" fill="${c2}"/><path d="M11 25c0-9 6-14 13-14s13 5 13 14H11z" fill="${c1}"/>`;
     case 'zapallo':
       return `<path d="M24 11v-3" stroke="#15803d" stroke-width="3" stroke-linecap="round"/><ellipse cx="17" cy="25" rx="7" ry="12" fill="${c1}"/><ellipse cx="31" cy="25" rx="7" ry="12" fill="${c1}"/><ellipse cx="24" cy="25" rx="7" ry="13" fill="${c2}"/>`;
     case 'bulbo':
@@ -1742,12 +1858,18 @@ function dibujoFormaSvg(forma, c1, c2, nombre) {
       return `<circle cx="24" cy="24" r="13" fill="${c1}"/><circle cx="24" cy="24" r="10" fill="${c2}" opacity="0.85"/><path d="M24 14v20M14 24h20M17 17l14 14M31 17L17 31" stroke="${c1}" stroke-width="1.5"/>`;
     case 'frutilla':
       return `<path d="M16 14h16l-8 5z" fill="${c2}"/><path d="M14 18c0 10 6 20 10 20s10-10 10-20c0-3-4-4-10-4s-10 1-10 4z" fill="${c1}"/><circle cx="20" cy="22" r="1.1" fill="#fef08a"/><circle cx="28" cy="22" r="1.1" fill="#fef08a"/><circle cx="24" cy="28" r="1.1" fill="#fef08a"/><circle cx="21" cy="32" r="1" fill="#fef08a"/>`;
+    case 'cereza':
+      return `<path d="M17 26c1-8 6-14 10-16 1 5 3 11 5 16" fill="none" stroke="${c2}" stroke-width="2.2" stroke-linecap="round"/><circle cx="17" cy="30" r="6" fill="${c1}"/><circle cx="31" cy="30" r="6" fill="${c1}"/>`;
     case 'manzana':
       return `<path d="M24 13v-4l4-2" stroke="#15803d" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M24 14c-6-3-12 2-11 11 1 8 6 13 11 11 5 2 10-3 11-11 1-9-5-14-11-11z" fill="${c1}"/><ellipse cx="20" cy="22" rx="2.5" ry="5" fill="${c2}" opacity="0.4"/>`;
     case 'berries':
       return `<circle cx="18" cy="27" r="6.5" fill="${c1}"/><circle cx="30" cy="27" r="6.5" fill="${c2}"/><circle cx="24" cy="18" r="6.5" fill="${c1}"/><circle cx="24" cy="15" r="1.5" fill="#c7d2fe"/>`;
     case 'kiwi':
       return `<circle cx="24" cy="24" r="13" fill="${c2}"/><circle cx="24" cy="24" r="10.5" fill="${c1}"/><ellipse cx="24" cy="24" rx="4" ry="3" fill="#ecfccb"/>`;
+    case 'sandia':
+      return `<path d="M10 20h28c-1 10-7 16-14 16S11 30 10 20z" fill="${c2}"/><path d="M13 20h22c-1 7-5 12-11 12s-10-5-11-12z" fill="${c1}"/><circle cx="20" cy="25" r="1.2" fill="#1e293b"/><circle cx="28" cy="25" r="1.2" fill="#1e293b"/><circle cx="24" cy="28" r="1.2" fill="#1e293b"/>`;
+    case 'pina':
+      return `<path d="M20 13l-3-5m7 5V7m4 6l3-5" stroke="${c2}" stroke-width="2.5" stroke-linecap="round"/><ellipse cx="24" cy="26" rx="9" ry="12" fill="${c1}"/><path d="M18 20l12 12M30 20L18 32" stroke="#ca8a04" stroke-width="1.5" opacity="0.6"/>`;
     case 'fruta_redonda':
       return `<path d="M24 12v-4" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round"/><circle cx="24" cy="25" r="12" fill="${c1}"/><circle cx="20" cy="21" r="3.5" fill="${c2}" opacity="0.5"/>`;
     case 'pera':
@@ -1780,6 +1902,10 @@ function dibujoFormaSvg(forma, c1, c2, nombre) {
       return `<rect x="16" y="10" width="16" height="5" rx="2" fill="#475569"/><rect x="14" y="15" width="20" height="22" rx="4" fill="${c1}"/><rect x="17" y="21" width="14" height="9" rx="2" fill="${c2}"/>`;
     case 'semillas':
       return `<ellipse cx="18" cy="19" rx="3" ry="4.5" transform="rotate(-20 18 19)" fill="${c1}"/><ellipse cx="28" cy="18" rx="3" ry="4.5" transform="rotate(25 28 18)" fill="${c2}"/><ellipse cx="22" cy="30" rx="3" ry="4.5" transform="rotate(15 22 30)" fill="${c1}"/><ellipse cx="31" cy="29" rx="3" ry="4.5" transform="rotate(-15 31 29)" fill="${c2}"/>`;
+    case 'especia':
+      return `<path d="M12 31c4-9 9-14 12-14s8 5 12 14H12z" fill="${c1}"/><circle cx="20" cy="14" r="2" fill="${c2}"/><circle cx="28" cy="15" r="1.8" fill="${c1}"/><circle cx="24" cy="11" r="1.5" fill="${c2}"/>`;
+    case 'ajo':
+      return `<path d="M24 10c-2 5-10 8-10 17 0 6 4 10 10 10s10-4 10-10c0-9-8-12-10-17z" fill="${c1}" stroke="${c2}" stroke-width="1.8"/><path d="M24 12v25M20 15c-2 6-2 15 0 21M28 15c2 6 2 15 0 21" stroke="${c2}" stroke-width="1.2" fill="none"/>`;
     case 'bowl':
       return `<ellipse cx="24" cy="21" rx="13" ry="7" fill="${c1}"/><path d="M10 22h28c-1 10-7 15-14 15S11 32 10 22z" fill="${c2}"/>`;
     case 'papa':
@@ -1821,9 +1947,9 @@ function alimentoSvgDataUri(alimento) {
   const key = `${alimento?.id || alimento?.nombre}_${alimento?.forma || 'custom'}_${alimento?.c1 || ''}`;
   if (svgUriCache.has(key)) return svgUriCache.get(key);
   const gInfo = GRUPOS_COMIDA.find((g) => g.key === alimento?.grupo);
-  const c1 = alimento?.c1 || gInfo?.color || '#3987e5';
+  const c1 = alimento?.c1 || gInfo?.color || (alimento?.grupo === 'alino' ? '#16a34a' : '#3987e5');
   const c2 = alimento?.c2 || '#e2e8f0';
-  const body = dibujoFormaSvg(alimento?.forma || 'custom', c1, c2, alimento?.nombre || '');
+  const body = dibujoFormaSvg(alimento?.forma || 'custom', c1, c2, alimento?.nombreBase || alimento?.nombre || '');
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">${body}</svg>`;
   const uri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   svgUriCache.set(key, uri);
@@ -1831,6 +1957,7 @@ function alimentoSvgDataUri(alimento) {
 }
 
 let comidaDraftPlato = { verdura: null, fruta: null, proteina: null, grasa: null, cereal: null };
+let comidaDraftAlinos = [];
 let comidaGrupoActivo = null;
 let comidaCatalogoFiltroGrupo = 'todos';
 let comidaModalId = null;
@@ -1869,7 +1996,9 @@ function obtenerCatalogoAlimentos() {
   const mapa = new Map();
   for (const a of CATALOGO_ALIMENTOS_BASE) mapa.set(a.id, a);
   for (const c of custom) {
-    if (c?.id && c?.nombre && c?.grupo) mapa.set(c.id, c);
+    if (c?.id && c?.nombre && c?.grupo) {
+      mapa.set(c.id, normalizarItemAlimento({ ...c, opcional: c.grupo === 'alino' }));
+    }
   }
   return Array.from(mapa.values());
 }
@@ -1886,6 +2015,7 @@ function leerPlatosComida() {
         hora: p.hora || '12:00',
         tiempo: p.tiempo || 'Almuerzo',
         ingredientes: p.ingredientes || {},
+        alinos: Array.isArray(p.alinos) ? p.alinos : [],
         alimentoNuevo: p.alimentoNuevo || null,
         alimentoNuevoGrupo: p.alimentoNuevoGrupo || null,
         reacciones: Array.isArray(p.reacciones) ? p.reacciones : [],
@@ -1904,6 +2034,8 @@ function leerPlatosComida() {
 
 function calcularContextoComidas(fechaSel) {
   const catalogo = obtenerCatalogoAlimentos();
+  const alimentosPrincipales = catalogo.filter((a) => a.grupo !== 'alino');
+  const alinosCatalogo = catalogo.filter((a) => a.grupo === 'alino');
   const catalogoMap = new Map(catalogo.map((a) => [a.id, a]));
   const custom = leerComidaCustom();
   const platos = leerPlatosComida();
@@ -1937,6 +2069,9 @@ function calcularContextoComidas(fechaSel) {
         setSem.add(id);
       }
     });
+    for (const alinoId of (p.alinos || [])) {
+      if (alinoId) probadosHistoricos.add(alinoId);
+    }
     if (p.alimentoNuevo) totalNuevosHistorico++;
     if (p.fecha === fechaRef) platosHoy.push(p);
     for (const alId of (p.reacciones || [])) {
@@ -1950,7 +2085,7 @@ function calcularContextoComidas(fechaSel) {
   const grupoSugerido = GRUPOS_COMIDA[totalNuevosHistorico % GRUPOS_COMIDA.length];
 
   // Si el grupo en turno ya tiene todos probados, buscar primer grupo con alimentos sin probar
-  const pendientesPorGrupo = (gk) => catalogo.filter((a) => a.grupo === gk && !probadosHistoricos.has(a.id));
+  const pendientesPorGrupo = (gk) => alimentosPrincipales.filter((a) => a.grupo === gk && !probadosHistoricos.has(a.id));
   const grupoRealSugerido = pendientesPorGrupo(grupoSugerido.key).length
     ? grupoSugerido
     : (GRUPOS_COMIDA.find((g) => pendientesPorGrupo(g.key).length > 0) || grupoSugerido);
@@ -1958,13 +2093,15 @@ function calcularContextoComidas(fechaSel) {
   // Determinar qué ingredientes están bloqueados por la regla semanal por grupo
   const bloqueadosPorGrupo = {};
   for (const g of GRUPOS_COMIDA) {
-    const delGrupo = catalogo.filter((a) => a.grupo === g.key && !alergiasMap.has(a.id));
+    const delGrupo = alimentosPrincipales.filter((a) => a.grupo === g.key && !alergiasMap.has(a.id));
     const disponiblesNoSemanaAnt = delGrupo.filter((a) => !usadosSemanaAnterior.has(a.id));
     bloqueadosPorGrupo[g.key] = disponiblesNoSemanaAnt.length > 0 ? usadosSemanaAnterior : new Set();
   }
 
   return {
     catalogo,
+    alimentosPrincipales,
+    alinosCatalogo,
     catalogoMap,
     platos,
     fechaInicio,
@@ -2011,7 +2148,7 @@ function renderPlatoVisualSlots(ctx) {
         ${item ? `
           <div class="plato-slot-body">
             <img class="alimento-thumb" src="${alimentoSvgDataUri(item)}" alt="${escapeHtml(item.nombre)}">
-            <strong style="font-size:0.82rem; color:var(--text); line-height:1.2;">${escapeHtml(item.nombre)}</strong>
+            <strong style="font-size:0.8rem; color:var(--text); line-height:1.2;">${escapeHtml(item.nombre)}</strong>
           </div>
         ` : `<div class="plato-slot-empty">＋ Elegir ${g.nombre.toLowerCase()}</div>`}
       </button>
@@ -2033,6 +2170,25 @@ function renderPlatoVisualSlots(ctx) {
   }
 }
 
+function renderAlinosSelector(ctx) {
+  const grid = $('platoAlinosGrid');
+  if (!grid) return;
+  const selSet = new Set(comidaDraftAlinos);
+  const btnClear = $('btnLimpiarAlinos');
+  if (btnClear) btnClear.classList.toggle('hidden', selSet.size === 0);
+
+  grid.innerHTML = ctx.alinosCatalogo.map((al) => {
+    const activo = selSet.has(al.id);
+    const esAlergia = ctx.alergiasMap.has(al.id);
+    return `
+      <button type="button" class="alino-chip${activo ? ' selected' : ''}" data-alino-id="${al.id}" title="Aliño opcional: toca para agregar o quitar del plato">
+        <img class="alimento-thumb-sm" src="${alimentoSvgDataUri(al)}" alt="${escapeHtml(al.nombre)}">
+        <span>${escapeHtml(al.nombre)}${esAlergia ? ' 🚨' : ''}</span>
+      </button>
+    `;
+  }).join('');
+}
+
 function renderSelectorGrupoComida(ctx) {
   const wrap = $('platoSelectorGrupoWrap');
   if (!wrap) return;
@@ -2045,7 +2201,7 @@ function renderSelectorGrupoComida(ctx) {
 
   wrap.classList.remove('hidden');
   $('platoSelectorTitulo').textContent = `${gInfo.icono} Elige ${gInfo.nombre} (Semana ${ctx.semanaActual})`;
-  const search = ($('platoSelectorSearch')?.value || '').trim().toLowerCase();
+  const search = ($('platoSelectorSearch')?.value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const bloqueados = ctx.bloqueadosPorGrupo[gInfo.key] || new Set();
 
   // Revisar si otro slot del draft ya tiene un alimento nuevo
@@ -2053,8 +2209,13 @@ function renderSelectorGrupoComida(ctx) {
     ([gk, id]) => gk !== gInfo.key && id && !ctx.probadosHistoricos.has(id)
   );
 
-  const items = ctx.catalogo
-    .filter((a) => a.grupo === gInfo.key && (!search || a.nombre.toLowerCase().includes(search)))
+  const items = ctx.alimentosPrincipales
+    .filter((a) => {
+      if (a.grupo !== gInfo.key) return false;
+      if (!search) return true;
+      const norm = a.nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      return norm.includes(search);
+    })
     .sort((a, b) => {
       const aBloq = bloqueados.has(a.id) ? 1 : 0;
       const bBloq = bloqueados.has(b.id) ? 1 : 0;
@@ -2102,9 +2263,10 @@ function renderCatalogoComidas(ctx) {
   filtroWrap.innerHTML = [
     `<button type="button" class="chip-filter${comidaCatalogoFiltroGrupo === 'todos' ? ' active' : ''}" data-cat-grupo="todos">Todos (${ctx.catalogo.length})</button>`,
     ...GRUPOS_COMIDA.map((g) => {
-      const cnt = ctx.catalogo.filter((a) => a.grupo === g.key).length;
+      const cnt = ctx.alimentosPrincipales.filter((a) => a.grupo === g.key).length;
       return `<button type="button" class="chip-filter${comidaCatalogoFiltroGrupo === g.key ? ' active' : ''}" data-cat-grupo="${g.key}">${g.icono} ${g.nombre} (${cnt})</button>`;
     }),
+    `<button type="button" class="chip-filter${comidaCatalogoFiltroGrupo === 'alino' ? ' active' : ''}" data-cat-grupo="alino">🧂 Aliños (${ctx.alinosCatalogo.length})</button>`,
   ].join('');
 
   const list = ctx.catalogo.filter((a) => comidaCatalogoFiltroGrupo === 'todos' || a.grupo === comidaCatalogoFiltroGrupo);
@@ -2112,10 +2274,10 @@ function renderCatalogoComidas(ctx) {
     const probado = ctx.probadosHistoricos.has(a.id);
     const alergia = ctx.alergiasMap.has(a.id);
     const usadoSemAnt = ctx.usadosSemanaAnterior.has(a.id);
-    let estado = '⏳ Pendiente';
+    let estado = a.grupo === 'alino' ? '🧂 Aliño opcional' : '⏳ Pendiente';
     if (alergia) estado = '🚨 Alergia detectada';
-    else if (usadoSemAnt) estado = '🔒 Usado sem. anterior';
-    else if (probado) estado = '✓ Probado / Integrado';
+    else if (usadoSemAnt && a.grupo !== 'alino') estado = '🔒 Usado sem. anterior';
+    else if (probado) estado = a.grupo === 'alino' ? '✓ Aliño usado' : '✓ Probado / Integrado';
     return `
       <button type="button" class="alimento-item${probado ? ' selected' : ''}${alergia ? ' alergia' : ''}" data-toggle-cat="${a.id}" title="Toca para marcar/desmarcar como ya probado antes de usar la app">
         <img class="alimento-thumb" src="${alimentoSvgDataUri(a)}" alt="${escapeHtml(a.nombre)}">
@@ -2137,7 +2299,8 @@ function renderGuiasComidas() {
         <strong>Paso a paso para iniciar</strong>
         <p><strong>Paso N°1:</strong> Todos los días integra 1 alimento nuevo por grupo intentando armar un plato completo.<br>
         <strong>Paso N°2:</strong> Repite el orden (Verdura → Fruta → Proteína → Grasa → Cereal/Tubérculo), siempre integrando 1 alimento nuevo por día y completando con alimentos ya probados.<br>
-        <strong>Regla clave:</strong> Nunca 2 alimentos nuevos el mismo día. Así detectas posibles reacciones alérgicas.</p>
+        <strong>Regla clave:</strong> Nunca 2 alimentos nuevos el mismo día. Así detectas posibles reacciones alérgicas.<br>
+        <strong>Simbología al final del nombre:</strong> 🌾 Alto en fibra · 🦷 Alto en calcio · 🌿 Alto en hierro · ❗ Alérgeno.</p>
       </div>
       ${GRUPOS_COMIDA.map((g) => `
         <div class="faq-item" style="border-left:4px solid ${g.color};">
@@ -2176,15 +2339,15 @@ function renderComidas() {
   const fechaSel = $('comidaFecha')?.value || dayKey(new Date());
   const ctx = calcularContextoComidas(fechaSel);
 
-  const probadosCount = ctx.catalogo.filter((a) => ctx.probadosHistoricos.has(a.id)).length;
-  const totalCat = ctx.catalogo.length || 1;
+  const probadosCount = ctx.alimentosPrincipales.filter((a) => ctx.probadosHistoricos.has(a.id)).length;
+  const totalCat = ctx.alimentosPrincipales.length || 1;
   const pct = Math.min(100, Math.round((probadosCount / totalCat) * 100));
 
   if ($('comidaSemanaActual')) $('comidaSemanaActual').textContent = `Semana ${ctx.semanaActual}`;
   if ($('comidaAlimentosProbados')) $('comidaAlimentosProbados').textContent = `${probadosCount} / ${totalCat}`;
   if ($('comidaGrupoSugeridoHoy')) $('comidaGrupoSugeridoHoy').textContent = `${ctx.grupoSugerido.icono} ${ctx.grupoSugerido.nombre}`;
   if ($('comidaAlergiasDetectadas')) $('comidaAlergiasDetectadas').textContent = String(ctx.alergiasMap.size);
-  if ($('comidaCatalogoStatus')) $('comidaCatalogoStatus').textContent = `${probadosCount} de ${totalCat} ingredientes integrados (${pct}%)`;
+  if ($('comidaCatalogoStatus')) $('comidaCatalogoStatus').textContent = `${probadosCount} de ${totalCat} alimentos integrados (${pct}%) · +${ctx.alinosCatalogo.length} aliños opcionales`;
   if ($('comidaCatalogoBar')) $('comidaCatalogoBar').style.width = `${pct}%`;
 
   const bloqueadosNombres = Array.from(ctx.usadosSemanaAnterior)
@@ -2200,6 +2363,7 @@ function renderComidas() {
 
   renderPlatoVisualSlots(ctx);
   renderSelectorGrupoComida(ctx);
+  renderAlinosSelector(ctx);
   renderCatalogoComidas(ctx);
   renderGuiasComidas();
 
@@ -2207,14 +2371,22 @@ function renderComidas() {
     ['Hora / Comida', 'Plato e ingredientes'],
     groupByDay(ctx.platos, 'fecha'),
     (p) => {
-      const pills = GRUPOS_COMIDA.map((g) => {
+      const pillsPrincipales = GRUPOS_COMIDA.map((g) => {
         const id = p.ingredientes?.[g.key];
         if (!id) return '';
         const item = ctx.catalogoMap.get(id) || { id, nombre: id, grupo: g.key };
         const esNuevo = p.alimentoNuevo === id;
         const esAlergia = (p.reacciones || []).includes(id);
         return `<span class="comida-ing-pill${esNuevo ? ' nuevo' : ''}${esAlergia ? ' alergia' : ''}"><img class="alimento-thumb-sm" src="${alimentoSvgDataUri(item)}" alt=""> ${escapeHtml(item.nombre)}${esNuevo ? ' ✨' : ''}${esAlergia ? ' 🚨' : ''}</span>`;
-      }).filter(Boolean).join('');
+      }).filter(Boolean);
+
+      const pillsAlinos = (p.alinos || []).map((alId) => {
+        const item = ctx.catalogoMap.get(alId) || { id: alId, nombre: alId, grupo: 'alino' };
+        const esAlergia = (p.reacciones || []).includes(alId);
+        return `<span class="comida-ing-pill alino${esAlergia ? ' alergia' : ''}" title="Aliño opcional"><img class="alimento-thumb-sm" src="${alimentoSvgDataUri(item)}" alt=""> 🧂 ${escapeHtml(item.nombre)}${esAlergia ? ' 🚨' : ''}</span>`;
+      });
+
+      const pills = [...pillsPrincipales, ...pillsAlinos].join('');
 
       const alergiaBadge = (p.reacciones || []).length
         ? `<span class="plato-slot-tag alergia" style="margin-left:4px;">🚨 Alergia (${p.reacciones.length})</span>`
@@ -2239,7 +2411,7 @@ function sugerirPlatoDelDia() {
 
   for (const g of GRUPOS_COMIDA) {
     const bloqueados = ctx.bloqueadosPorGrupo[g.key] || new Set();
-    const candidatos = ctx.catalogo.filter((a) => a.grupo === g.key && !ctx.alergiasMap.has(a.id) && !bloqueados.has(a.id));
+    const candidatos = ctx.alimentosPrincipales.filter((a) => a.grupo === g.key && !ctx.alergiasMap.has(a.id) && !bloqueados.has(a.id));
     const nuevos = candidatos.filter((a) => !ctx.probadosHistoricos.has(a.id));
     const probados = candidatos.filter((a) => ctx.probadosHistoricos.has(a.id));
 
@@ -2309,6 +2481,35 @@ function abrirComidaModal(id) {
     `);
   }
 
+  for (const alinoId of (plato.alinos || [])) {
+    if (!alinoId) continue;
+    const item = ctx.catalogoMap.get(alinoId) || { id: alinoId, nombre: alinoId, grupo: 'alino' };
+    const marcadoAlergia = (plato.reacciones || []).includes(alinoId);
+
+    ingRows.push(`
+      <div class="comida-modal-row">
+        <div class="comida-modal-row-left">
+          <img class="alimento-thumb" src="${alimentoSvgDataUri(item)}" alt="${escapeHtml(item.nombre)}">
+          <div>
+            <strong style="font-size:0.88rem; display:block;">${escapeHtml(item.nombre)}</strong>
+            <small style="color:var(--text-2);">🧂 Aliño (opcional)</small>
+          </div>
+        </div>
+        <span class="plato-slot-tag" style="background:var(--surface); color:var(--text-2);">🧂 Opcional</span>
+      </div>
+    `);
+
+    checkRows.push(`
+      <label class="alergia-check-item">
+        <span style="display:flex; align-items:center; gap:8px;">
+          <img class="alimento-thumb-sm" src="${alimentoSvgDataUri(item)}" alt="">
+          <span><strong>${escapeHtml(item.nombre)}</strong> <small style="color:var(--muted);">(Aliño)</small></span>
+        </span>
+        <input type="checkbox" class="alergia-food-chk" value="${escapeHtml(alinoId)}" ${marcadoAlergia ? 'checked' : ''}>
+      </label>
+    `);
+  }
+
   $('comidaModalIngredientes').innerHTML = ingRows.length ? ingRows.join('') : '<p class="empty-msg">Sin ingredientes</p>';
   $('comidaModalAlergiaChecks').innerHTML = checkRows.length ? checkRows.join('') : '<p class="empty-msg">Sin ingredientes</p>';
   $('comidaModalReaccionNotas').value = plato.reaccionNotas || '';
@@ -2353,6 +2554,23 @@ $('platoSelectorOpciones')?.addEventListener('click', (e) => {
   renderComidas();
 });
 
+$('platoAlinosGrid')?.addEventListener('click', (e) => {
+  const chip = e.target.closest('[data-alino-id]');
+  if (!chip) return;
+  const id = chip.dataset.alinoId;
+  const idx = comidaDraftAlinos.indexOf(id);
+  if (idx >= 0) comidaDraftAlinos.splice(idx, 1);
+  else comidaDraftAlinos.push(id);
+  const ctx = calcularContextoComidas($('comidaFecha')?.value || dayKey(new Date()));
+  renderAlinosSelector(ctx);
+});
+
+$('btnLimpiarAlinos')?.addEventListener('click', () => {
+  comidaDraftAlinos = [];
+  const ctx = calcularContextoComidas($('comidaFecha')?.value || dayKey(new Date()));
+  renderAlinosSelector(ctx);
+});
+
 $('comidaCatalogoFiltro')?.addEventListener('click', (e) => {
   const btn = e.target.closest('.chip-filter');
   if (!btn) return;
@@ -2392,14 +2610,29 @@ $('btnAgregarAlimentoCat')?.addEventListener('click', async () => {
   try {
     const id = 'custom_' + nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_');
     const custom = leerComidaCustom();
-    if (obtenerCatalogoAlimentos().some((a) => a.id === id || a.nombre.toLowerCase() === nombre.toLowerCase())) {
+    if (obtenerCatalogoAlimentos().some((a) => a.id === id || (a.nombreBase || a.nombre).toLowerCase() === nombre.toLowerCase())) {
       toast('Ese alimento ya existe en el catálogo', true);
       return;
     }
-    custom.customFoods.push({ id, nombre, grupo, forma: 'custom' });
+    const itemNuevo = normalizarItemAlimento({
+      id,
+      nombre,
+      grupo,
+      forma: grupo === 'alino' ? 'hierba' : 'custom',
+      fibra: Boolean($('nuevoAlimFibra')?.checked),
+      calcio: Boolean($('nuevoAlimCalcio')?.checked),
+      hierro: Boolean($('nuevoAlimHierro')?.checked),
+      alergeno: Boolean($('nuevoAlimAlergeno')?.checked),
+      opcional: grupo === 'alino',
+    });
+    custom.customFoods.push(itemNuevo);
     await guardarComidaCustom(custom);
     $('nuevoAlimNombre').value = '';
-    toast(`"${nombre}" agregado al catálogo ✓`);
+    if ($('nuevoAlimFibra')) $('nuevoAlimFibra').checked = false;
+    if ($('nuevoAlimCalcio')) $('nuevoAlimCalcio').checked = false;
+    if ($('nuevoAlimHierro')) $('nuevoAlimHierro').checked = false;
+    if ($('nuevoAlimAlergeno')) $('nuevoAlimAlergeno').checked = false;
+    toast(`"${itemNuevo.nombre}" agregado al catálogo ✓`);
     renderComidas();
   } finally {
     btn.disabled = false;
@@ -2436,6 +2669,7 @@ $('formComidaPlato')?.addEventListener('submit', async (e) => {
       hora,
       tiempo,
       ingredientes: { ...comidaDraftPlato },
+      alinos: [...comidaDraftAlinos],
       alimentoNuevo: nuevosEnPlato[0]?.[1] || null,
       alimentoNuevoGrupo: nuevosEnPlato[0]?.[0] || null,
       reacciones: [],
@@ -2450,6 +2684,7 @@ $('formComidaPlato')?.addEventListener('submit', async (e) => {
     });
     if (ok) {
       comidaDraftPlato = { verdura: null, fruta: null, proteina: null, grasa: null, cereal: null };
+      comidaDraftAlinos = [];
       comidaGrupoActivo = null;
       $('comidaNotas').value = '';
       renderComidas();
