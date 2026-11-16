@@ -1956,22 +1956,64 @@ function alimentoSvgDataUri(alimento) {
   return uri;
 }
 
-let comidaDraftPlato = { verdura: null, fruta: null, proteina: null, grasa: null, cereal: null };
+function crearDraftPlatoVacio() {
+  return { verdura: [], fruta: [], proteina: [], grasa: [], cereal: [] };
+}
+
+function normalizarIngredientesPlato(ingObj) {
+  const res = crearDraftPlatoVacio();
+  if (!ingObj || typeof ingObj !== 'object') return res;
+  for (const g of GRUPOS_COMIDA) {
+    const val = ingObj[g.key];
+    if (Array.isArray(val)) {
+      res[g.key] = Array.from(new Set(val.filter(Boolean).map(String)));
+    } else if (typeof val === 'string' && val.trim()) {
+      res[g.key] = [val.trim()];
+    }
+  }
+  return res;
+}
+
+function obtenerIdsIngredientesPlato(ingObj) {
+  const norm = normalizarIngredientesPlato(ingObj);
+  const ids = [];
+  for (const g of GRUPOS_COMIDA) {
+    for (const id of norm[g.key]) {
+      if (id && !ids.includes(id)) ids.push(id);
+    }
+  }
+  return ids;
+}
+
+let comidaDraftPlato = crearDraftPlatoVacio();
 let comidaDraftAlinos = [];
 let comidaGrupoActivo = null;
 let comidaCatalogoFiltroGrupo = 'todos';
 let comidaModalId = null;
+let comidaEditId = null;
+
+function leerSemanaLocal() {
+  const v = Number(localStorage.getItem('nebu_comida_semana'));
+  return Number.isFinite(v) && v >= 1 ? Math.min(99, Math.round(v)) : null;
+}
 
 function leerComidaCustom() {
   const rec = (cache.bitacora || []).find((r) => r.titulo === SYSTEM_COMIDA_CUSTOM);
-  const base = { customFoods: [], manualProbados: [], manualAlergias: {} };
+  const semLS = leerSemanaLocal();
+  const base = { customFoods: [], manualProbados: [], manualAlergias: {}, semanaManual: semLS };
   if (!rec?.notas) return base;
   try {
     const parsed = JSON.parse(rec.notas);
+    const semDB = Number(parsed.semanaManual);
+    const semanaManual = (Number.isFinite(semDB) && semDB >= 1)
+      ? Math.min(99, Math.round(semDB))
+      : semLS;
+    if (semanaManual) localStorage.setItem('nebu_comida_semana', String(semanaManual));
     return {
       customFoods: Array.isArray(parsed.customFoods) ? parsed.customFoods : [],
       manualProbados: Array.isArray(parsed.manualProbados) ? parsed.manualProbados : [],
       manualAlergias: (parsed.manualAlergias && typeof parsed.manualAlergias === 'object') ? parsed.manualAlergias : {},
+      semanaManual: semanaManual || null,
     };
   } catch {
     return base;
@@ -1979,6 +2021,9 @@ function leerComidaCustom() {
 }
 
 async function guardarComidaCustom(dataObj) {
+  if (dataObj?.semanaManual) {
+    localStorage.setItem('nebu_comida_semana', String(dataObj.semanaManual));
+  }
   if (!bebe?.id) return;
   const notasStr = JSON.stringify(dataObj);
   const today = dayKey(new Date());
@@ -2009,14 +2054,20 @@ function leerPlatosComida() {
   for (const r of rows) {
     try {
       const p = JSON.parse(r.notas || '{}');
+      const ingNorm = normalizarIngredientesPlato(p.ingredientes);
+      const nuevosArr = Array.isArray(p.alimentosNuevos)
+        ? p.alimentosNuevos.filter(Boolean)
+        : (p.alimentoNuevo ? [p.alimentoNuevo] : []);
       platos.push({
         id: r.id,
         fecha: p.fecha || r.fecha,
         hora: p.hora || '12:00',
         tiempo: p.tiempo || 'Almuerzo',
-        ingredientes: p.ingredientes || {},
+        semana: Number(p.semana) >= 1 ? Number(p.semana) : null,
+        ingredientes: ingNorm,
         alinos: Array.isArray(p.alinos) ? p.alinos : [],
-        alimentoNuevo: p.alimentoNuevo || null,
+        alimentoNuevo: nuevosArr[0] || null,
+        alimentosNuevos: nuevosArr,
         alimentoNuevoGrupo: p.alimentoNuevoGrupo || null,
         reacciones: Array.isArray(p.reacciones) ? p.reacciones : [],
         sintomas: Array.isArray(p.sintomas) ? p.sintomas : [],
@@ -2047,7 +2098,8 @@ function calcularContextoComidas(fechaSel) {
 
   const diasEntre = (f1, f2) => Math.round((new Date(f2 + 'T12:00') - new Date(f1 + 'T12:00')) / 86400000);
   const semanaDe = (f) => Math.max(1, Math.floor(diasEntre(fechaInicio, f) / 7) + 1);
-  const semanaActual = semanaDe(fechaRef);
+  const semanaAuto = semanaDe(fechaRef);
+  const semanaActual = (custom.semanaManual && custom.semanaManual >= 1) ? custom.semanaManual : semanaAuto;
 
   const probadosHistoricos = new Set(custom.manualProbados);
   const alergiasMap = new Map();
@@ -2060,19 +2112,19 @@ function calcularContextoComidas(fechaSel) {
   let totalNuevosHistorico = 0;
 
   for (const p of platosAsc) {
-    const sem = semanaDe(p.fecha);
+    // Si estamos editando este plato, no contarlo como ya guardado previo para el borrador en curso
+    if (comidaEditId && String(p.id) === String(comidaEditId)) continue;
+    const sem = p.semana || semanaDe(p.fecha);
     if (!usadosPorSemana.has(sem)) usadosPorSemana.set(sem, new Set());
     const setSem = usadosPorSemana.get(sem);
-    Object.values(p.ingredientes || {}).forEach((id) => {
-      if (id) {
-        probadosHistoricos.add(id);
-        setSem.add(id);
-      }
-    });
+    for (const id of obtenerIdsIngredientesPlato(p.ingredientes)) {
+      probadosHistoricos.add(id);
+      setSem.add(id);
+    }
     for (const alinoId of (p.alinos || [])) {
       if (alinoId) probadosHistoricos.add(alinoId);
     }
-    if (p.alimentoNuevo) totalNuevosHistorico++;
+    if ((p.alimentosNuevos && p.alimentosNuevos.length) || p.alimentoNuevo) totalNuevosHistorico++;
     if (p.fecha === fechaRef) platosHoy.push(p);
     for (const alId of (p.reacciones || [])) {
       alergiasMap.set(alId, { fecha: p.fecha, sintomas: p.sintomas || [], notas: p.reaccionNotas || '' });
@@ -2081,16 +2133,14 @@ function calcularContextoComidas(fechaSel) {
 
   const usadosSemanaAnterior = semanaActual > 1 ? (usadosPorSemana.get(semanaActual - 1) || new Set()) : new Set();
   const usadosEstaSemana = usadosPorSemana.get(semanaActual) || new Set();
-  const yaHayNuevoHoy = platosHoy.some((p) => Boolean(p.alimentoNuevo));
+  const yaHayNuevoHoy = platosHoy.some((p) => Boolean(p.alimentoNuevo || (p.alimentosNuevos && p.alimentosNuevos.length)));
   const grupoSugerido = GRUPOS_COMIDA[totalNuevosHistorico % GRUPOS_COMIDA.length];
 
-  // Si el grupo en turno ya tiene todos probados, buscar primer grupo con alimentos sin probar
   const pendientesPorGrupo = (gk) => alimentosPrincipales.filter((a) => a.grupo === gk && !probadosHistoricos.has(a.id));
   const grupoRealSugerido = pendientesPorGrupo(grupoSugerido.key).length
     ? grupoSugerido
     : (GRUPOS_COMIDA.find((g) => pendientesPorGrupo(g.key).length > 0) || grupoSugerido);
 
-  // Determinar qué ingredientes están bloqueados por la regla semanal por grupo
   const bloqueadosPorGrupo = {};
   for (const g of GRUPOS_COMIDA) {
     const delGrupo = alimentosPrincipales.filter((a) => a.grupo === g.key && !alergiasMap.has(a.id));
@@ -2117,57 +2167,150 @@ function calcularContextoComidas(fechaSel) {
   };
 }
 
+function toggleIngredienteEnDraft(foodId, grupoKey) {
+  if (!foodId) return;
+  if (grupoKey === 'alino') {
+    const idx = comidaDraftAlinos.indexOf(foodId);
+    if (idx >= 0) comidaDraftAlinos.splice(idx, 1);
+    else comidaDraftAlinos.push(foodId);
+    return;
+  }
+  const gk = GRUPOS_COMIDA.some((g) => g.key === grupoKey) ? grupoKey : 'verdura';
+  if (!Array.isArray(comidaDraftPlato[gk])) comidaDraftPlato[gk] = [];
+  const arr = comidaDraftPlato[gk];
+  const idx = arr.indexOf(foodId);
+  if (idx >= 0) arr.splice(idx, 1);
+  else arr.push(foodId);
+}
+
 function renderPlatoVisualSlots(ctx) {
   const slotsWrap = $('platoVisualSlots');
   if (!slotsWrap) return;
 
-  let alimentoNuevoEnDraft = null;
-  let cantNuevosDraft = 0;
+  const nuevosEnDraft = [];
+  let totalSeleccionados = 0;
 
   slotsWrap.innerHTML = GRUPOS_COMIDA.map((g) => {
-    const idSel = comidaDraftPlato[g.key];
-    const item = idSel ? ctx.catalogoMap.get(idSel) : null;
+    const idsGrupo = Array.isArray(comidaDraftPlato[g.key]) ? comidaDraftPlato[g.key] : [];
+    const items = idsGrupo.map((id) => ctx.catalogoMap.get(id) || { id, nombre: id, grupo: g.key });
+    totalSeleccionados += items.length;
     const activo = comidaGrupoActivo === g.key;
-    let badge = '';
-    if (item) {
-      const esAlergia = ctx.alergiasMap.has(item.id);
-      const esNuevo = !ctx.probadosHistoricos.has(item.id);
-      if (esNuevo) {
-        cantNuevosDraft++;
-        alimentoNuevoEnDraft = { item, grupo: g };
+
+    let tieneAlergia = false;
+    let cantNuevosSlot = 0;
+    for (const item of items) {
+      if (ctx.alergiasMap.has(item.id)) tieneAlergia = true;
+      if (!ctx.probadosHistoricos.has(item.id)) {
+        cantNuevosSlot++;
+        nuevosEnDraft.push(item.nombre);
       }
-      if (esAlergia) badge = '<span class="plato-slot-tag alergia">🚨 Alergia</span>';
-      else if (esNuevo) badge = '<span class="plato-slot-tag nuevo">✨ Nuevo</span>';
     }
+
+    let badge = '';
+    if (tieneAlergia) badge = '<span class="plato-slot-tag alergia">🚨 Alergia</span>';
+    else if (cantNuevosSlot > 0) badge = `<span class="plato-slot-tag nuevo">✨ ${cantNuevosSlot > 1 ? cantNuevosSlot + ' nuevos' : 'Nuevo'}</span>`;
+    else if (items.length > 0) badge = `<span class="plato-slot-tag" style="background:var(--surface); color:var(--text-2);">${items.length}</span>`;
+
+    const listaHtml = items.length ? `
+      <div class="plato-slot-items">
+        ${items.map((item) => `
+          <div class="plato-slot-item-row">
+            <div class="plato-slot-item-left">
+              <img class="alimento-thumb-sm" src="${alimentoSvgDataUri(item)}" alt="${escapeHtml(item.nombre)}">
+              <strong>${escapeHtml(item.nombre)}</strong>
+            </div>
+            <span role="button" tabindex="0" class="plato-slot-item-del" data-remove-slot-grupo="${g.key}" data-remove-slot-food="${escapeHtml(item.id)}" title="Quitar del plato">✕</span>
+          </div>
+        `).join('')}
+      </div>
+      <div class="plato-slot-add-more">＋ Agregar otro (${g.nombre.toLowerCase()})</div>
+    ` : `<div class="plato-slot-empty">＋ Elegir ${g.nombre.toLowerCase()} (1 o más)</div>`;
+
     return `
-      <button type="button" class="plato-slot${activo ? ' active' : ''}" data-grupo="${g.key}" style="--grupo-color:${g.color}">
+      <div class="plato-slot${activo ? ' active' : ''}" data-grupo="${g.key}" style="--grupo-color:${g.color}">
         <div class="plato-slot-head">
           <span>${g.icono} ${g.nombre}</span>
           ${badge}
         </div>
-        ${item ? `
-          <div class="plato-slot-body">
-            <img class="alimento-thumb" src="${alimentoSvgDataUri(item)}" alt="${escapeHtml(item.nombre)}">
-            <strong style="font-size:0.8rem; color:var(--text); line-height:1.2;">${escapeHtml(item.nombre)}</strong>
-          </div>
-        ` : `<div class="plato-slot-empty">＋ Elegir ${g.nombre.toLowerCase()}</div>`}
-      </button>
+        ${listaHtml}
+      </div>
     `;
   }).join('');
 
   const resumenEl = $('comidaAlimentoNuevoResumen');
   if (resumenEl) {
-    if (ctx.yaHayNuevoHoy && cantNuevosDraft > 0) {
-      resumenEl.innerHTML = '⚠️ Ya registraste un alimento nuevo hoy. Quita el alimento nuevo del plato o cambia a uno ya probado.';
-      resumenEl.style.color = '#ef4444';
-    } else if (alimentoNuevoEnDraft) {
-      resumenEl.innerHTML = `✨ Alimento nuevo de hoy: <strong>${escapeHtml(alimentoNuevoEnDraft.item.nombre)}</strong> (${alimentoNuevoEnDraft.grupo.nombre}). El resto completa el plato sin repetir la semana anterior.`;
+    if (nuevosEnDraft.length > 0) {
+      resumenEl.innerHTML = `✨ Alimentos nuevos en este plato (${nuevosEnDraft.length}): <strong>${nuevosEnDraft.map(escapeHtml).join(', ')}</strong> · Total en plato: ${totalSeleccionados} alimento${totalSeleccionados === 1 ? '' : 's'}${comidaDraftAlinos.length ? ` + ${comidaDraftAlinos.length} aliño(s)` : ''}.`;
       resumenEl.style.color = '#199e70';
+    } else if (totalSeleccionados > 0) {
+      resumenEl.innerHTML = `🍽️ Plato con <strong>${totalSeleccionados} alimento${totalSeleccionados === 1 ? '' : 's'}</strong> seleccionado${totalSeleccionados === 1 ? '' : 's'}${comidaDraftAlinos.length ? ` y <strong>${comidaDraftAlinos.length} aliño(s)</strong>` : ''}. Puedes seguir agregando más en cualquier categoría o con la lupa 🔍.`;
+      resumenEl.style.color = 'var(--text-2)';
     } else {
-      resumenEl.innerHTML = `💡 Toca <strong>${ctx.grupoSugerido.icono} ${ctx.grupoSugerido.nombre}</strong> para introducir 1 alimento nuevo hoy, o usa <strong>🎲 Sugerir plato</strong>.`;
+      resumenEl.innerHTML = `💡 Toca cualquier categoría (ej. <strong>${ctx.grupoSugerido.icono} ${ctx.grupoSugerido.nombre}</strong>) o usa la <strong>lupa 🔍</strong> para agregar todos los alimentos que quieras al plato.`;
       resumenEl.style.color = 'var(--text-2)';
     }
   }
+}
+
+function renderBusquedaRapidaPlato(ctx) {
+  const input = $('platoBusquedaRapida');
+  const clearBtn = $('platoBusquedaRapidaClear');
+  const resWrap = $('platoBusquedaResultados');
+  if (!input || !resWrap) return;
+
+  const rawQuery = (input.value || '').trim();
+  const query = rawQuery.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (clearBtn) clearBtn.classList.toggle('hidden', !rawQuery);
+
+  if (!query) {
+    resWrap.classList.add('hidden');
+    resWrap.innerHTML = '';
+    return;
+  }
+
+  resWrap.classList.remove('hidden');
+  const seleccionadosSet = new Set([
+    ...obtenerIdsIngredientesPlato(comidaDraftPlato),
+    ...comidaDraftAlinos,
+  ]);
+
+  const matches = ctx.catalogo.filter((a) => {
+    const norm = a.nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return norm.includes(query);
+  });
+
+  const gLabel = (gk) => {
+    if (gk === 'alino') return '🧂 Aliño';
+    const g = GRUPOS_COMIDA.find((x) => x.key === gk);
+    return g ? `${g.icono} ${g.nombre}` : gk;
+  };
+
+  const cards = matches.map((a) => {
+    const sel = seleccionadosSet.has(a.id);
+    const esAlergia = ctx.alergiasMap.has(a.id);
+    return `
+      <button type="button" class="alimento-item${sel ? ' selected' : ''}${esAlergia ? ' alergia' : ''}" data-quick-pick="${escapeHtml(a.id)}" data-quick-grupo="${escapeHtml(a.grupo)}">
+        <img class="alimento-thumb" src="${alimentoSvgDataUri(a)}" alt="${escapeHtml(a.nombre)}">
+        <div class="alimento-info">
+          <strong>${escapeHtml(a.nombre)}</strong>
+          <small>${sel ? '✓ En el plato (toca para quitar)' : `＋ Agregar · ${gLabel(a.grupo)}`}</small>
+        </div>
+      </button>
+    `;
+  });
+
+  const exactMatch = matches.some((a) => (a.nombreBase || a.nombre).toLowerCase() === rawQuery.toLowerCase());
+  const addFreeBtn = !exactMatch ? `
+    <button type="button" class="alimento-item" data-quick-create="${escapeHtml(rawQuery)}">
+      <span>➕</span>
+      <div class="alimento-info">
+        <strong>Agregar "${escapeHtml(rawQuery)}"</strong>
+        <small>Crear e incluir en el plato</small>
+      </div>
+    </button>
+  ` : '';
+
+  resWrap.innerHTML = cards.join('') + addFreeBtn;
 }
 
 function renderAlinosSelector(ctx) {
@@ -2200,14 +2343,11 @@ function renderSelectorGrupoComida(ctx) {
   if (!gInfo) return;
 
   wrap.classList.remove('hidden');
-  $('platoSelectorTitulo').textContent = `${gInfo.icono} Elige ${gInfo.nombre} (Semana ${ctx.semanaActual})`;
+  const selArr = Array.isArray(comidaDraftPlato[gInfo.key]) ? comidaDraftPlato[gInfo.key] : [];
+  const selSet = new Set(selArr);
+  $('platoSelectorTitulo').textContent = `${gInfo.icono} Elige ${gInfo.nombre} (${selSet.size} seleccionado${selSet.size === 1 ? '' : 's'} · Semana ${ctx.semanaActual})`;
   const search = ($('platoSelectorSearch')?.value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const bloqueados = ctx.bloqueadosPorGrupo[gInfo.key] || new Set();
-
-  // Revisar si otro slot del draft ya tiene un alimento nuevo
-  const otroNuevoEnDraft = Object.entries(comidaDraftPlato).some(
-    ([gk, id]) => gk !== gInfo.key && id && !ctx.probadosHistoricos.has(id)
-  );
 
   const items = ctx.alimentosPrincipales
     .filter((a) => {
@@ -2217,34 +2357,36 @@ function renderSelectorGrupoComida(ctx) {
       return norm.includes(search);
     })
     .sort((a, b) => {
+      const aSel = selSet.has(a.id) ? 0 : 1;
+      const bSel = selSet.has(b.id) ? 0 : 1;
+      if (aSel !== bSel) return aSel - bSel;
       const aBloq = bloqueados.has(a.id) ? 1 : 0;
       const bBloq = bloqueados.has(b.id) ? 1 : 0;
       if (aBloq !== bBloq) return aBloq - bBloq;
       const aProb = ctx.probadosHistoricos.has(a.id) ? 1 : 0;
       const bProb = ctx.probadosHistoricos.has(b.id) ? 1 : 0;
-      return aProb - bProb; // Priorizar nuevos primero si están permitidos
+      return aProb - bProb;
     });
 
-  const quitarBtn = comidaDraftPlato[gInfo.key]
-    ? '<button type="button" class="alimento-item" data-pick-alimento=""><span>✕</span><div class="alimento-info"><strong>Vaciar sección</strong><small>Dejar sin ingrediente</small></div></button>'
+  const quitarBtn = selSet.size > 0
+    ? '<button type="button" class="alimento-item" data-pick-alimento="__clear__"><span>✕</span><div class="alimento-info"><strong>Vaciar esta categoría</strong><small>Quitar seleccionados de este grupo</small></div></button>'
     : '';
 
   $('platoSelectorOpciones').innerHTML = quitarBtn + items.map((a) => {
-    const seleccionado = comidaDraftPlato[gInfo.key] === a.id;
+    const seleccionado = selSet.has(a.id);
     const bloqSemana = bloqueados.has(a.id);
     const esNuevo = !ctx.probadosHistoricos.has(a.id);
     const esAlergia = ctx.alergiasMap.has(a.id);
-    const bloqReglaNuevo = esNuevo && (ctx.yaHayNuevoHoy || otroNuevoEnDraft);
-    const disabled = bloqSemana || bloqReglaNuevo;
 
-    let sub = '✓ Ya integrado';
-    if (esAlergia) sub = '🚨 Causó alergia';
-    else if (bloqSemana) sub = '🔒 Semana anterior';
-    else if (bloqReglaNuevo) sub = '🔒 Máx 1 nuevo/día';
-    else if (esNuevo) sub = '✨ Nuevo (por probar)';
+    let sub = seleccionado ? '✓ En el plato (toca para quitar)' : '✓ Ya integrado';
+    if (!seleccionado) {
+      if (esAlergia) sub = '🚨 Causó alergia';
+      else if (bloqSemana) sub = '🔄 Usado sem. anterior';
+      else if (esNuevo) sub = '✨ Nuevo (por probar)';
+    }
 
     return `
-      <button type="button" class="alimento-item${seleccionado ? ' selected' : ''}${disabled ? ' bloqueado' : ''}${esAlergia ? ' alergia' : ''}" data-pick-alimento="${a.id}" ${disabled ? 'disabled' : ''}>
+      <button type="button" class="alimento-item${seleccionado ? ' selected' : ''}${esAlergia ? ' alergia' : ''}" data-pick-alimento="${a.id}">
         <img class="alimento-thumb" src="${alimentoSvgDataUri(a)}" alt="${escapeHtml(a.nombre)}">
         <div class="alimento-info">
           <strong>${escapeHtml(a.nombre)}</strong>
@@ -2260,6 +2402,12 @@ function renderCatalogoComidas(ctx) {
   const gridWrap = $('comidaCatalogoGrid');
   if (!filtroWrap || !gridWrap) return;
 
+  const rawSearch = ($('comidaCatalogoSearch')?.value || '').trim();
+  const search = rawSearch.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if ($('comidaCatalogoSearchClear')) {
+    $('comidaCatalogoSearchClear').classList.toggle('hidden', !rawSearch);
+  }
+
   filtroWrap.innerHTML = [
     `<button type="button" class="chip-filter${comidaCatalogoFiltroGrupo === 'todos' ? ' active' : ''}" data-cat-grupo="todos">Todos (${ctx.catalogo.length})</button>`,
     ...GRUPOS_COMIDA.map((g) => {
@@ -2269,14 +2417,20 @@ function renderCatalogoComidas(ctx) {
     `<button type="button" class="chip-filter${comidaCatalogoFiltroGrupo === 'alino' ? ' active' : ''}" data-cat-grupo="alino">🧂 Aliños (${ctx.alinosCatalogo.length})</button>`,
   ].join('');
 
-  const list = ctx.catalogo.filter((a) => comidaCatalogoFiltroGrupo === 'todos' || a.grupo === comidaCatalogoFiltroGrupo);
+  const list = ctx.catalogo.filter((a) => {
+    if (comidaCatalogoFiltroGrupo !== 'todos' && a.grupo !== comidaCatalogoFiltroGrupo) return false;
+    if (!search) return true;
+    const norm = a.nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return norm.includes(search);
+  });
+
   gridWrap.innerHTML = list.map((a) => {
     const probado = ctx.probadosHistoricos.has(a.id);
     const alergia = ctx.alergiasMap.has(a.id);
     const usadoSemAnt = ctx.usadosSemanaAnterior.has(a.id);
     let estado = a.grupo === 'alino' ? '🧂 Aliño opcional' : '⏳ Pendiente';
     if (alergia) estado = '🚨 Alergia detectada';
-    else if (usadoSemAnt && a.grupo !== 'alino') estado = '🔒 Usado sem. anterior';
+    else if (usadoSemAnt && a.grupo !== 'alino') estado = '🔄 Usado sem. anterior';
     else if (probado) estado = a.grupo === 'alino' ? '✓ Aliño usado' : '✓ Probado / Integrado';
     return `
       <button type="button" class="alimento-item${probado ? ' selected' : ''}${alergia ? ' alergia' : ''}" data-toggle-cat="${a.id}" title="Toca para marcar/desmarcar como ya probado antes de usar la app">
@@ -2297,9 +2451,8 @@ function renderGuiasComidas() {
     guia.innerHTML = `
       <div class="faq-item">
         <strong>Paso a paso para iniciar</strong>
-        <p><strong>Paso N°1:</strong> Todos los días integra 1 alimento nuevo por grupo intentando armar un plato completo.<br>
-        <strong>Paso N°2:</strong> Repite el orden (Verdura → Fruta → Proteína → Grasa → Cereal/Tubérculo), siempre integrando 1 alimento nuevo por día y completando con alimentos ya probados.<br>
-        <strong>Regla clave:</strong> Nunca 2 alimentos nuevos el mismo día. Así detectas posibles reacciones alérgicas.<br>
+        <p><strong>Paso N°1:</strong> Todos los días integra alimentos intentando armar un plato nutritivo y variado.<br>
+        <strong>Paso N°2:</strong> Puedes elegir 1 o varios alimentos por categoría según lo que prepares.<br>
         <strong>Simbología al final del nombre:</strong> 🌾 Alto en fibra · 🦷 Alto en calcio · 🌿 Alto en hierro · ❗ Alérgeno.</p>
       </div>
       ${GRUPOS_COMIDA.map((g) => `
@@ -2344,6 +2497,9 @@ function renderComidas() {
   const pct = Math.min(100, Math.round((probadosCount / totalCat) * 100));
 
   if ($('comidaSemanaActual')) $('comidaSemanaActual').textContent = `Semana ${ctx.semanaActual}`;
+  if ($('comidaSemanaInput') && document.activeElement !== $('comidaSemanaInput')) {
+    $('comidaSemanaInput').value = String(ctx.semanaActual);
+  }
   if ($('comidaAlimentosProbados')) $('comidaAlimentosProbados').textContent = `${probadosCount} / ${totalCat}`;
   if ($('comidaGrupoSugeridoHoy')) $('comidaGrupoSugeridoHoy').textContent = `${ctx.grupoSugerido.icono} ${ctx.grupoSugerido.nombre}`;
   if ($('comidaAlergiasDetectadas')) $('comidaAlergiasDetectadas').textContent = String(ctx.alergiasMap.size);
@@ -2355,13 +2511,14 @@ function renderComidas() {
     .filter(Boolean);
   if ($('comidaReglaTexto')) {
     if (ctx.semanaActual > 1 && bloqueadosNombres.length > 0) {
-      $('comidaReglaTexto').innerHTML = `<strong>Rotación Semana ${ctx.semanaActual}:</strong> No se pueden repetir ingredientes de la semana anterior (${bloqueadosNombres.slice(0, 6).map(escapeHtml).join(', ')}${bloqueadosNombres.length > 6 ? '…' : ''}) hasta completar el catálogo. Introduce 1 alimento nuevo por día.`;
+      $('comidaReglaTexto').innerHTML = `<strong>Semana ${ctx.semanaActual}:</strong> Puedes agregar libremente todos los alimentos que quieras por categoría. Sugerencia semanal: variar respecto a la Semana ${ctx.semanaActual - 1} (${bloqueadosNombres.slice(0, 5).map(escapeHtml).join(', ')}${bloqueadosNombres.length > 5 ? '…' : ''}).`;
     } else {
-      $('comidaReglaTexto').innerHTML = '<strong>Regla clave (Semana 1):</strong> Introduce <strong>1 alimento nuevo por día</strong> rotando los 5 grupos. Nunca 2 alimentos nuevos el mismo día para detectar reacciones.';
+      $('comidaReglaTexto').innerHTML = `<strong>Semana ${ctx.semanaActual}:</strong> Plato libre y flexible — puedes agregar <strong>uno o varios alimentos por categoría</strong> (o buscarlos con la lupa 🔍) según lo que incluya la comida.`;
     }
   }
 
   renderPlatoVisualSlots(ctx);
+  renderBusquedaRapidaPlato(ctx);
   renderSelectorGrupoComida(ctx);
   renderAlinosSelector(ctx);
   renderCatalogoComidas(ctx);
@@ -2371,14 +2528,17 @@ function renderComidas() {
     ['Hora / Comida', 'Plato e ingredientes'],
     groupByDay(ctx.platos, 'fecha'),
     (p) => {
-      const pillsPrincipales = GRUPOS_COMIDA.map((g) => {
-        const id = p.ingredientes?.[g.key];
-        if (!id) return '';
-        const item = ctx.catalogoMap.get(id) || { id, nombre: id, grupo: g.key };
-        const esNuevo = p.alimentoNuevo === id;
-        const esAlergia = (p.reacciones || []).includes(id);
-        return `<span class="comida-ing-pill${esNuevo ? ' nuevo' : ''}${esAlergia ? ' alergia' : ''}"><img class="alimento-thumb-sm" src="${alimentoSvgDataUri(item)}" alt=""> ${escapeHtml(item.nombre)}${esNuevo ? ' ✨' : ''}${esAlergia ? ' 🚨' : ''}</span>`;
-      }).filter(Boolean);
+      const ingNorm = normalizarIngredientesPlato(p.ingredientes);
+      const nuevosSet = new Set(p.alimentosNuevos?.length ? p.alimentosNuevos : (p.alimentoNuevo ? [p.alimentoNuevo] : []));
+      const pillsPrincipales = [];
+      for (const g of GRUPOS_COMIDA) {
+        for (const id of ingNorm[g.key]) {
+          const item = ctx.catalogoMap.get(id) || { id, nombre: id, grupo: g.key };
+          const esNuevo = nuevosSet.has(id);
+          const esAlergia = (p.reacciones || []).includes(id);
+          pillsPrincipales.push(`<span class="comida-ing-pill${esNuevo ? ' nuevo' : ''}${esAlergia ? ' alergia' : ''}"><img class="alimento-thumb-sm" src="${alimentoSvgDataUri(item)}" alt=""> ${escapeHtml(item.nombre)}${esNuevo ? ' ✨' : ''}${esAlergia ? ' 🚨' : ''}</span>`);
+        }
+      }
 
       const pillsAlinos = (p.alinos || []).map((alId) => {
         const item = ctx.catalogoMap.get(alId) || { id: alId, nombre: alId, grupo: 'alino' };
@@ -2391,11 +2551,12 @@ function renderComidas() {
       const alergiaBadge = (p.reacciones || []).length
         ? `<span class="plato-slot-tag alergia" style="margin-left:4px;">🚨 Alergia (${p.reacciones.length})</span>`
         : '';
+      const semTag = p.semana ? `<small style="color:var(--muted); display:block;">Semana ${p.semana}</small>` : '';
 
       return `<tr>
-        <td class="comida-hist-row" data-comida-id="${p.id}" style="cursor:pointer;"><strong>${escapeHtml((p.hora || '12:00').slice(0, 5))}</strong><br><small style="color:var(--text-2);">${escapeHtml(p.tiempo)}</small></td>
+        <td class="comida-hist-row" data-comida-id="${p.id}" style="cursor:pointer;"><strong>${escapeHtml((p.hora || '12:00').slice(0, 5))}</strong><br><small style="color:var(--text-2);">${escapeHtml(p.tiempo)}</small>${semTag}</td>
         <td class="comida-hist-row" data-comida-id="${p.id}" style="cursor:pointer;"><div class="comida-ing-mini">${pills || '—'}${alergiaBadge}</div></td>
-        <td><div class="acciones-cell"><button type="button" class="comida-hist-btn" data-comida-id="${p.id}" title="Ver detalle y alergias">👁️ Ver</button><button type="button" class="del-btn" data-tabla="bitacora" data-id="${p.id}" aria-label="Eliminar">🗑</button></div></td>
+        <td><div class="acciones-cell"><button type="button" class="comida-edit-btn" data-comida-edit-id="${p.id}" title="Editar composición del plato">✏️ Editar</button><button type="button" class="comida-hist-btn" data-comida-id="${p.id}" title="Ver detalle y alergias">👁️ Ver</button><button type="button" class="del-btn" data-tabla="bitacora" data-id="${p.id}" aria-label="Eliminar">🗑</button></div></td>
       </tr>`;
     },
     (rows) => `${rows.length} plato${rows.length > 1 ? 's' : ''}`,
@@ -2403,10 +2564,56 @@ function renderComidas() {
   );
 }
 
+function cancelarEdicionPlato() {
+  comidaEditId = null;
+  comidaDraftPlato = crearDraftPlatoVacio();
+  comidaDraftAlinos = [];
+  comidaGrupoActivo = null;
+  if ($('comidaNotas')) $('comidaNotas').value = '';
+  if ($('comidaEditBanner')) $('comidaEditBanner').classList.add('hidden');
+  if ($('comidaFormTitulo')) $('comidaFormTitulo').textContent = '🍽️ Armar plato del día';
+  if ($('btnGuardarPlato')) $('btnGuardarPlato').textContent = '💾 Guardar plato del día';
+  renderComidas();
+}
+
+function cargarPlatoParaEditar(id) {
+  const platos = leerPlatosComida();
+  const plato = platos.find((p) => String(p.id) === String(id));
+  if (!plato) return;
+
+  $('comidaModal')?.classList.add('hidden');
+  comidaEditId = plato.id;
+  comidaDraftPlato = normalizarIngredientesPlato(plato.ingredientes);
+  comidaDraftAlinos = Array.isArray(plato.alinos) ? [...plato.alinos] : [];
+  comidaGrupoActivo = null;
+
+  if ($('comidaFecha')) $('comidaFecha').value = plato.fecha || dayKey(new Date());
+  if ($('comidaHora')) $('comidaHora').value = (plato.hora || '12:00').slice(0, 5);
+  if ($('comidaTiempo')) $('comidaTiempo').value = plato.tiempo || 'Almuerzo';
+  if ($('comidaNotas')) $('comidaNotas').value = plato.notas || '';
+
+  if ($('comidaEditBanner')) {
+    $('comidaEditBanner').classList.remove('hidden');
+  }
+  if ($('comidaEditBannerTxt')) {
+    $('comidaEditBannerTxt').textContent = `✏️ Editando plato: ${plato.tiempo} (${plato.fecha} · ${(plato.hora || '12:00').slice(0, 5)})`;
+  }
+  if ($('comidaFormTitulo')) {
+    $('comidaFormTitulo').textContent = '✏️ Editar composición del plato';
+  }
+  if ($('btnGuardarPlato')) {
+    $('btnGuardarPlato').textContent = '💾 Actualizar composición del plato';
+  }
+
+  renderComidas();
+  $('formComidaPlato')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  toast('Plato cargado para editar su composición ✏️');
+}
+
 function sugerirPlatoDelDia() {
   const fechaSel = $('comidaFecha')?.value || dayKey(new Date());
   const ctx = calcularContextoComidas(fechaSel);
-  const nuevoDraft = { verdura: null, fruta: null, proteina: null, grasa: null, cereal: null };
+  const nuevoDraft = crearDraftPlatoVacio();
   let yaPusoNuevo = ctx.yaHayNuevoHoy;
 
   for (const g of GRUPOS_COMIDA) {
@@ -2416,15 +2623,14 @@ function sugerirPlatoDelDia() {
     const probados = candidatos.filter((a) => ctx.probadosHistoricos.has(a.id));
 
     if (!yaPusoNuevo && g.key === ctx.grupoSugerido.key && nuevos.length > 0) {
-      nuevoDraft[g.key] = nuevos[0].id;
+      nuevoDraft[g.key] = [nuevos[0].id];
       yaPusoNuevo = true;
     } else if (probados.length > 0) {
-      // Priorizar los que no se han usado esta semana todavía para variar cada día
       const noUsadosEstaSem = probados.filter((a) => !ctx.usadosEstaSemana.has(a.id));
       const pool = noUsadosEstaSem.length > 0 ? noUsadosEstaSem : probados;
-      nuevoDraft[g.key] = pool[Math.floor(Math.random() * pool.length)].id;
+      nuevoDraft[g.key] = [pool[Math.floor(Math.random() * pool.length)].id];
     } else if (!yaPusoNuevo && nuevos.length > 0) {
-      nuevoDraft[g.key] = nuevos[0].id;
+      nuevoDraft[g.key] = [nuevos[0].id];
       yaPusoNuevo = true;
     }
   }
@@ -2443,42 +2649,45 @@ function abrirComidaModal(id) {
 
   $('comidaModalTitulo').textContent = `🍽️ ${plato.tiempo} — ${fmtDayLabel(plato.fecha)}`;
   $('comidaModalMeta').innerHTML = `
-    <strong>Fecha:</strong> ${plato.fecha} · <strong>Hora:</strong> ${(plato.hora || '12:00').slice(0, 5)}
+    <strong>Fecha:</strong> ${plato.fecha} · <strong>Hora:</strong> ${(plato.hora || '12:00').slice(0, 5)}${plato.semana ? ` · <strong>Semana:</strong> ${plato.semana}` : ''}
     ${plato.notas ? `<br><strong>Notas:</strong> ${escapeHtml(plato.notas)}` : ''}
   `;
 
   const ingRows = [];
   const checkRows = [];
+  const ingNorm = normalizarIngredientesPlato(plato.ingredientes);
+  const nuevosSet = new Set(plato.alimentosNuevos?.length ? plato.alimentosNuevos : (plato.alimentoNuevo ? [plato.alimentoNuevo] : []));
 
   for (const g of GRUPOS_COMIDA) {
-    const foodId = plato.ingredientes?.[g.key];
-    if (!foodId) continue;
-    const item = ctx.catalogoMap.get(foodId) || { id: foodId, nombre: foodId, grupo: g.key };
-    const esNuevo = plato.alimentoNuevo === foodId;
-    const marcadoAlergia = (plato.reacciones || []).includes(foodId);
+    for (const foodId of ingNorm[g.key]) {
+      if (!foodId) continue;
+      const item = ctx.catalogoMap.get(foodId) || { id: foodId, nombre: foodId, grupo: g.key };
+      const esNuevo = nuevosSet.has(foodId);
+      const marcadoAlergia = (plato.reacciones || []).includes(foodId);
 
-    ingRows.push(`
-      <div class="comida-modal-row">
-        <div class="comida-modal-row-left">
-          <img class="alimento-thumb" src="${alimentoSvgDataUri(item)}" alt="${escapeHtml(item.nombre)}">
-          <div>
-            <strong style="font-size:0.88rem; display:block;">${escapeHtml(item.nombre)}</strong>
-            <small style="color:var(--text-2);">${g.icono} ${g.nombre}</small>
+      ingRows.push(`
+        <div class="comida-modal-row">
+          <div class="comida-modal-row-left">
+            <img class="alimento-thumb" src="${alimentoSvgDataUri(item)}" alt="${escapeHtml(item.nombre)}">
+            <div>
+              <strong style="font-size:0.88rem; display:block;">${escapeHtml(item.nombre)}</strong>
+              <small style="color:var(--text-2);">${g.icono} ${g.nombre}</small>
+            </div>
           </div>
+          ${esNuevo ? '<span class="plato-slot-tag nuevo">✨ Alimento nuevo</span>' : '<span class="plato-slot-tag" style="background:var(--surface); color:var(--text-2);">✓ Integrado</span>'}
         </div>
-        ${esNuevo ? '<span class="plato-slot-tag nuevo">✨ Alimento nuevo</span>' : '<span class="plato-slot-tag" style="background:var(--surface); color:var(--text-2);">✓ Integrado</span>'}
-      </div>
-    `);
+      `);
 
-    checkRows.push(`
-      <label class="alergia-check-item">
-        <span style="display:flex; align-items:center; gap:8px;">
-          <img class="alimento-thumb-sm" src="${alimentoSvgDataUri(item)}" alt="">
-          <span><strong>${escapeHtml(item.nombre)}</strong> <small style="color:var(--muted);">(${g.nombre})</small></span>
-        </span>
-        <input type="checkbox" class="alergia-food-chk" value="${escapeHtml(foodId)}" ${marcadoAlergia ? 'checked' : ''}>
-      </label>
-    `);
+      checkRows.push(`
+        <label class="alergia-check-item">
+          <span style="display:flex; align-items:center; gap:8px;">
+            <img class="alimento-thumb-sm" src="${alimentoSvgDataUri(item)}" alt="">
+            <span><strong>${escapeHtml(item.nombre)}</strong> <small style="color:var(--muted);">(${g.nombre})</small></span>
+          </span>
+          <input type="checkbox" class="alergia-food-chk" value="${escapeHtml(foodId)}" ${marcadoAlergia ? 'checked' : ''}>
+        </label>
+      `);
+    }
   }
 
   for (const alinoId of (plato.alinos || [])) {
@@ -2522,9 +2731,42 @@ function abrirComidaModal(id) {
   $('comidaModal').classList.remove('hidden');
 }
 
+async function actualizarSemanaManual(nuevaSemana) {
+  const sem = Math.max(1, Math.min(99, Math.round(Number(nuevaSemana) || 1)));
+  localStorage.setItem('nebu_comida_semana', String(sem));
+  if ($('comidaSemanaInput')) $('comidaSemanaInput').value = String(sem);
+  if ($('comidaSemanaActual')) $('comidaSemanaActual').textContent = `Semana ${sem}`;
+  renderComidas();
+  const custom = leerComidaCustom();
+  custom.semanaManual = sem;
+  await guardarComidaCustom(custom);
+  renderComidas();
+  toast(`Ciclo ajustado a Semana ${sem} ✓`);
+}
+
 // Eventos interactivos del Módulo de Comidas
+$('btnSemanaMenos')?.addEventListener('click', () => {
+  const actual = Number($('comidaSemanaInput')?.value || 1);
+  if (actual > 1) actualizarSemanaManual(actual - 1);
+});
+$('btnSemanaMas')?.addEventListener('click', () => {
+  const actual = Number($('comidaSemanaInput')?.value || 1);
+  actualizarSemanaManual(actual + 1);
+});
+$('comidaSemanaInput')?.addEventListener('change', () => {
+  actualizarSemanaManual($('comidaSemanaInput').value);
+});
+
 $('comidaFecha')?.addEventListener('change', () => renderComidas());
 $('btnSugerirPlato')?.addEventListener('click', sugerirPlatoDelDia);
+$('btnLimpiarPlato')?.addEventListener('click', () => {
+  comidaDraftPlato = crearDraftPlatoVacio();
+  comidaDraftAlinos = [];
+  comidaGrupoActivo = null;
+  renderComidas();
+});
+$('btnCancelarEditPlato')?.addEventListener('click', cancelarEdicionPlato);
+
 $('platoSelectorClose')?.addEventListener('click', () => {
   comidaGrupoActivo = null;
   renderComidas();
@@ -2534,7 +2776,55 @@ $('platoSelectorSearch')?.addEventListener('input', () => {
   renderSelectorGrupoComida(ctx);
 });
 
+$('platoBusquedaRapida')?.addEventListener('input', () => {
+  const ctx = calcularContextoComidas($('comidaFecha')?.value || dayKey(new Date()));
+  renderBusquedaRapidaPlato(ctx);
+});
+$('platoBusquedaRapidaClear')?.addEventListener('click', () => {
+  if ($('platoBusquedaRapida')) $('platoBusquedaRapida').value = '';
+  const ctx = calcularContextoComidas($('comidaFecha')?.value || dayKey(new Date()));
+  renderBusquedaRapidaPlato(ctx);
+});
+$('platoBusquedaResultados')?.addEventListener('click', async (e) => {
+  const pickBtn = e.target.closest('[data-quick-pick]');
+  if (pickBtn) {
+    const id = pickBtn.dataset.quickPick;
+    const grupo = pickBtn.dataset.quickGrupo || 'verdura';
+    toggleIngredienteEnDraft(id, grupo);
+    renderComidas();
+    return;
+  }
+  const createBtn = e.target.closest('[data-quick-create]');
+  if (createBtn) {
+    const rawNombre = (createBtn.dataset.quickCreate || '').trim();
+    if (!rawNombre) return;
+    const grupoDestino = comidaGrupoActivo || 'verdura';
+    const id = 'custom_' + rawNombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_');
+    const custom = leerComidaCustom();
+    if (!obtenerCatalogoAlimentos().some((a) => a.id === id)) {
+      const nuevoItem = normalizarItemAlimento({ id, nombre: rawNombre, grupo: grupoDestino, forma: 'custom' });
+      custom.customFoods.push(nuevoItem);
+      await guardarComidaCustom(custom);
+    }
+    toggleIngredienteEnDraft(id, grupoDestino);
+    if ($('platoBusquedaRapida')) $('platoBusquedaRapida').value = '';
+    renderComidas();
+    toast(`"${rawNombre}" agregado al plato ✓`);
+  }
+});
+
 $('platoVisualSlots')?.addEventListener('click', (e) => {
+  const delChip = e.target.closest('[data-remove-slot-food]');
+  if (delChip) {
+    e.stopPropagation();
+    const gk = delChip.dataset.removeSlotGrupo;
+    const fid = delChip.dataset.removeSlotFood;
+    if (gk && Array.isArray(comidaDraftPlato[gk])) {
+      comidaDraftPlato[gk] = comidaDraftPlato[gk].filter((x) => x !== fid);
+      renderComidas();
+    }
+    return;
+  }
   const slot = e.target.closest('.plato-slot');
   if (!slot) return;
   const g = slot.dataset.grupo;
@@ -2549,8 +2839,11 @@ $('platoSelectorOpciones')?.addEventListener('click', (e) => {
   const btn = e.target.closest('.alimento-item');
   if (!btn || btn.disabled || !comidaGrupoActivo) return;
   const alId = btn.dataset.pickAlimento;
-  comidaDraftPlato[comidaGrupoActivo] = alId || null;
-  comidaGrupoActivo = null;
+  if (alId === '__clear__') {
+    comidaDraftPlato[comidaGrupoActivo] = [];
+  } else if (alId) {
+    toggleIngredienteEnDraft(alId, comidaGrupoActivo);
+  }
   renderComidas();
 });
 
@@ -2558,17 +2851,27 @@ $('platoAlinosGrid')?.addEventListener('click', (e) => {
   const chip = e.target.closest('[data-alino-id]');
   if (!chip) return;
   const id = chip.dataset.alinoId;
-  const idx = comidaDraftAlinos.indexOf(id);
-  if (idx >= 0) comidaDraftAlinos.splice(idx, 1);
-  else comidaDraftAlinos.push(id);
+  toggleIngredienteEnDraft(id, 'alino');
   const ctx = calcularContextoComidas($('comidaFecha')?.value || dayKey(new Date()));
+  renderPlatoVisualSlots(ctx);
   renderAlinosSelector(ctx);
 });
 
 $('btnLimpiarAlinos')?.addEventListener('click', () => {
   comidaDraftAlinos = [];
   const ctx = calcularContextoComidas($('comidaFecha')?.value || dayKey(new Date()));
+  renderPlatoVisualSlots(ctx);
   renderAlinosSelector(ctx);
+});
+
+$('comidaCatalogoSearch')?.addEventListener('input', () => {
+  const ctx = calcularContextoComidas($('comidaFecha')?.value || dayKey(new Date()));
+  renderCatalogoComidas(ctx);
+});
+$('comidaCatalogoSearchClear')?.addEventListener('click', () => {
+  if ($('comidaCatalogoSearch')) $('comidaCatalogoSearch').value = '';
+  const ctx = calcularContextoComidas($('comidaFecha')?.value || dayKey(new Date()));
+  renderCatalogoComidas(ctx);
 });
 
 $('comidaCatalogoFiltro')?.addEventListener('click', (e) => {
@@ -2645,49 +2948,91 @@ $('formComidaPlato')?.addEventListener('submit', async (e) => {
   const hora = $('comidaHora').value || fmtTime(new Date());
   const tiempo = $('comidaTiempo').value || 'Almuerzo';
   const notas = ($('comidaNotas').value || '').trim();
-  const seleccion = Object.values(comidaDraftPlato).filter(Boolean);
-  if (!seleccion.length) { toast('Agrega al menos 1 alimento al plato', true); return; }
-
-  const ctx = calcularContextoComidas(fecha);
-  const nuevosEnPlato = Object.entries(comidaDraftPlato)
-    .filter(([, id]) => id && !ctx.probadosHistoricos.has(id));
-
-  if (ctx.yaHayNuevoHoy && nuevosEnPlato.length > 0) {
-    toast('Regla clave: Ya probó 1 alimento nuevo hoy. Usa ingredientes ya integrados.', true);
+  const ingNormalizados = normalizarIngredientesPlato(comidaDraftPlato);
+  const todosIdsPrincipales = obtenerIdsIngredientesPlato(ingNormalizados);
+  if (!todosIdsPrincipales.length && !comidaDraftAlinos.length) {
+    toast('Agrega al menos 1 alimento al plato', true);
     return;
   }
-  if (nuevosEnPlato.length > 1) {
-    toast('Regla clave: Nunca 2 alimentos nuevos el mismo día.', true);
-    return;
+
+  const ctx = calcularContextoComidas(fecha);
+  const nuevosIds = [];
+  let primerNuevoGrupo = null;
+  for (const g of GRUPOS_COMIDA) {
+    for (const id of ingNormalizados[g.key]) {
+      if (id && !ctx.probadosHistoricos.has(id)) {
+        if (!nuevosIds.includes(id)) nuevosIds.push(id);
+        if (!primerNuevoGrupo) primerNuevoGrupo = g.key;
+      }
+    }
   }
 
   const submitBtn = $('btnGuardarPlato') || e.target.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = true;
   try {
-    const payloadPlato = {
-      fecha,
-      hora,
-      tiempo,
-      ingredientes: { ...comidaDraftPlato },
-      alinos: [...comidaDraftAlinos],
-      alimentoNuevo: nuevosEnPlato[0]?.[1] || null,
-      alimentoNuevoGrupo: nuevosEnPlato[0]?.[0] || null,
-      reacciones: [],
-      sintomas: [],
-      reaccionNotas: '',
-      notas,
-    };
-    const ok = await insertar('bitacora', {
-      titulo: SYSTEM_COMIDA_PLATO,
-      fecha,
-      notas: JSON.stringify(payloadPlato),
-    });
-    if (ok) {
-      comidaDraftPlato = { verdura: null, fruta: null, proteina: null, grasa: null, cereal: null };
-      comidaDraftAlinos = [];
-      comidaGrupoActivo = null;
-      $('comidaNotas').value = '';
-      renderComidas();
+    if (comidaEditId) {
+      const regExistente = (cache.bitacora || []).find((r) => String(r.id) === String(comidaEditId));
+      let previo = {};
+      try { previo = JSON.parse(regExistente?.notas || '{}'); } catch {}
+      const idsValidosPlato = new Set([...todosIdsPrincipales, ...comidaDraftAlinos]);
+      const reaccionesPrev = Array.isArray(previo.reacciones)
+        ? previo.reacciones.filter((id) => idsValidosPlato.has(id))
+        : [];
+
+      const payloadActualizado = {
+        ...previo,
+        fecha,
+        hora,
+        tiempo,
+        semana: ctx.semanaActual,
+        ingredientes: ingNormalizados,
+        alinos: [...comidaDraftAlinos],
+        alimentoNuevo: nuevosIds[0] || null,
+        alimentosNuevos: nuevosIds,
+        alimentoNuevoGrupo: primerNuevoGrupo,
+        reacciones: reaccionesPrev,
+        notas,
+      };
+      const { error } = await db.from('bitacora').update({
+        fecha,
+        notas: JSON.stringify(payloadActualizado),
+      }).eq('id', comidaEditId);
+      if (error) {
+        toast(`Error: ${error.message}`, true);
+        return;
+      }
+      await loadData('bitacora');
+      toast('Composición del plato actualizada ✓');
+      cancelarEdicionPlato();
+    } else {
+      const payloadPlato = {
+        fecha,
+        hora,
+        tiempo,
+        semana: ctx.semanaActual,
+        ingredientes: ingNormalizados,
+        alinos: [...comidaDraftAlinos],
+        alimentoNuevo: nuevosIds[0] || null,
+        alimentosNuevos: nuevosIds,
+        alimentoNuevoGrupo: primerNuevoGrupo,
+        reacciones: [],
+        sintomas: [],
+        reaccionNotas: '',
+        notas,
+      };
+      const ok = await insertar('bitacora', {
+        titulo: SYSTEM_COMIDA_PLATO,
+        fecha,
+        notas: JSON.stringify(payloadPlato),
+      });
+      if (ok) {
+        comidaDraftPlato = crearDraftPlatoVacio();
+        comidaDraftAlinos = [];
+        comidaGrupoActivo = null;
+        $('comidaNotas').value = '';
+        if ($('platoBusquedaRapida')) $('platoBusquedaRapida').value = '';
+        renderComidas();
+      }
     }
   } finally {
     if (submitBtn) submitBtn.disabled = false;
@@ -2697,12 +3042,20 @@ $('formComidaPlato')?.addEventListener('submit', async (e) => {
 document.addEventListener('click', (e) => {
   const delBtn = e.target.closest('.del-btn');
   if (delBtn) return;
+  const editTarget = e.target.closest('[data-comida-edit-id]');
+  if (editTarget && editTarget.dataset.comidaEditId) {
+    cargarPlatoParaEditar(editTarget.dataset.comidaEditId);
+    return;
+  }
   const histTarget = e.target.closest('[data-comida-id]');
   if (histTarget && histTarget.dataset.comidaId) {
     abrirComidaModal(histTarget.dataset.comidaId);
   }
 });
 
+$('comidaModalEditar')?.addEventListener('click', () => {
+  if (comidaModalId) cargarPlatoParaEditar(comidaModalId);
+});
 $('comidaModalClose')?.addEventListener('click', () => $('comidaModal').classList.add('hidden'));
 $('comidaModal')?.addEventListener('click', (e) => { if (e.target === $('comidaModal')) $('comidaModal').classList.add('hidden'); });
 

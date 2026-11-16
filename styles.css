@@ -1890,4 +1890,178 @@ tr.month-row td {
   border-style: dashed;
   opacity: 0.92;
 }
+.semana-badge-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.semana-step-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+.semana-step-btn:hover {
+  border-color: var(--brand-accent);
+  color: var(--brand-accent);
+}
+.semana-input-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--brand-primary) 14%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 40%, var(--border));
+  font-size: 0.86rem;
+  font-weight: 800;
+  color: var(--text);
+  cursor: pointer;
+}
+.semana-input-wrap input {
+  width: 38px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--brand-accent);
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-align: center;
+}
+.semana-input-wrap input:focus {
+  outline: none;
+  border-color: var(--brand-accent);
+  background: var(--surface);
+}
+.search-lupa-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.search-lupa-icon {
+  position: absolute;
+  left: 11px;
+  font-size: 0.92rem;
+  pointer-events: none;
+  opacity: 0.85;
+}
+.search-lupa-wrap input[type="search"] {
+  width: 100%;
+  padding-left: 34px !important;
+  padding-right: 32px !important;
+}
+.search-clear-btn {
+  position: absolute;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 0.72rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.plato-busqueda-rapida-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.comida-edit-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1.5px solid rgba(245, 158, 11, 0.5);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.plato-slot-items {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
+  width: 100%;
+}
+.plato-slot-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 9px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.plato-slot-item-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+.plato-slot-item-left strong {
+  font-size: 0.75rem;
+  line-height: 1.15;
+  color: var(--text);
+  word-break: break-word;
+}
+.plato-slot-item-del {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 0.68rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.plato-slot-item-del:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+.plato-slot-add-more {
+  font-size: 0.7rem;
+  color: var(--brand-accent);
+  font-weight: 700;
+  margin-top: auto;
+  padding-top: 4px;
+}
+.comida-edit-btn {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
 

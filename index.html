@@ -453,9 +453,17 @@
         <span class="eyebrow-badge">★ Alimentación Complementaria</span>
 
         <div class="dash-grid">
-          <div class="card dash-card">
-            <span class="stat-label">Ciclo semanal</span>
-            <span class="stat-value stat-value-sm" id="comidaSemanaActual">Semana 1</span>
+          <div class="card dash-card semana-edit-card">
+            <span class="stat-label">Ciclo semanal ✏️</span>
+            <div class="semana-badge-edit" title="Toca para ajustar la semana en la que estás">
+              <button type="button" id="btnSemanaMenos" class="semana-step-btn" aria-label="Semana anterior">−</button>
+              <label class="semana-input-wrap">
+                <span>Semana</span>
+                <input type="number" id="comidaSemanaInput" min="1" max="99" value="1" inputmode="numeric">
+              </label>
+              <button type="button" id="btnSemanaMas" class="semana-step-btn" aria-label="Siguiente semana">＋</button>
+            </div>
+            <span id="comidaSemanaActual" class="hidden">Semana 1</span>
           </div>
           <div class="card dash-card">
             <span class="stat-label">Alimentos integrados</span>
@@ -483,14 +491,22 @@
 
         <form id="formComidaPlato" class="card form-card">
           <div class="comida-header-actions">
-            <h2 style="margin:0;">🍽️ Armar plato del día</h2>
-            <button type="button" id="btnSugerirPlato" class="btn-secondary" style="padding:7px 12px; font-size:0.8rem;">🎲 Sugerir plato</button>
+            <h2 id="comidaFormTitulo" style="margin:0;">🍽️ Armar plato del día</h2>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <button type="button" id="btnLimpiarPlato" class="btn-secondary" style="padding:7px 10px; font-size:0.78rem;">🧹 Vaciar</button>
+              <button type="button" id="btnSugerirPlato" class="btn-secondary" style="padding:7px 12px; font-size:0.8rem;">🎲 Sugerir plato</button>
+            </div>
+          </div>
+
+          <div id="comidaEditBanner" class="comida-edit-banner hidden">
+            <span id="comidaEditBannerTxt">✏️ Editando composición del plato guardado</span>
+            <button type="button" id="btnCancelarEditPlato" class="btn-secondary" style="padding:4px 10px; font-size:0.76rem;">Cancelar edición</button>
           </div>
 
           <div class="comida-rule-banner" id="comidaReglaBanner">
             <span>💡</span>
             <div id="comidaReglaTexto">
-              <strong>Regla clave:</strong> Introduce <strong>1 alimento nuevo por día</strong> rotando los 5 grupos y completa el plato con ingredientes ya probados (sin repetir los de la semana anterior).
+              <strong>Plato libre y flexible:</strong> Puedes agregar <strong>uno o varios alimentos por categoría</strong> (y otros alimentos adicionales) según lo que incluya tu plato.
             </div>
           </div>
 
@@ -519,16 +535,32 @@
             </label>
           </div>
 
-          <!-- Plato visual de 5 grupos -->
+          <!-- Buscador rápido con lupa para agregar cualquier alimento libremente al plato -->
+          <div class="plato-busqueda-rapida-box">
+            <div class="search-lupa-wrap">
+              <span class="search-lupa-icon" aria-hidden="true">🔍</span>
+              <input type="search" id="platoBusquedaRapida" placeholder="Buscar alimento con lupa para agregar o quitar del plato…">
+              <button type="button" id="platoBusquedaRapidaClear" class="search-clear-btn hidden" title="Limpiar búsqueda">✕</button>
+            </div>
+            <div id="platoBusquedaResultados" class="alimentos-grid hidden"></div>
+          </div>
+
+          <!-- Plato visual de 5 grupos (permite múltiples alimentos por grupo) -->
           <div id="platoVisualSlots" class="plato-visual-grid"></div>
 
           <!-- Panel de selección por grupo -->
           <div id="platoSelectorGrupoWrap" class="comida-selector-box hidden">
             <div class="comida-selector-head">
-              <strong id="platoSelectorTitulo" style="font-size:0.88rem;">Selecciona ingrediente</strong>
-              <button type="button" id="platoSelectorClose" class="icon-btn" style="padding:2px 8px;">✕</button>
+              <div>
+                <strong id="platoSelectorTitulo" style="font-size:0.88rem; display:block;">Selecciona ingredientes</strong>
+                <small style="font-size:0.73rem; color:var(--text-2);">Puedes marcar todos los alimentos que quieras en esta categoría</small>
+              </div>
+              <button type="button" id="platoSelectorClose" class="btn-secondary" style="padding:4px 10px; font-size:0.76rem;">✓ Listo</button>
             </div>
-            <input type="search" id="platoSelectorSearch" placeholder="Buscar alimento en este grupo…">
+            <div class="search-lupa-wrap">
+              <span class="search-lupa-icon" aria-hidden="true">🔍</span>
+              <input type="search" id="platoSelectorSearch" placeholder="Buscar alimento en este grupo…">
+            </div>
             <div id="platoSelectorOpciones" class="alimentos-grid"></div>
           </div>
 
@@ -555,13 +587,18 @@
 
         <div class="card table-card">
           <h2>Historial de platos</h2>
-          <p class="form-hint" style="margin-bottom:8px;">Toca un plato para ver sus ingredientes con imágenes y registrar si causó alergia.</p>
+          <p class="form-hint" style="margin-bottom:8px;">Toca <strong>✏️ Editar</strong> para modificar la composición de cualquier plato, o <strong>👁️ Ver</strong> para detalle y alergias.</p>
           <div id="tablaComidas" class="table-wrap"></div>
         </div>
 
         <!-- Catálogo de alimentos con imágenes referenciales -->
         <div class="card form-card">
           <h2>🧺 Lista maestra de alimentos</h2>
+          <div class="search-lupa-wrap">
+            <span class="search-lupa-icon" aria-hidden="true">🔍</span>
+            <input type="search" id="comidaCatalogoSearch" placeholder="Buscar alimento por nombre en la lista maestra…">
+            <button type="button" id="comidaCatalogoSearchClear" class="search-clear-btn hidden" title="Limpiar búsqueda">✕</button>
+          </div>
           <div id="comidaCatalogoFiltro" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
           <div id="comidaCatalogoGrid" class="alimentos-grid"></div>
 
@@ -1152,7 +1189,8 @@
         </label>
       </div>
 
-      <div style="display:flex; gap:10px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button type="button" id="comidaModalEditar" class="btn-secondary" style="flex:1;">✏️ Editar composición</button>
         <button id="comidaModalGuardar" class="btn-primary" style="flex:1;">Guardar evaluación</button>
         <button id="comidaModalEliminar" class="btn-danger" style="flex:none; padding:0 16px;">🗑</button>
       </div>
@@ -1165,8 +1203,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
-  <script src="config.js?v=2.8.0"></script>
-  <script src="whatsapp.js?v=2.8.0"></script>
-  <script src="app.js?v=2.8.0"></script>
+  <script src="config.js?v=2.9.0"></script>
+  <script src="whatsapp.js?v=2.9.0"></script>
+  <script src="app.js?v=2.9.0"></script>
 </body>
 </html>
