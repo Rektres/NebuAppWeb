@@ -1917,21 +1917,22 @@ tr.month-row td {
   color: var(--brand-accent);
 }
 .semana-input-wrap {
-  display: inline-flex;
+  display: inline-flex !important;
+  flex-direction: row !important;
   align-items: center;
   gap: 4px;
-  padding: 3px 8px;
+  padding: 2px 8px;
   border-radius: 10px;
   background: color-mix(in srgb, var(--brand-primary) 14%, var(--surface-2));
   border: 1px solid color-mix(in srgb, var(--brand-primary) 40%, var(--border));
-  font-size: 0.86rem;
+  font-size: 0.84rem;
   font-weight: 800;
   color: var(--text);
   cursor: pointer;
 }
 .semana-input-wrap input {
-  width: 38px;
-  padding: 2px 4px;
+  width: 38px !important;
+  padding: 2px 2px !important;
   border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
@@ -1957,11 +1958,23 @@ tr.month-row td {
   font-size: 0.92rem;
   pointer-events: none;
   opacity: 0.85;
+  z-index: 2;
 }
 .search-lupa-wrap input[type="search"] {
   width: 100%;
-  padding-left: 34px !important;
-  padding-right: 32px !important;
+  padding: 10px 34px 10px 36px !important;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.86rem;
+  font-family: inherit;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease;
+}
+.search-lupa-wrap input[type="search"]:focus {
+  outline: none;
+  border-color: var(--brand-accent);
 }
 .search-clear-btn {
   position: absolute;
