@@ -487,10 +487,91 @@ function renderLecheResumen() {
 }
 
 // ---------- Vitaminas ----------
+const SYSTEM_VITAMINAS_META = '__vitaminas_meta__';
+const UNIDADES_VITAMINA = [
+  { key: 'gotas', label: '💧 Gotas', sing: 'gota', plur: 'gotas' },
+  { key: 'ml', label: '🧪 ml (mililitros)', sing: 'ml', plur: 'ml' },
+  { key: 'medida', label: '🥄 Medida / Dosificador', sing: 'medida', plur: 'medidas' },
+  { key: 'pastilla', label: '💊 Pastilla / Comprimido', sing: 'pastilla', plur: 'pastillas' },
+  { key: 'capsula', label: '💊 Cápsula', sing: 'cápsula', plur: 'cápsulas' },
+  { key: 'porcion', label: '🥣 Porción', sing: 'porción', plur: 'porciones' },
+  { key: 'gramos', label: '⚖️ Gramos (g)', sing: 'g', plur: 'g' },
+  { key: 'sobre', label: '✉️ Sobre / Sachet', sing: 'sobre', plur: 'sobres' },
+  { key: 'puff', label: '💨 Puff / Spray', sing: 'puff', plur: 'puffs' },
+  { key: 'unidad', label: '🔢 Unidad', sing: 'unidad', plur: 'unidades' },
+];
+
+function leerVitaminasMeta() {
+  let lsMeta = {};
+  try { lsMeta = JSON.parse(localStorage.getItem('nebu_vitaminas_meta') || '{}') || {}; } catch {}
+  const rec = (cache.bitacora || []).find((r) => r.titulo === SYSTEM_VITAMINAS_META);
+  if (!rec?.notas) return lsMeta;
+  try {
+    const dbMeta = JSON.parse(rec.notas);
+    if (dbMeta && typeof dbMeta === 'object') {
+      const merged = { ...lsMeta, ...dbMeta };
+      localStorage.setItem('nebu_vitaminas_meta', JSON.stringify(merged));
+      return merged;
+    }
+  } catch {}
+  return lsMeta;
+}
+
+async function guardarVitaminaMetaItem(vitId, nombre, metaPatch) {
+  const mapa = { ...leerVitaminasMeta() };
+  const keyId = vitId != null ? String(vitId) : null;
+  const keyNom = (nombre || '').trim().toLowerCase();
+  const actual = (keyId && mapa[keyId]) || (keyNom && mapa['nom:' + keyNom]) || {};
+  const nuevo = {
+    unidad: metaPatch.unidad || actual.unidad || 'gotas',
+    hora_sugerida: metaPatch.hora_sugerida !== undefined ? (metaPatch.hora_sugerida || '') : (actual.hora_sugerida || ''),
+  };
+  if (keyId) mapa[keyId] = nuevo;
+  if (keyNom) mapa['nom:' + keyNom] = nuevo;
+  localStorage.setItem('nebu_vitaminas_meta', JSON.stringify(mapa));
+  if (!bebe?.id) return;
+  const notasStr = JSON.stringify(mapa);
+  const today = dayKey(new Date());
+  const rec = (cache.bitacora || []).find((r) => r.titulo === SYSTEM_VITAMINAS_META);
+  if (rec?.id) {
+    await db.from('bitacora').update({ notas: notasStr, fecha: today }).eq('id', rec.id);
+  } else {
+    await db.from('bitacora').insert({ bebe_id: bebe.id, titulo: SYSTEM_VITAMINAS_META, fecha: today, notas: notasStr });
+  }
+  await loadData('bitacora');
+}
+
+function obtenerMetaVitamina(v) {
+  if (!v) return { unidad: 'gotas', hora_sugerida: '' };
+  const mapa = leerVitaminasMeta();
+  const porId = v.id != null ? mapa[String(v.id)] : null;
+  const nomLow = (v.nombre || '').trim().toLowerCase();
+  const porNom = nomLow ? mapa['nom:' + nomLow] : null;
+  const guardado = porId || porNom || {};
+
+  let horaDefault = '';
+  if (nomLow.includes('hierro')) horaDefault = '08:00';
+  else if (nomLow.includes('b12')) horaDefault = '17:30';
+  else if (nomLow.includes('vitamina d') || nomLow === 'vitamina') horaDefault = '20:15';
+
+  return {
+    unidad: v.unidad || guardado.unidad || 'gotas',
+    hora_sugerida: v.hora_sugerida
+      ? String(v.hora_sugerida).slice(0, 5)
+      : (guardado.hora_sugerida !== undefined ? guardado.hora_sugerida : horaDefault),
+  };
+}
+
+function formatearDosisVitamina(cantidad, unidadKey) {
+  const n = Number(cantidad) || 0;
+  const uObj = UNIDADES_VITAMINA.find((u) => u.key === unidadKey) || UNIDADES_VITAMINA[0];
+  return `${n} ${n === 1 ? uObj.sing : uObj.plur}`;
+}
+
 function renderVitaminas() {
   renderVitaminaTipos();
   $('tablaVitaminas').innerHTML = tablaHTML(
-    ['Hora', 'Gotas'],
+    ['Hora', 'Dosis'],
     groupByDay(cache.vitaminas || [], 'fecha_hora'),
     (r) => `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.gotas} gotas</td>${accionesTd('vitaminas', r.id)}</tr>`,
     (rows) => `${rows.reduce((s, r) => s + r.gotas, 0)} gotas`,
@@ -505,15 +586,25 @@ function renderVitaminaTipos() {
   const fechaSel = $('vitTipoFecha')?.value || dayKey(new Date());
   $('vitTipoHoy').innerHTML = lista.length
     ? lista.map((v) => {
+        const meta = obtenerMetaVitamina(v);
         const row = (cache.vitaminas_tipos_log || []).find((l) => l.fecha === fechaSel && String(l.vitamina_id) === String(v.id));
         const tomada = Boolean(row);
-        const detalle = row ? `(${row.gotas ?? v.gotas_default ?? 5}g${row.hora ? ' · ' + row.hora.slice(0, 5) : ''})` : `(${v.gotas_default || 5}g)`;
-        return `<button type="button" class="past-btn${tomada ? ' tomada' : ''}" data-id="${v.id}">${tomada ? '✓' : '＋'} ${escapeHtml(v.nombre)} <small>${detalle}</small></button>`;
+        const cant = row ? (row.gotas ?? v.gotas_default ?? 5) : (v.gotas_default || 5);
+        const dosisTxt = formatearDosisVitamina(cant, meta.unidad);
+        const horaInfo = row?.hora
+          ? ` · ${row.hora.slice(0, 5)}`
+          : (meta.hora_sugerida ? ` · ⏰ ${meta.hora_sugerida}` : '');
+        return `<button type="button" class="past-btn${tomada ? ' tomada' : ''}" data-id="${v.id}">${tomada ? '✓' : '＋'} ${escapeHtml(v.nombre)} <small>(${escapeHtml(dosisTxt)}${escapeHtml(horaInfo)})</small></button>`;
       }).join('')
     : '<p class="empty-msg">Agrega vitaminas a tu lista abajo</p>';
 
   $('vitTipoLista').innerHTML = lista.length
-    ? `<table><tbody>${lista.map((v) => `<tr><td>${escapeHtml(v.nombre)}</td><td>${v.gotas_default || 5} gotas</td>${accionesTd('vitaminas_tipos', v.id)}</tr>`).join('')}</tbody></table>`
+    ? `<table><tbody>${lista.map((v) => {
+        const meta = obtenerMetaVitamina(v);
+        const dosisTxt = formatearDosisVitamina(v.gotas_default || 5, meta.unidad);
+        const badgeHora = meta.hora_sugerida ? `<span class="vit-hora-badge" title="Hora sugerida">⏰ ${escapeHtml(meta.hora_sugerida)}</span>` : '';
+        return `<tr><td><strong>${escapeHtml(v.nombre)}</strong>${badgeHora}</td><td>${escapeHtml(dosisTxt)}</td>${accionesTd('vitaminas_tipos', v.id)}</tr>`;
+      }).join('')}</tbody></table>`
     : '<p class="empty-msg">Aún no agregas vitaminas a tu lista</p>';
 
   const mapa = new Map((cache.vitaminas_tipos || []).map((v) => [String(v.id), v]));
@@ -539,13 +630,15 @@ function renderVitaminaTipos() {
     grupos,
     (l) => {
       const v = mapa.get(String(l.vitamina_id));
+      const meta = obtenerMetaVitamina(v);
       const nombre = v ? v.nombre : 'Vitamina';
-      const gotas = l.gotas ?? v?.gotas_default ?? 5;
-      const horaTxt = l.hora ? ` · ${l.hora.slice(0, 5)}` : '';
-      return `<tr><td><strong>${escapeHtml(nombre)}</strong></td><td>${gotas} gotas ✅${horaTxt}</td>${accionesTd('vitaminas_tipos_log', l.id)}</tr>`;
+      const cant = l.gotas ?? v?.gotas_default ?? 5;
+      const dosisTxt = formatearDosisVitamina(cant, meta.unidad);
+      const horaTxt = l.hora ? ` · ${l.hora.slice(0, 5)}` : (meta.hora_sugerida ? ` · ⏰ ${meta.hora_sugerida}` : '');
+      return `<tr><td><strong>${escapeHtml(nombre)}</strong></td><td>${escapeHtml(dosisTxt)} ✅${escapeHtml(horaTxt)}</td>${accionesTd('vitaminas_tipos_log', l.id)}</tr>`;
     },
-    (rows) => `${rows.length} dosis (${rows.reduce((s, r) => s + (r.gotas || 5), 0)} gotas)`,
-    (rows) => `${rows.length} dosis (${rows.reduce((s, r) => s + (r.gotas || 5), 0)} gotas)`
+    (rows) => `${rows.length} ${rows.length === 1 ? 'dosis registrada' : 'dosis registradas'}`,
+    (rows) => `${rows.length} ${rows.length === 1 ? 'dosis registrada' : 'dosis registradas'}`
   );
 }
 
@@ -602,6 +695,8 @@ document.addEventListener('click', async (e) => {
   try {
     const nombre = chip.dataset.nombre;
     const gotas = Number(chip.dataset.gotas) || 5;
+    const unidad = chip.dataset.unidad || 'gotas';
+    const horaSug = chip.dataset.hora || '';
     const yaExiste = (cache.vitaminas_tipos || []).some(
       (v) => (v.nombre || '').trim().toLowerCase() === nombre.trim().toLowerCase()
     );
@@ -611,6 +706,10 @@ document.addEventListener('click', async (e) => {
     }
     const ok = await insertar('vitaminas_tipos', { nombre, gotas_default: gotas });
     if (ok) {
+      const recCreado = (cache.vitaminas_tipos || []).find(
+        (v) => (v.nombre || '').trim().toLowerCase() === nombre.trim().toLowerCase()
+      );
+      await guardarVitaminaMetaItem(recCreado?.id, nombre, { unidad, hora_sugerida: horaSug });
       toast(`"${nombre}" agregada ✓`);
       renderVitaminaTipos();
     }
@@ -1987,6 +2086,7 @@ function obtenerIdsIngredientesPlato(ingObj) {
 
 let comidaDraftPlato = crearDraftPlatoVacio();
 let comidaDraftAlinos = [];
+let comidaDraftNuevos = [];
 let comidaGrupoActivo = null;
 let comidaCatalogoFiltroGrupo = 'todos';
 let comidaModalId = null;
@@ -2112,7 +2212,6 @@ function calcularContextoComidas(fechaSel) {
   let totalNuevosHistorico = 0;
 
   for (const p of platosAsc) {
-    // Si estamos editando este plato, no contarlo como ya guardado previo para el borrador en curso
     if (comidaEditId && String(p.id) === String(comidaEditId)) continue;
     const sem = p.semana || semanaDe(p.fecha);
     if (!usadosPorSemana.has(sem)) usadosPorSemana.set(sem, new Set());
@@ -2167,26 +2266,46 @@ function calcularContextoComidas(fechaSel) {
   };
 }
 
+function toggleNuevoEnDraft(foodId) {
+  if (!foodId) return;
+  const idx = comidaDraftNuevos.indexOf(foodId);
+  if (idx >= 0) comidaDraftNuevos.splice(idx, 1);
+  else comidaDraftNuevos.push(foodId);
+}
+
 function toggleIngredienteEnDraft(foodId, grupoKey) {
   if (!foodId) return;
+  const ctx = calcularContextoComidas($('comidaFecha')?.value || dayKey(new Date()));
   if (grupoKey === 'alino') {
     const idx = comidaDraftAlinos.indexOf(foodId);
-    if (idx >= 0) comidaDraftAlinos.splice(idx, 1);
-    else comidaDraftAlinos.push(foodId);
+    if (idx >= 0) {
+      comidaDraftAlinos.splice(idx, 1);
+      comidaDraftNuevos = comidaDraftNuevos.filter((x) => x !== foodId);
+    } else {
+      comidaDraftAlinos.push(foodId);
+    }
     return;
   }
   const gk = GRUPOS_COMIDA.some((g) => g.key === grupoKey) ? grupoKey : 'verdura';
   if (!Array.isArray(comidaDraftPlato[gk])) comidaDraftPlato[gk] = [];
   const arr = comidaDraftPlato[gk];
   const idx = arr.indexOf(foodId);
-  if (idx >= 0) arr.splice(idx, 1);
-  else arr.push(foodId);
+  if (idx >= 0) {
+    arr.splice(idx, 1);
+    comidaDraftNuevos = comidaDraftNuevos.filter((x) => x !== foodId);
+  } else {
+    arr.push(foodId);
+    if (!ctx.probadosHistoricos.has(foodId) && !comidaDraftNuevos.includes(foodId)) {
+      comidaDraftNuevos.push(foodId);
+    }
+  }
 }
 
 function renderPlatoVisualSlots(ctx) {
   const slotsWrap = $('platoVisualSlots');
   if (!slotsWrap) return;
 
+  const nuevosSet = new Set(comidaDraftNuevos);
   const nuevosEnDraft = [];
   let totalSeleccionados = 0;
 
@@ -2200,7 +2319,7 @@ function renderPlatoVisualSlots(ctx) {
     let cantNuevosSlot = 0;
     for (const item of items) {
       if (ctx.alergiasMap.has(item.id)) tieneAlergia = true;
-      if (!ctx.probadosHistoricos.has(item.id)) {
+      if (nuevosSet.has(item.id)) {
         cantNuevosSlot++;
         nuevosEnDraft.push(item.nombre);
       }
@@ -2213,15 +2332,21 @@ function renderPlatoVisualSlots(ctx) {
 
     const listaHtml = items.length ? `
       <div class="plato-slot-items">
-        ${items.map((item) => `
+        ${items.map((item) => {
+          const esMarcadoNuevo = nuevosSet.has(item.id);
+          return `
           <div class="plato-slot-item-row">
             <div class="plato-slot-item-left">
               <img class="alimento-thumb-sm" src="${alimentoSvgDataUri(item)}" alt="${escapeHtml(item.nombre)}">
               <strong>${escapeHtml(item.nombre)}</strong>
             </div>
-            <span role="button" tabindex="0" class="plato-slot-item-del" data-remove-slot-grupo="${g.key}" data-remove-slot-food="${escapeHtml(item.id)}" title="Quitar del plato">✕</span>
+            <div class="plato-slot-item-actions">
+              <span role="button" tabindex="0" class="plato-item-nuevo-btn${esMarcadoNuevo ? ' active' : ''}" data-toggle-nuevo-food="${escapeHtml(item.id)}" title="Toca para marcar o desmarcar este alimento como Nuevo en el plato">${esMarcadoNuevo ? '✨ Nuevo ✓' : '＋ Nuevo'}</span>
+              <span role="button" tabindex="0" class="plato-slot-item-del" data-remove-slot-grupo="${g.key}" data-remove-slot-food="${escapeHtml(item.id)}" title="Quitar del plato">✕</span>
+            </div>
           </div>
-        `).join('')}
+        `;
+        }).join('')}
       </div>
       <div class="plato-slot-add-more">＋ Agregar otro (${g.nombre.toLowerCase()})</div>
     ` : `<div class="plato-slot-empty">＋ Elegir ${g.nombre.toLowerCase()} (1 o más)</div>`;
@@ -2240,10 +2365,10 @@ function renderPlatoVisualSlots(ctx) {
   const resumenEl = $('comidaAlimentoNuevoResumen');
   if (resumenEl) {
     if (nuevosEnDraft.length > 0) {
-      resumenEl.innerHTML = `✨ Alimentos nuevos en este plato (${nuevosEnDraft.length}): <strong>${nuevosEnDraft.map(escapeHtml).join(', ')}</strong> · Total en plato: ${totalSeleccionados} alimento${totalSeleccionados === 1 ? '' : 's'}${comidaDraftAlinos.length ? ` + ${comidaDraftAlinos.length} aliño(s)` : ''}.`;
+      resumenEl.innerHTML = `✨ Marcado como <strong>Nuevo</strong> en este plato (${nuevosEnDraft.length}): <strong>${nuevosEnDraft.map(escapeHtml).join(', ')}</strong> · Puedes tocar <strong>✨ Nuevo</strong> en cada elemento para cambiarlo.`;
       resumenEl.style.color = '#199e70';
     } else if (totalSeleccionados > 0) {
-      resumenEl.innerHTML = `🍽️ Plato con <strong>${totalSeleccionados} alimento${totalSeleccionados === 1 ? '' : 's'}</strong> seleccionado${totalSeleccionados === 1 ? '' : 's'}${comidaDraftAlinos.length ? ` y <strong>${comidaDraftAlinos.length} aliño(s)</strong>` : ''}. Puedes seguir agregando más en cualquier categoría o con la lupa 🔍.`;
+      resumenEl.innerHTML = `🍽️ Plato con <strong>${totalSeleccionados} alimento${totalSeleccionados === 1 ? '' : 's'}</strong> seleccionado${totalSeleccionados === 1 ? '' : 's'}${comidaDraftAlinos.length ? ` y <strong>${comidaDraftAlinos.length} aliño(s)</strong>` : ''}. Toca <strong>＋ Nuevo</strong> junto a cualquier ingrediente para indicar cuál fue nuevo.`;
       resumenEl.style.color = 'var(--text-2)';
     } else {
       resumenEl.innerHTML = `💡 Toca cualquier categoría (ej. <strong>${ctx.grupoSugerido.icono} ${ctx.grupoSugerido.nombre}</strong>) o usa la <strong>lupa 🔍</strong> para agregar todos los alimentos que quieras al plato.`;
@@ -2345,6 +2470,7 @@ function renderSelectorGrupoComida(ctx) {
   wrap.classList.remove('hidden');
   const selArr = Array.isArray(comidaDraftPlato[gInfo.key]) ? comidaDraftPlato[gInfo.key] : [];
   const selSet = new Set(selArr);
+  const nuevosSet = new Set(comidaDraftNuevos);
   $('platoSelectorTitulo').textContent = `${gInfo.icono} Elige ${gInfo.nombre} (${selSet.size} seleccionado${selSet.size === 1 ? '' : 's'} · Semana ${ctx.semanaActual})`;
   const search = ($('platoSelectorSearch')?.value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const bloqueados = ctx.bloqueadosPorGrupo[gInfo.key] || new Set();
@@ -2376,9 +2502,10 @@ function renderSelectorGrupoComida(ctx) {
     const seleccionado = selSet.has(a.id);
     const bloqSemana = bloqueados.has(a.id);
     const esNuevo = !ctx.probadosHistoricos.has(a.id);
+    const esMarcadoNuevo = nuevosSet.has(a.id);
     const esAlergia = ctx.alergiasMap.has(a.id);
 
-    let sub = seleccionado ? '✓ En el plato (toca para quitar)' : '✓ Ya integrado';
+    let sub = seleccionado ? (esMarcadoNuevo ? '✨ Marcado como Nuevo en plato' : '✓ En el plato (toca para quitar)') : '✓ Ya integrado';
     if (!seleccionado) {
       if (esAlergia) sub = '🚨 Causó alergia';
       else if (bloqSemana) sub = '🔄 Usado sem. anterior';
@@ -2386,13 +2513,14 @@ function renderSelectorGrupoComida(ctx) {
     }
 
     return `
-      <button type="button" class="alimento-item${seleccionado ? ' selected' : ''}${esAlergia ? ' alergia' : ''}" data-pick-alimento="${a.id}">
+      <div class="alimento-item${seleccionado ? ' selected' : ''}${esAlergia ? ' alergia' : ''}" data-pick-alimento="${a.id}">
         <img class="alimento-thumb" src="${alimentoSvgDataUri(a)}" alt="${escapeHtml(a.nombre)}">
         <div class="alimento-info">
           <strong>${escapeHtml(a.nombre)}</strong>
           <small>${sub}</small>
         </div>
-      </button>
+        ${seleccionado ? `<button type="button" class="plato-item-nuevo-btn${esMarcadoNuevo ? ' active' : ''}" data-toggle-nuevo-food="${escapeHtml(a.id)}" title="Marcar o desmarcar como alimento Nuevo">${esMarcadoNuevo ? '✨ Nuevo ✓' : '＋ Nuevo'}</button>` : ''}
+      </div>
     `;
   }).join('');
 }
@@ -2511,9 +2639,9 @@ function renderComidas() {
     .filter(Boolean);
   if ($('comidaReglaTexto')) {
     if (ctx.semanaActual > 1 && bloqueadosNombres.length > 0) {
-      $('comidaReglaTexto').innerHTML = `<strong>Semana ${ctx.semanaActual}:</strong> Puedes agregar libremente todos los alimentos que quieras por categoría. Sugerencia semanal: variar respecto a la Semana ${ctx.semanaActual - 1} (${bloqueadosNombres.slice(0, 5).map(escapeHtml).join(', ')}${bloqueadosNombres.length > 5 ? '…' : ''}).`;
+      $('comidaReglaTexto').innerHTML = `<strong>Semana ${ctx.semanaActual}:</strong> Puedes agregar libremente todos los alimentos que quieras por categoría y marcar cuál es <strong>✨ Nuevo</strong>. Sugerencia semanal: variar respecto a la Semana ${ctx.semanaActual - 1} (${bloqueadosNombres.slice(0, 5).map(escapeHtml).join(', ')}${bloqueadosNombres.length > 5 ? '…' : ''}).`;
     } else {
-      $('comidaReglaTexto').innerHTML = `<strong>Semana ${ctx.semanaActual}:</strong> Plato libre y flexible — puedes agregar <strong>uno o varios alimentos por categoría</strong> (o buscarlos con la lupa 🔍) según lo que incluya la comida.`;
+      $('comidaReglaTexto').innerHTML = `<strong>Semana ${ctx.semanaActual}:</strong> Plato libre y flexible — puedes agregar <strong>uno o varios alimentos por categoría</strong> (o con la lupa 🔍) y marcar con <strong>✨ Nuevo</strong> cuál alimento fue nuevo en el plato.`;
     }
   }
 
@@ -2554,9 +2682,15 @@ function renderComidas() {
       const semTag = p.semana ? `<small style="color:var(--muted); display:block;">Semana ${p.semana}</small>` : '';
 
       return `<tr>
-        <td class="comida-hist-row" data-comida-id="${p.id}" style="cursor:pointer;"><strong>${escapeHtml((p.hora || '12:00').slice(0, 5))}</strong><br><small style="color:var(--text-2);">${escapeHtml(p.tiempo)}</small>${semTag}</td>
-        <td class="comida-hist-row" data-comida-id="${p.id}" style="cursor:pointer;"><div class="comida-ing-mini">${pills || '—'}${alergiaBadge}</div></td>
-        <td><div class="acciones-cell"><button type="button" class="comida-edit-btn" data-comida-edit-id="${p.id}" title="Editar composición del plato">✏️ Editar</button><button type="button" class="comida-hist-btn" data-comida-id="${p.id}" title="Ver detalle y alergias">👁️ Ver</button><button type="button" class="del-btn" data-tabla="bitacora" data-id="${p.id}" aria-label="Eliminar">🗑</button></div></td>
+        <td class="comida-col-hora comida-hist-row" data-comida-id="${p.id}" style="cursor:pointer;"><strong>${escapeHtml((p.hora || '12:00').slice(0, 5))}</strong><br><small style="color:var(--text-2);">${escapeHtml(p.tiempo)}</small>${semTag}</td>
+        <td colspan="2" class="comida-col-plato">
+          <div class="comida-ing-mini comida-hist-row" data-comida-id="${p.id}" style="cursor:pointer;">${pills || '—'}${alergiaBadge}</div>
+          <div class="comida-row-actions">
+            <button type="button" class="comida-hist-btn" data-comida-id="${p.id}" title="Ver detalle y alergias">👁️ Ver</button>
+            <button type="button" class="comida-edit-btn" data-comida-edit-id="${p.id}" title="Editar composición del plato">✏️ Editar</button>
+            <button type="button" class="del-btn" data-tabla="bitacora" data-id="${p.id}" aria-label="Eliminar">🗑</button>
+          </div>
+        </td>
       </tr>`;
     },
     (rows) => `${rows.length} plato${rows.length > 1 ? 's' : ''}`,
@@ -2568,6 +2702,7 @@ function cancelarEdicionPlato() {
   comidaEditId = null;
   comidaDraftPlato = crearDraftPlatoVacio();
   comidaDraftAlinos = [];
+  comidaDraftNuevos = [];
   comidaGrupoActivo = null;
   if ($('comidaNotas')) $('comidaNotas').value = '';
   if ($('comidaEditBanner')) $('comidaEditBanner').classList.add('hidden');
@@ -2585,6 +2720,9 @@ function cargarPlatoParaEditar(id) {
   comidaEditId = plato.id;
   comidaDraftPlato = normalizarIngredientesPlato(plato.ingredientes);
   comidaDraftAlinos = Array.isArray(plato.alinos) ? [...plato.alinos] : [];
+  comidaDraftNuevos = Array.isArray(plato.alimentosNuevos) && plato.alimentosNuevos.length
+    ? [...plato.alimentosNuevos]
+    : (plato.alimentoNuevo ? [plato.alimentoNuevo] : []);
   comidaGrupoActivo = null;
 
   if ($('comidaFecha')) $('comidaFecha').value = plato.fecha || dayKey(new Date());
@@ -2614,6 +2752,7 @@ function sugerirPlatoDelDia() {
   const fechaSel = $('comidaFecha')?.value || dayKey(new Date());
   const ctx = calcularContextoComidas(fechaSel);
   const nuevoDraft = crearDraftPlatoVacio();
+  const nuevosSugeridos = [];
   let yaPusoNuevo = ctx.yaHayNuevoHoy;
 
   for (const g of GRUPOS_COMIDA) {
@@ -2624,6 +2763,7 @@ function sugerirPlatoDelDia() {
 
     if (!yaPusoNuevo && g.key === ctx.grupoSugerido.key && nuevos.length > 0) {
       nuevoDraft[g.key] = [nuevos[0].id];
+      nuevosSugeridos.push(nuevos[0].id);
       yaPusoNuevo = true;
     } else if (probados.length > 0) {
       const noUsadosEstaSem = probados.filter((a) => !ctx.usadosEstaSemana.has(a.id));
@@ -2631,11 +2771,13 @@ function sugerirPlatoDelDia() {
       nuevoDraft[g.key] = [pool[Math.floor(Math.random() * pool.length)].id];
     } else if (!yaPusoNuevo && nuevos.length > 0) {
       nuevoDraft[g.key] = [nuevos[0].id];
+      nuevosSugeridos.push(nuevos[0].id);
       yaPusoNuevo = true;
     }
   }
 
   comidaDraftPlato = nuevoDraft;
+  comidaDraftNuevos = nuevosSugeridos;
   comidaGrupoActivo = null;
   renderComidas();
   toast('Plato sugerido según ciclo semanal ✓');
@@ -2674,7 +2816,7 @@ function abrirComidaModal(id) {
               <small style="color:var(--text-2);">${g.icono} ${g.nombre}</small>
             </div>
           </div>
-          ${esNuevo ? '<span class="plato-slot-tag nuevo">✨ Alimento nuevo</span>' : '<span class="plato-slot-tag" style="background:var(--surface); color:var(--text-2);">✓ Integrado</span>'}
+          <button type="button" class="plato-item-nuevo-btn${esNuevo ? ' active' : ''}" data-modal-toggle-nuevo="${escapeHtml(foodId)}" title="Toca para marcar o desmarcar este alimento como Nuevo en este plato">${esNuevo ? '✨ Nuevo ✓' : '＋ Nuevo'}</button>
         </div>
       `);
 
@@ -2693,6 +2835,7 @@ function abrirComidaModal(id) {
   for (const alinoId of (plato.alinos || [])) {
     if (!alinoId) continue;
     const item = ctx.catalogoMap.get(alinoId) || { id: alinoId, nombre: alinoId, grupo: 'alino' };
+    const esNuevo = nuevosSet.has(alinoId);
     const marcadoAlergia = (plato.reacciones || []).includes(alinoId);
 
     ingRows.push(`
@@ -2704,7 +2847,7 @@ function abrirComidaModal(id) {
             <small style="color:var(--text-2);">🧂 Aliño (opcional)</small>
           </div>
         </div>
-        <span class="plato-slot-tag" style="background:var(--surface); color:var(--text-2);">🧂 Opcional</span>
+        <button type="button" class="plato-item-nuevo-btn${esNuevo ? ' active' : ''}" data-modal-toggle-nuevo="${escapeHtml(alinoId)}" title="Toca para marcar o desmarcar como Nuevo">${esNuevo ? '✨ Nuevo ✓' : '＋ Nuevo'}</button>
       </div>
     `);
 
@@ -2762,6 +2905,7 @@ $('btnSugerirPlato')?.addEventListener('click', sugerirPlatoDelDia);
 $('btnLimpiarPlato')?.addEventListener('click', () => {
   comidaDraftPlato = crearDraftPlatoVacio();
   comidaDraftAlinos = [];
+  comidaDraftNuevos = [];
   comidaGrupoActivo = null;
   renderComidas();
 });
@@ -2814,6 +2958,13 @@ $('platoBusquedaResultados')?.addEventListener('click', async (e) => {
 });
 
 $('platoVisualSlots')?.addEventListener('click', (e) => {
+  const nuevoBtn = e.target.closest('[data-toggle-nuevo-food]');
+  if (nuevoBtn) {
+    e.stopPropagation();
+    toggleNuevoEnDraft(nuevoBtn.dataset.toggleNuevoFood);
+    renderComidas();
+    return;
+  }
   const delChip = e.target.closest('[data-remove-slot-food]');
   if (delChip) {
     e.stopPropagation();
@@ -2821,6 +2972,7 @@ $('platoVisualSlots')?.addEventListener('click', (e) => {
     const fid = delChip.dataset.removeSlotFood;
     if (gk && Array.isArray(comidaDraftPlato[gk])) {
       comidaDraftPlato[gk] = comidaDraftPlato[gk].filter((x) => x !== fid);
+      comidaDraftNuevos = comidaDraftNuevos.filter((x) => x !== fid);
       renderComidas();
     }
     return;
@@ -2836,10 +2988,19 @@ $('platoVisualSlots')?.addEventListener('click', (e) => {
 });
 
 $('platoSelectorOpciones')?.addEventListener('click', (e) => {
+  const nuevoBtn = e.target.closest('[data-toggle-nuevo-food]');
+  if (nuevoBtn) {
+    e.stopPropagation();
+    toggleNuevoEnDraft(nuevoBtn.dataset.toggleNuevoFood);
+    renderComidas();
+    return;
+  }
   const btn = e.target.closest('.alimento-item');
   if (!btn || btn.disabled || !comidaGrupoActivo) return;
   const alId = btn.dataset.pickAlimento;
   if (alId === '__clear__') {
+    const actuales = comidaDraftPlato[comidaGrupoActivo] || [];
+    comidaDraftNuevos = comidaDraftNuevos.filter((x) => !actuales.includes(x));
     comidaDraftPlato[comidaGrupoActivo] = [];
   } else if (alId) {
     toggleIngredienteEnDraft(alId, comidaGrupoActivo);
@@ -2956,14 +3117,13 @@ $('formComidaPlato')?.addEventListener('submit', async (e) => {
   }
 
   const ctx = calcularContextoComidas(fecha);
-  const nuevosIds = [];
+  const idsValidosPlato = new Set([...todosIdsPrincipales, ...comidaDraftAlinos]);
+  const nuevosIds = comidaDraftNuevos.filter((id) => idsValidosPlato.has(id));
   let primerNuevoGrupo = null;
   for (const g of GRUPOS_COMIDA) {
-    for (const id of ingNormalizados[g.key]) {
-      if (id && !ctx.probadosHistoricos.has(id)) {
-        if (!nuevosIds.includes(id)) nuevosIds.push(id);
-        if (!primerNuevoGrupo) primerNuevoGrupo = g.key;
-      }
+    if (ingNormalizados[g.key].some((id) => nuevosIds.includes(id))) {
+      primerNuevoGrupo = g.key;
+      break;
     }
   }
 
@@ -2974,7 +3134,6 @@ $('formComidaPlato')?.addEventListener('submit', async (e) => {
       const regExistente = (cache.bitacora || []).find((r) => String(r.id) === String(comidaEditId));
       let previo = {};
       try { previo = JSON.parse(regExistente?.notas || '{}'); } catch {}
-      const idsValidosPlato = new Set([...todosIdsPrincipales, ...comidaDraftAlinos]);
       const reaccionesPrev = Array.isArray(previo.reacciones)
         ? previo.reacciones.filter((id) => idsValidosPlato.has(id))
         : [];
@@ -3028,6 +3187,7 @@ $('formComidaPlato')?.addEventListener('submit', async (e) => {
       if (ok) {
         comidaDraftPlato = crearDraftPlatoVacio();
         comidaDraftAlinos = [];
+        comidaDraftNuevos = [];
         comidaGrupoActivo = null;
         $('comidaNotas').value = '';
         if ($('platoBusquedaRapida')) $('platoBusquedaRapida').value = '';
@@ -3053,6 +3213,13 @@ document.addEventListener('click', (e) => {
   }
 });
 
+$('comidaModalIngredientes')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-modal-toggle-nuevo]');
+  if (!btn) return;
+  const activo = btn.classList.toggle('active');
+  btn.textContent = activo ? '✨ Nuevo ✓' : '＋ Nuevo';
+});
+
 $('comidaModalEditar')?.addEventListener('click', () => {
   if (comidaModalId) cargarPlatoParaEditar(comidaModalId);
 });
@@ -3074,10 +3241,13 @@ $('comidaModalGuardar')?.addEventListener('click', async () => {
     const reacciones = Array.from(document.querySelectorAll('.alergia-food-chk:checked')).map((chk) => chk.value);
     const sintomas = Array.from(document.querySelectorAll('#comidaModalSintomas .sintoma-chip.active')).map((c) => c.dataset.sintoma);
     const reaccionNotas = ($('comidaModalReaccionNotas').value || '').trim();
+    const nuevosModal = Array.from(document.querySelectorAll('#comidaModalIngredientes [data-modal-toggle-nuevo].active')).map((b) => b.dataset.modalToggleNuevo);
 
     plato.reacciones = reacciones;
     plato.sintomas = sintomas;
     plato.reaccionNotas = reaccionNotas;
+    plato.alimentosNuevos = nuevosModal;
+    plato.alimentoNuevo = nuevosModal[0] || null;
 
     const { error } = await db.from('bitacora').update({ notas: JSON.stringify(plato) }).eq('id', reg.id);
     if (error) { toast(`Error: ${error.message}`, true); return; }
@@ -3097,7 +3267,7 @@ $('comidaModalGuardar')?.addEventListener('click', async () => {
 
     await loadData('bitacora');
     $('comidaModal').classList.add('hidden');
-    toast('Evaluación de alergias guardada ✓');
+    toast('Evaluación del plato guardada ✓');
     renderComidas();
   } finally {
     btn.disabled = false;
@@ -3402,11 +3572,23 @@ $('formVitaminaTipo').addEventListener('submit', async (e) => {
   const nombre = $('vitTipoNombre').value.trim();
   if (!nombre) return;
   const gotas = Number($('vitTipoGotas').value) || 5;
+  const unidad = $('vitTipoUnidad')?.value || 'gotas';
+  const horaSug = ($('vitTipoHoraSugerida')?.value || '').trim();
   const submitBtn = e.target.querySelector('button[type="submit"]') || e.submitter;
   if (submitBtn) submitBtn.disabled = true;
   try {
     const ok = await insertar('vitaminas_tipos', { nombre, gotas_default: gotas });
-    if (ok) { $('vitTipoNombre').value = ''; $('vitTipoGotas').value = '5'; renderVitaminaTipos(); }
+    if (ok) {
+      const recCreado = (cache.vitaminas_tipos || []).find(
+        (v) => (v.nombre || '').trim().toLowerCase() === nombre.toLowerCase()
+      );
+      await guardarVitaminaMetaItem(recCreado?.id, nombre, { unidad, hora_sugerida: horaSug });
+      $('vitTipoNombre').value = '';
+      $('vitTipoGotas').value = '5';
+      if ($('vitTipoUnidad')) $('vitTipoUnidad').value = 'gotas';
+      if ($('vitTipoHoraSugerida')) $('vitTipoHoraSugerida').value = '';
+      renderVitaminaTipos();
+    }
   } finally {
     if (submitBtn) submitBtn.disabled = false;
   }
@@ -3725,13 +3907,24 @@ function abrirEdicion(tabla, id) {
       <label>Gotas<input type="number" id="edVitGotas" step="any" inputmode="decimal" value="${reg.gotas}" required></label>
       <div class="fila-2"><label>Fecha<input type="date" id="edVitFecha" value="${dayKey(d)}"></label><label>Hora<input type="time" id="edVitHora" value="${fmtTime(d)}"></label></div>`;
   } else if (tabla === 'vitaminas_tipos') {
+    const meta = obtenerMetaVitamina(reg);
+    const optsUnidades = UNIDADES_VITAMINA.map(
+      (u) => `<option value="${u.key}"${u.key === meta.unidad ? ' selected' : ''}>${u.label}</option>`
+    ).join('');
     c.innerHTML = `
       <label>Nombre<input type="text" id="edVitNombre" maxlength="60" value="${escapeHtml(reg.nombre)}" required></label>
-      <label>Gotas por defecto<input type="number" id="edVitGotasDef" step="any" inputmode="decimal" value="${reg.gotas_default || 5}"></label>`;
+      <div class="fila-2">
+        <label>Cantidad por defecto<input type="number" id="edVitGotasDef" step="any" inputmode="decimal" value="${reg.gotas_default || 5}"></label>
+        <label>Unidad de medida<select id="edVitUnidad">${optsUnidades}</select></label>
+      </div>
+      <label>Hora sugerida (opcional)<input type="time" id="edVitHoraSug" value="${escapeHtml(meta.hora_sugerida || '')}"></label>`;
   } else if (tabla === 'vitaminas_tipos_log') {
+    const vitPadre = (cache.vitaminas_tipos || []).find((v) => String(v.id) === String(reg.vitamina_id));
+    const metaPadre = obtenerMetaVitamina(vitPadre);
+    const uObj = UNIDADES_VITAMINA.find((u) => u.key === metaPadre.unidad) || UNIDADES_VITAMINA[0];
     c.innerHTML = `
       <div class="fila-2"><label>Fecha<input type="date" id="edVitLogFecha" value="${reg.fecha}" required></label><label>Hora<input type="time" id="edVitLogHora" value="${reg.hora ? reg.hora.slice(0, 5) : ''}"></label></div>
-      <label>Gotas<input type="number" id="edVitLogGotas" step="any" inputmode="decimal" value="${reg.gotas ?? 5}"></label>`;
+      <label>Cantidad (${escapeHtml(uObj.plur)})<input type="number" id="edVitLogGotas" step="any" inputmode="decimal" value="${reg.gotas ?? vitPadre?.gotas_default ?? 5}"></label>`;
   } else if (tabla === 'panales') {
     const d = new Date(reg.fecha_hora);
     const fechaStr = dayKey(d);
@@ -3801,6 +3994,11 @@ $('editGuardar').addEventListener('click', async () => {
 
     const { error } = await db.from(editTabla).update(patch).eq('id', editId);
     if (error) { toast(`Error al actualizar: ${error.message}`, true); return; }
+    if (editTabla === 'vitaminas_tipos') {
+      const unidadEd = $('edVitUnidad')?.value || 'gotas';
+      const horaSugEd = ($('edVitHoraSug')?.value || '').trim();
+      await guardarVitaminaMetaItem(editId, patch.nombre, { unidad: unidadEd, hora_sugerida: horaSugEd });
+    }
     if (editTabla === 'panales') {
       const fPan = $('edPanFecha').value;
       const bGuardar = (patch.heces && fPan >= FECHA_MIN_BRISTOL) ? editBristolVal : null;

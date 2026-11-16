@@ -2072,9 +2072,84 @@ tr.month-row td {
   color: #fbbf24;
   border: 1px solid rgba(245, 158, 11, 0.45);
   border-radius: 8px;
-  padding: 4px 8px;
+  padding: 5px 10px;
   font-size: 0.75rem;
   font-weight: 700;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.comida-hist-btn {
+  padding: 5px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.comida-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed color-mix(in srgb, var(--border) 70%, transparent);
+}
+#tablaComidas table {
+  table-layout: fixed;
+  width: 100%;
+}
+#tablaComidas th:first-child,
+#tablaComidas td.comida-col-hora {
+  width: 82px;
+  vertical-align: top;
+}
+#tablaComidas th:last-child {
+  width: 1px;
+  padding: 0;
+}
+#tablaComidas td.comida-col-plato {
+  white-space: normal;
+  word-break: break-word;
+  vertical-align: top;
+}
+.plato-slot-item-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.plato-item-nuevo-btn {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.plato-item-nuevo-btn:hover {
+  border-color: #199e70;
+  color: #199e70;
+}
+.plato-item-nuevo-btn.active {
+  background: rgba(25, 158, 112, 0.22);
+  border-color: #199e70;
+  color: #199e70;
+}
+.vit-hora-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--brand-primary) 16%, transparent);
+  color: var(--brand-accent);
+  margin-left: 4px;
 }
 

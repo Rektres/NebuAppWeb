@@ -665,15 +665,32 @@
             <label>Nombre
               <input type="text" id="vitTipoNombre" maxlength="60" placeholder="Nombre de la vitamina" required>
             </label>
-            <label>Gotas por defecto
+            <label>Cantidad por defecto
               <input type="number" id="vitTipoGotas" step="any" inputmode="decimal" value="5">
+            </label>
+            <label>Unidad de medida
+              <select id="vitTipoUnidad">
+                <option value="gotas">💧 Gotas</option>
+                <option value="ml">🧪 ml (mililitros)</option>
+                <option value="medida">🥄 Medida / Dosificador</option>
+                <option value="pastilla">💊 Pastilla / Comprimido</option>
+                <option value="capsula">💊 Cápsula</option>
+                <option value="porcion">🥣 Porción</option>
+                <option value="gramos">⚖️ Gramos (g)</option>
+                <option value="sobre">✉️ Sobre / Sachet</option>
+                <option value="puff">💨 Puff / Spray</option>
+                <option value="unidad">🔢 Unidad</option>
+              </select>
+            </label>
+            <label>Hora sugerida (opcional)
+              <input type="time" id="vitTipoHoraSugerida">
             </label>
           </div>
           <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
             <span style="font-size:0.8rem; color:var(--text-2);">Sugerencias rápidas:</span>
-            <button type="button" class="chip-add-vit" data-nombre="Hierro" data-gotas="5">＋ Hierro (8:00)</button>
-            <button type="button" class="chip-add-vit" data-nombre="B12" data-gotas="5">＋ B12 (17:30)</button>
-            <button type="button" class="chip-add-vit" data-nombre="Vitamina D" data-gotas="5">＋ Vitamina D (20:15)</button>
+            <button type="button" class="chip-add-vit" data-nombre="Hierro" data-gotas="5" data-unidad="gotas" data-hora="08:00">＋ Hierro (8:00)</button>
+            <button type="button" class="chip-add-vit" data-nombre="B12" data-gotas="5" data-unidad="gotas" data-hora="17:30">＋ B12 (17:30)</button>
+            <button type="button" class="chip-add-vit" data-nombre="Vitamina D" data-gotas="5" data-unidad="gotas" data-hora="20:15">＋ Vitamina D (20:15)</button>
           </div>
           <button type="submit" class="btn-primary">＋ Agregar a mi lista</button>
           <div id="vitTipoLista" class="table-wrap past-lista"></div>
@@ -1203,8 +1220,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
-  <script src="config.js?v=2.9.1"></script>
-  <script src="whatsapp.js?v=2.9.1"></script>
-  <script src="app.js?v=2.9.1"></script>
+  <script src="config.js?v=3.0.0"></script>
+  <script src="whatsapp.js?v=3.0.0"></script>
+  <script src="app.js?v=3.0.0"></script>
 </body>
 </html>
