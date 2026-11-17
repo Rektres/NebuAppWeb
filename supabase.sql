@@ -14,6 +14,8 @@ create table bebes (
   fecha_nacimiento date,
   peso_kg numeric,
   talla_cm numeric,
+  perimetro_cefalico_cm numeric,
+  sexo text default 'nino' check (sexo in ('nina', 'nino')),
   nombre_completo text,
   apodo text,
   grupo_sanguineo text,
@@ -22,6 +24,10 @@ create table bebes (
   lata_gramos numeric default 800,     -- tamaño del tarro/lata de fórmula en gramos
   lata_abierta_en timestamptz,          -- cuándo se abrió la lata actual
   latas_usadas integer default 0,       -- contador de latas abiertas
+  es_admin boolean not null default false,
+  wsp_desbloqueado boolean not null default false,
+  modulos_desbloqueados jsonb default '["stats","leche","panales","comidas","sueno"]'::jsonb,
+  modulos_visibles jsonb default '["stats","alertas","leche","comidas","vitaminas","panales","sueno","info","bitacora","juegos"]'::jsonb,
   created_at timestamptz default now()
 );
 

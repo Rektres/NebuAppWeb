@@ -214,7 +214,7 @@ async function insertar(tabla, valores) {
   await loadData(tabla);
   statsDirty = true;
   toast('Registro guardado ✓');
-  if (typeof window.enviarNotificacionWhatsApp === 'function') {
+  if (typeof window.enviarNotificacionWhatsApp === 'function' && tieneWspYAlertasDesbloqueado()) {
     window.enviarNotificacionWhatsApp(tabla, valores, { bebe, miRol });
   }
   if (typeof actualizarAlertasYBadge === 'function') {
@@ -1618,9 +1618,370 @@ function renderChartsDias(s, surface) {
       },
     }),
   });
+  if (statsSubTab === 'crecimiento') {
+    renderChartsCrecimiento();
+  }
 }
 
-// ---------- Tabs ----------
+// ---------- Submódulo de Curvas de Crecimiento MINSAL / OMS (0 a 24 meses) ----------
+let statsSubTab = localStorage.getItem('stats_subtab') || 'rutina';
+let crecimientoIndFiltro = 'todos';
+
+// Tablas oficiales MINSAL / OMS (extraídas de Patrones de Crecimiento para la Evaluación Nutricional)
+// Formato de cada punto: [mes_o_cm, -2DE, -1DE, Mediana, +1DE, +2DE]
+const PATRONES_MINSAL = {
+  nino: {
+    pe: [
+      [0, 2.5, 2.9, 3.3, 3.9, 4.4], [1, 3.4, 3.9, 4.5, 5.1, 5.8], [2, 4.3, 4.9, 5.6, 6.3, 7.1],
+      [3, 5.0, 5.7, 6.4, 7.2, 8.0], [4, 5.6, 6.2, 7.0, 7.8, 8.7], [5, 6.0, 6.7, 7.5, 8.4, 9.3],
+      [6, 6.4, 7.1, 7.9, 8.8, 9.8], [7, 6.7, 7.4, 8.3, 9.2, 10.3], [8, 6.9, 7.7, 8.6, 9.6, 10.7],
+      [9, 7.1, 8.0, 8.9, 9.9, 11.0], [10, 7.4, 8.2, 9.2, 10.2, 11.4], [11, 7.6, 8.4, 9.4, 10.5, 11.7],
+      [12, 7.7, 8.6, 9.6, 10.8, 12.0], [13, 7.9, 8.8, 9.9, 11.0, 12.3], [14, 8.1, 9.0, 10.1, 11.3, 12.6],
+      [15, 8.3, 9.2, 10.3, 11.5, 12.8], [16, 8.4, 9.4, 10.5, 11.7, 13.1], [17, 8.6, 9.6, 10.7, 12.0, 13.4],
+      [18, 8.8, 9.8, 10.9, 12.2, 13.7], [19, 8.9, 10.0, 11.1, 12.5, 13.9], [20, 9.1, 10.1, 11.3, 12.7, 14.2],
+      [21, 9.2, 10.3, 11.5, 12.9, 14.5], [22, 9.4, 10.5, 11.8, 13.2, 14.7], [23, 9.5, 10.7, 12.0, 13.4, 15.0],
+      [24, 9.7, 10.8, 12.2, 13.6, 15.3],
+    ],
+    te: [
+      [0, 46.1, 48.0, 49.9, 51.8, 53.7], [1, 50.8, 52.8, 54.7, 56.7, 58.6], [2, 54.4, 56.4, 58.4, 60.4, 62.4],
+      [3, 57.3, 59.4, 61.4, 63.5, 65.5], [4, 59.7, 61.8, 63.9, 66.0, 68.0], [5, 61.7, 63.8, 65.9, 68.0, 70.1],
+      [6, 63.3, 65.5, 67.6, 69.8, 71.9], [7, 64.8, 67.0, 69.2, 71.3, 73.5], [8, 66.2, 68.4, 70.6, 72.8, 75.0],
+      [9, 67.5, 69.7, 72.0, 74.2, 76.5], [10, 68.7, 71.0, 73.3, 75.6, 77.9], [11, 69.9, 72.2, 74.5, 76.9, 79.2],
+      [12, 71.0, 73.4, 75.7, 78.1, 80.5], [13, 72.1, 74.5, 76.9, 79.3, 81.8], [14, 73.1, 75.6, 78.0, 80.5, 83.0],
+      [15, 74.1, 76.6, 79.1, 81.7, 84.2], [16, 75.0, 77.6, 80.2, 82.8, 85.4], [17, 76.0, 78.6, 81.2, 83.9, 86.5],
+      [18, 76.9, 79.6, 82.3, 85.0, 87.7], [19, 77.7, 80.5, 83.2, 86.0, 88.8], [20, 78.6, 81.4, 84.2, 87.0, 89.8],
+      [21, 79.4, 82.3, 85.1, 88.0, 90.9], [22, 80.2, 83.1, 86.0, 89.0, 91.9], [23, 81.0, 83.9, 86.9, 89.9, 92.9],
+      [24, 81.7, 84.8, 87.8, 90.9, 93.9],
+    ],
+    pce: [
+      [0, 31.9, 33.2, 34.5, 35.7, 37.0], [1, 34.9, 36.1, 37.3, 38.5, 39.7], [2, 36.8, 38.0, 39.1, 40.3, 41.5],
+      [3, 38.1, 39.3, 40.5, 41.7, 42.9], [4, 39.2, 40.4, 41.6, 42.8, 44.0], [5, 40.1, 41.4, 42.6, 43.8, 45.0],
+      [6, 40.9, 42.1, 43.3, 44.6, 45.8], [7, 41.5, 42.7, 44.0, 45.2, 46.4], [8, 42.0, 43.2, 44.5, 45.8, 47.0],
+      [9, 42.5, 43.7, 45.0, 46.3, 47.5], [10, 42.9, 44.1, 45.4, 46.7, 47.9], [11, 43.2, 44.5, 45.8, 47.0, 48.3],
+      [12, 43.5, 44.8, 46.1, 47.4, 48.6], [13, 43.8, 45.0, 46.3, 47.6, 48.9], [14, 44.0, 45.3, 46.6, 47.9, 49.2],
+      [15, 44.2, 45.5, 46.8, 48.1, 49.4], [16, 44.4, 45.7, 47.0, 48.3, 49.6], [17, 44.6, 45.9, 47.2, 48.5, 49.8],
+      [18, 44.7, 46.0, 47.4, 48.7, 50.0], [19, 44.9, 46.2, 47.5, 48.9, 50.2], [20, 45.0, 46.4, 47.7, 49.0, 50.4],
+      [21, 45.2, 46.5, 47.8, 49.2, 50.5], [22, 45.3, 46.6, 48.0, 49.3, 50.7], [23, 45.4, 46.8, 48.1, 49.5, 50.8],
+      [24, 45.5, 46.9, 48.3, 49.6, 51.0],
+    ],
+    pt: [
+      [45, 2.0, 2.2, 2.4, 2.7, 3.0], [50, 2.8, 3.0, 3.3, 3.6, 4.0], [55, 3.8, 4.2, 4.5, 5.0, 5.4],
+      [60, 5.1, 5.5, 6.0, 6.5, 7.1], [65, 6.3, 6.9, 7.4, 8.1, 8.8], [70, 7.2, 7.8, 8.4, 9.2, 10.0],
+      [75, 8.1, 8.8, 9.5, 10.3, 11.3], [80, 9.0, 9.7, 10.6, 11.5, 12.6], [85, 10.0, 10.8, 11.7, 12.8, 14.0],
+      [90, 11.0, 11.9, 12.9, 14.1, 15.4], [95, 12.0, 13.0, 14.1, 15.4, 16.9],
+    ],
+  },
+  nina: {
+    pe: [
+      [0, 2.4, 2.8, 3.2, 3.7, 4.2], [1, 3.2, 3.6, 4.2, 4.8, 5.5], [2, 3.9, 4.5, 5.1, 5.8, 6.6],
+      [3, 4.5, 5.2, 5.8, 6.6, 7.5], [4, 5.0, 5.7, 6.4, 7.3, 8.2], [5, 5.4, 6.1, 6.9, 7.8, 8.8],
+      [6, 5.7, 6.5, 7.3, 8.2, 9.3], [7, 6.0, 6.8, 7.6, 8.6, 9.8], [8, 6.3, 7.0, 7.9, 9.0, 10.2],
+      [9, 6.5, 7.3, 8.2, 9.3, 10.5], [10, 6.7, 7.5, 8.5, 9.6, 10.9], [11, 6.9, 7.7, 8.7, 9.9, 11.2],
+      [12, 7.0, 7.9, 8.9, 10.1, 11.5], [13, 7.2, 8.1, 9.2, 10.4, 11.8], [14, 7.4, 8.3, 9.4, 10.6, 12.1],
+      [15, 7.6, 8.5, 9.6, 10.9, 12.4], [16, 7.7, 8.7, 9.8, 11.1, 12.6], [17, 7.9, 8.9, 10.0, 11.4, 12.9],
+      [18, 8.1, 9.1, 10.2, 11.6, 13.2], [19, 8.2, 9.2, 10.4, 11.8, 13.5], [20, 8.4, 9.4, 10.6, 12.1, 13.7],
+      [21, 8.6, 9.6, 10.9, 12.3, 14.0], [22, 8.7, 9.8, 11.1, 12.5, 14.3], [23, 8.9, 10.0, 11.3, 12.8, 14.6],
+      [24, 9.0, 10.2, 11.5, 13.0, 14.8],
+    ],
+    te: [
+      [0, 45.4, 47.3, 49.1, 51.0, 52.9], [1, 49.8, 51.7, 53.7, 55.6, 57.6], [2, 53.0, 55.0, 57.1, 59.1, 61.1],
+      [3, 55.6, 57.7, 59.8, 61.9, 64.0], [4, 57.8, 59.9, 62.1, 64.3, 66.4], [5, 59.6, 61.8, 64.0, 66.2, 68.5],
+      [6, 61.2, 63.5, 65.7, 68.0, 70.3], [7, 62.7, 65.0, 67.3, 69.6, 71.9], [8, 64.0, 66.4, 68.7, 71.1, 73.5],
+      [9, 65.3, 67.7, 70.1, 72.6, 75.0], [10, 66.5, 69.0, 71.5, 73.9, 76.4], [11, 67.7, 70.3, 72.8, 75.3, 77.8],
+      [12, 68.9, 71.4, 74.0, 76.6, 79.2], [13, 70.0, 72.6, 75.2, 77.8, 80.5], [14, 71.0, 73.7, 76.4, 79.1, 81.7],
+      [15, 72.0, 74.8, 77.5, 80.2, 83.0], [16, 73.0, 75.8, 78.6, 81.4, 84.2], [17, 74.0, 76.8, 79.7, 82.5, 85.4],
+      [18, 74.9, 77.8, 80.7, 83.6, 86.5], [19, 75.8, 78.8, 81.7, 84.7, 87.6], [20, 76.7, 79.7, 82.7, 85.7, 88.7],
+      [21, 77.5, 80.6, 83.7, 86.7, 89.8], [22, 78.4, 81.5, 84.6, 87.7, 90.8], [23, 79.2, 82.3, 85.5, 88.7, 91.9],
+      [24, 80.0, 83.2, 86.4, 89.6, 92.9],
+    ],
+    pce: [
+      [0, 31.5, 32.7, 33.9, 35.1, 36.2], [1, 34.2, 35.4, 36.5, 37.7, 38.9], [2, 35.8, 37.0, 38.3, 39.5, 40.7],
+      [3, 37.1, 38.3, 39.5, 40.8, 42.0], [4, 38.1, 39.3, 40.6, 41.8, 43.1], [5, 38.9, 40.2, 41.5, 42.7, 44.0],
+      [6, 39.6, 40.9, 42.2, 43.5, 44.8], [7, 40.2, 41.5, 42.8, 44.1, 45.5], [8, 40.7, 42.0, 43.4, 44.7, 46.0],
+      [9, 41.2, 42.5, 43.8, 45.2, 46.5], [10, 41.5, 42.9, 44.2, 45.6, 46.9], [11, 41.9, 43.2, 44.6, 45.9, 47.3],
+      [12, 42.2, 43.5, 44.9, 46.3, 47.6], [13, 42.5, 43.8, 45.2, 46.6, 47.9], [14, 42.7, 44.1, 45.4, 46.8, 48.2],
+      [15, 42.9, 44.3, 45.7, 47.1, 48.4], [16, 43.1, 44.5, 45.9, 47.3, 48.6], [17, 43.3, 44.7, 46.1, 47.5, 48.8],
+      [18, 43.5, 44.9, 46.2, 47.6, 49.0], [19, 43.7, 45.1, 46.4, 47.8, 49.2], [20, 43.8, 45.2, 46.6, 48.0, 49.4],
+      [21, 44.0, 45.4, 46.7, 48.1, 49.5], [22, 44.1, 45.5, 46.9, 48.3, 49.7], [23, 44.3, 45.7, 47.0, 48.4, 49.9],
+      [24, 44.4, 45.8, 47.2, 48.6, 50.0],
+    ],
+    pt: [
+      [45, 2.1, 2.3, 2.5, 2.7, 3.0], [50, 2.8, 3.1, 3.4, 3.7, 4.0], [55, 3.8, 4.2, 4.5, 5.0, 5.5],
+      [60, 5.0, 5.4, 5.9, 6.4, 7.0], [65, 6.1, 6.6, 7.2, 7.9, 8.7], [70, 6.9, 7.5, 8.2, 9.0, 9.9],
+      [75, 7.7, 8.4, 9.1, 10.0, 11.0], [80, 8.6, 9.3, 10.1, 11.0, 12.1], [85, 9.6, 10.4, 11.3, 12.3, 13.5],
+      [90, 10.6, 11.6, 12.6, 13.8, 15.1], [95, 11.7, 12.7, 13.9, 15.2, 16.6],
+    ],
+  },
+};
+
+function obtenerSexoBebe() {
+  const s = (bebe?.sexo || localStorage.getItem('nebu_bebe_sexo') || 'nino').toLowerCase();
+  return s === 'nina' ? 'nina' : 'nino';
+}
+
+function interpolarCurvaMinsal(tabla, xVal) {
+  if (!tabla || !tabla.length) return null;
+  if (xVal <= tabla[0][0]) return tabla[0].slice(1);
+  if (xVal >= tabla[tabla.length - 1][0]) return tabla[tabla.length - 1].slice(1);
+  for (let i = 0; i < tabla.length - 1; i++) {
+    const a = tabla[i];
+    const b = tabla[i + 1];
+    if (xVal >= a[0] && xVal <= b[0]) {
+      const t = (xVal - a[0]) / (b[0] - a[0] || 1);
+      return [1, 2, 3, 4, 5].map((idx) => Math.round((a[idx] + (b[idx] - a[idx]) * t) * 100) / 100);
+    }
+  }
+  return tabla[0].slice(1);
+}
+
+function evaluarEstadoNutricionalMinsal(mesesEdad, pesoKg, tallaCm, perimCm, sexoKey) {
+  const pat = PATRONES_MINSAL[sexoKey === 'nina' ? 'nina' : 'nino'];
+  const res = {
+    nutricional: { texto: 'Sin datos', color: 'var(--muted)' },
+    estatural: { texto: 'Sin datos', color: 'var(--muted)' },
+    cefalico: { texto: 'Sin datos', color: 'var(--muted)' },
+  };
+
+  if (pesoKg > 0 && mesesEdad != null) {
+    const refPE = interpolarCurvaMinsal(pat.pe, mesesEdad);
+    const refPT = tallaCm > 0 ? interpolarCurvaMinsal(pat.pt, tallaCm) : null;
+    // Norma MINSAL (< 1 año usa P/E salvo que P/T >= +1DE; >= 1 año usa P/T)
+    const usarPT = (mesesEdad >= 12 && refPT) || (refPT && pesoKg >= refPT[3]);
+    const ref = usarPT ? refPT : refPE;
+    const indNombre = usarPT ? 'P/T' : 'P/E';
+    if (ref) {
+      if (pesoKg <= ref[0]) res.nutricional = { texto: `Desnutrición (${indNombre} ≤ -2 DE)`, color: '#ef4444' };
+      else if (pesoKg <= ref[1]) res.nutricional = { texto: `Riesgo de Desnutrir (${indNombre} -1 a -2 DE)`, color: '#f59e0b' };
+      else if (pesoKg >= ref[4]) res.nutricional = { texto: `Obesidad (${indNombre} ≥ +2 DE)`, color: '#ef4444' };
+      else if (pesoKg >= ref[3]) res.nutricional = { texto: `Sobrepeso (${indNombre} +1 a +2 DE)`, color: '#f59e0b' };
+      else res.nutricional = { texto: `Normal / Eutrófico (${indNombre})`, color: '#199e70' };
+    }
+  }
+
+  if (tallaCm > 0 && mesesEdad != null) {
+    const refTE = interpolarCurvaMinsal(pat.te, mesesEdad);
+    if (refTE) {
+      if (tallaCm <= refTE[0]) res.estatural = { texto: 'Talla Baja (T/E ≤ -2 DE)', color: '#ef4444' };
+      else if (tallaCm <= refTE[1]) res.estatural = { texto: 'Talla Normal Baja (T/E)', color: '#f59e0b' };
+      else if (tallaCm >= refTE[4]) res.estatural = { texto: 'Talla Alta (T/E ≥ +2 DE)', color: '#3987e5' };
+      else if (tallaCm >= refTE[3]) res.estatural = { texto: 'Talla Normal Alta (T/E)', color: '#199e70' };
+      else res.estatural = { texto: 'Talla Normal (T/E)', color: '#199e70' };
+    }
+  }
+
+  if (perimCm > 0 && mesesEdad != null) {
+    const refPCE = interpolarCurvaMinsal(pat.pce, mesesEdad);
+    if (refPCE) {
+      if (perimCm <= refPCE[0]) res.cefalico = { texto: 'Microcefalia (PCe/E ≤ -2 DE)', color: '#ef4444' };
+      else if (perimCm >= refPCE[4]) res.cefalico = { texto: 'Macrocefalia (PCe/E ≥ +2 DE)', color: '#ef4444' };
+      else res.cefalico = { texto: 'Normal (PCe/E entre ±2 DE)', color: '#199e70' };
+    }
+  }
+
+  return res;
+}
+
+function crearDatasetsCurvaMinsal(tabla, puntosBebe, unidadY) {
+  const mkLineaRef = (label, colIdx, color, dash, width = 1.6) => ({
+    label,
+    data: tabla.map((r) => ({ x: r[0], y: r[colIdx] })),
+    borderColor: color,
+    backgroundColor: 'transparent',
+    borderWidth: width,
+    borderDash: dash,
+    pointRadius: 0,
+    pointHoverRadius: 3,
+    tension: 0.32,
+  });
+
+  return [
+    mkLineaRef('+2 DE', 5, 'rgba(239, 68, 68, 0.75)', [5, 4], 1.5),
+    mkLineaRef('+1 DE', 4, 'rgba(245, 158, 11, 0.78)', [4, 4], 1.5),
+    mkLineaRef('Mediana (0 DE)', 3, '#10b981', [], 2.3),
+    mkLineaRef('-1 DE', 2, 'rgba(245, 158, 11, 0.78)', [4, 4], 1.5),
+    mkLineaRef('-2 DE', 1, 'rgba(239, 68, 68, 0.75)', [5, 4], 1.5),
+    {
+      label: `★ ${bebe?.nombre || 'Mi bebé'} (${unidadY})`,
+      data: puntosBebe,
+      borderColor: '#38bdf8',
+      backgroundColor: '#38bdf8',
+      borderWidth: 3,
+      pointRadius: 5.5,
+      pointHoverRadius: 7.5,
+      pointBackgroundColor: '#ffffff',
+      pointBorderColor: '#0284c7',
+      pointBorderWidth: 2.5,
+      tension: 0.25,
+    },
+  ];
+}
+
+function optsCurvaMinsal(xLabel, yLabel, unidadY) {
+  const opts = baseChartOpts({
+    callbacks: {
+      title: (items) => {
+        const raw = items[0]?.raw;
+        if (raw?.ctrlLabel) return `${raw.ctrlLabel} (${raw.x} ${xLabel})`;
+        return `${items[0]?.parsed?.x} ${xLabel}`;
+      },
+      label: (c) => ` ${c.dataset.label}: ${c.parsed.y} ${unidadY}`,
+    },
+  });
+  opts.scales.x = {
+    type: 'linear',
+    title: { display: true, text: xLabel, color: cssVar('--text-2'), font: { size: 11, weight: '700' } },
+    grid: { color: cssVar('--border') },
+    ticks: { color: cssVar('--muted'), font: { size: 10 }, stepSize: xLabel.includes('cm') ? 5 : 2 },
+  };
+  opts.scales.y.title = { display: true, text: yLabel, color: cssVar('--text-2'), font: { size: 11, weight: '700' } };
+  opts.scales.y.beginAtZero = false;
+  opts.plugins.legend = {
+    display: true,
+    position: 'top',
+    labels: { usePointStyle: true, boxWidth: 8, boxHeight: 8, color: cssVar('--text-2'), font: { size: 10 } },
+  };
+  return opts;
+}
+
+function renderChartsCrecimiento() {
+  if (!$('statsPanelCrecimiento')) return;
+  ['crecPE', 'crecTE', 'crecPCE', 'crecPT'].forEach((k) => {
+    if (charts[k]) { charts[k].destroy(); delete charts[k]; }
+  });
+
+  const sexo = obtenerSexoBebe();
+  $('crecSexoNino')?.classList.toggle('active', sexo === 'nino');
+  $('crecSexoNina')?.classList.toggle('active', sexo === 'nina');
+
+  const pat = PATRONES_MINSAL[sexo];
+  const controlesRealizados = typeof obtenerControlesConMediciones === 'function'
+    ? obtenerControlesConMediciones()
+    : [];
+
+  const ptsPE = controlesRealizados
+    .filter((c) => c.peso_kg > 0)
+    .map((c) => ({ x: c.meses, y: Number(c.peso_kg), ctrlLabel: c.nombre }));
+  const ptsTE = controlesRealizados
+    .filter((c) => c.talla_cm > 0)
+    .map((c) => ({ x: c.meses, y: Number(c.talla_cm), ctrlLabel: c.nombre }));
+  const ptsPCE = controlesRealizados
+    .filter((c) => c.perimetro_cm > 0)
+    .map((c) => ({ x: c.meses, y: Number(c.perimetro_cm), ctrlLabel: c.nombre }));
+  const ptsPT = controlesRealizados
+    .filter((c) => c.talla_cm > 0 && c.peso_kg > 0)
+    .map((c) => ({ x: Number(c.talla_cm), y: Number(c.peso_kg), ctrlLabel: c.nombre }));
+
+  const ult = controlesRealizados[controlesRealizados.length - 1] || null;
+  const diagWrap = $('crecimientoDiagnosticoWrap');
+  if (diagWrap) {
+    if (ult) {
+      const diag = evaluarEstadoNutricionalMinsal(ult.meses, ult.peso_kg, ult.talla_cm, ult.perimetro_cm, sexo);
+      diagWrap.innerHTML = `
+        <div class="crec-diag-item" style="border-left:4px solid ${diag.nutricional.color};">
+          <small>⚖️ Estado Nutricional (${escapeHtml(ult.nombre)})</small>
+          <strong style="color:${diag.nutricional.color};">${escapeHtml(diag.nutricional.texto)}</strong>
+          <small>${ult.peso_kg ? ult.peso_kg + ' kg' : '—'}</small>
+        </div>
+        <div class="crec-diag-item" style="border-left:4px solid ${diag.estatural.color};">
+          <small>📏 Calificación Estatural (T/E)</small>
+          <strong style="color:${diag.estatural.color};">${escapeHtml(diag.estatural.texto)}</strong>
+          <small>${ult.talla_cm ? ult.talla_cm + ' cm' : '—'}</small>
+        </div>
+        <div class="crec-diag-item" style="border-left:4px solid ${diag.cefalico.color};">
+          <small>🧠 Perímetro Cefálico (PCe/E)</small>
+          <strong style="color:${diag.cefalico.color};">${escapeHtml(diag.cefalico.texto)}</strong>
+          <small>${ult.perimetro_cm ? ult.perimetro_cm + ' cm' : 'Pendiente de medir'}</small>
+        </div>
+      `;
+    } else {
+      diagWrap.innerHTML = `
+        <div class="crec-diag-item" style="grid-column: 1 / -1;">
+          <small>🩺 Controles de Niño Sano</small>
+          <strong>Sin controles registrados todavía</strong>
+          <small>Registra los datos de tu Control de Niño Sano en la pestaña Info para graficar la curva de tu bebé.</small>
+        </div>
+      `;
+    }
+  }
+
+  const mapCards = {
+    pe: $('cardChartCrecPE'),
+    te: $('cardChartCrecTE'),
+    pce: $('cardChartCrecPCE'),
+    pt: $('cardChartCrecPT'),
+  };
+  for (const [k, card] of Object.entries(mapCards)) {
+    if (card) card.classList.toggle('hidden', crecimientoIndFiltro !== 'todos' && crecimientoIndFiltro !== k);
+  }
+
+  if ($('chartCrecimientoPE')) {
+    charts.crecPE = new Chart($('chartCrecimientoPE'), {
+      type: 'line',
+      data: { datasets: crearDatasetsCurvaMinsal(pat.pe, ptsPE, 'kg') },
+      options: optsCurvaMinsal('meses', 'Peso (kg)', 'kg'),
+    });
+  }
+  if ($('chartCrecimientoTE')) {
+    charts.crecTE = new Chart($('chartCrecimientoTE'), {
+      type: 'line',
+      data: { datasets: crearDatasetsCurvaMinsal(pat.te, ptsTE, 'cm') },
+      options: optsCurvaMinsal('meses', 'Longitud / Talla (cm)', 'cm'),
+    });
+  }
+  if ($('chartCrecimientoPCE')) {
+    charts.crecPCE = new Chart($('chartCrecimientoPCE'), {
+      type: 'line',
+      data: { datasets: crearDatasetsCurvaMinsal(pat.pce, ptsPCE, 'cm') },
+      options: optsCurvaMinsal('meses', 'Perímetro Cefálico (cm)', 'cm'),
+    });
+  }
+  if ($('chartCrecimientoPT')) {
+    charts.crecPT = new Chart($('chartCrecimientoPT'), {
+      type: 'line',
+      data: { datasets: crearDatasetsCurvaMinsal(pat.pt, ptsPT, 'kg') },
+      options: optsCurvaMinsal('cm de longitud', 'Peso (kg)', 'kg'),
+    });
+  }
+}
+
+function cambiarSubTabStats(sub) {
+  statsSubTab = sub === 'crecimiento' ? 'crecimiento' : 'rutina';
+  localStorage.setItem('stats_subtab', statsSubTab);
+  $('statsTabRutinaBtn')?.classList.toggle('active', statsSubTab === 'rutina');
+  $('statsTabCrecimientoBtn')?.classList.toggle('active', statsSubTab === 'crecimiento');
+  $('statsPanelRutina')?.classList.toggle('hidden', statsSubTab !== 'rutina');
+  $('statsPanelCrecimiento')?.classList.toggle('hidden', statsSubTab !== 'crecimiento');
+  if (statsSubTab === 'crecimiento') renderChartsCrecimiento();
+  else renderCharts();
+}
+
+$('statsTabRutinaBtn')?.addEventListener('click', () => cambiarSubTabStats('rutina'));
+$('statsTabCrecimientoBtn')?.addEventListener('click', () => cambiarSubTabStats('crecimiento'));
+
+$('crecimientoIndTabs')?.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-crec-ind]');
+  if (!b) return;
+  crecimientoIndFiltro = b.dataset.crecInd || 'todos';
+  document.querySelectorAll('#crecimientoIndTabs .chip-filter').forEach((el) => {
+    el.classList.toggle('active', el.dataset.crecInd === crecimientoIndFiltro);
+  });
+  renderChartsCrecimiento();
+});
+
+document.querySelectorAll('[data-sexo-pat]').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const nuevoSexo = btn.dataset.sexoPat === 'nina' ? 'nina' : 'nino';
+    localStorage.setItem('nebu_bebe_sexo', nuevoSexo);
+    if (bebe) bebe.sexo = nuevoSexo;
+    if ($('infoSexo')) $('infoSexo').value = nuevoSexo;
+    renderChartsCrecimiento();
+  });
+});
+
+// ---------- Tabs, Permisos de Módulos y Administrador (5D5005) ----------
+const CODIGO_ADMIN_BEBE = '5D5005';
+const MODULOS_PRINCIPALES_DEFAULT = ['stats', 'leche', 'panales', 'comidas', 'sueno'];
+
 const TABS = {
   stats: { icon: '📊', label: 'Stats' },
   alertas: { icon: '🚨', label: 'Alertas' },
@@ -1636,6 +1997,55 @@ const TABS = {
 
 const ORDEN_DEFAULT = ['stats', 'alertas', 'leche', 'comidas', 'vitaminas', 'panales', 'sueno', 'info', 'bitacora', 'juegos'];
 
+function esAdminBebe() {
+  if (!bebe) return false;
+  const cod = String(bebe.codigo || '').trim().toUpperCase();
+  return cod === CODIGO_ADMIN_BEBE || bebe.es_admin === true || bebe.whatsapp_config?.es_admin === true;
+}
+
+function tieneWspYAlertasDesbloqueado() {
+  if (esAdminBebe()) return true;
+  return Boolean(bebe?.wsp_desbloqueado || bebe?.whatsapp_config?.wsp_desbloqueado);
+}
+
+function obtenerModulosDesbloqueados() {
+  if (!bebe || esAdminBebe()) return ORDEN_DEFAULT.slice();
+  const desdeBebe = Array.isArray(bebe.modulos_desbloqueados)
+    ? bebe.modulos_desbloqueados
+    : (Array.isArray(bebe.whatsapp_config?.modulos_desbloqueados) ? bebe.whatsapp_config.modulos_desbloqueados : null);
+  const base = desdeBebe ? desdeBebe.filter((k) => TABS[k]) : MODULOS_PRINCIPALES_DEFAULT.slice();
+  if (!tieneWspYAlertasDesbloqueado()) {
+    return base.filter((k) => k !== 'alertas');
+  }
+  return base.length ? base : MODULOS_PRINCIPALES_DEFAULT.slice();
+}
+
+function leerVisibilidadTabs() {
+  const desbloqueados = new Set(obtenerModulosDesbloqueados());
+  try {
+    const raw = localStorage.getItem(`visibilidad_tabs_${bebe?.codigo || 'default'}`) || localStorage.getItem('visibilidad_tabs');
+    const guardado = JSON.parse(raw || 'null');
+    if (Array.isArray(guardado)) {
+      const filtrados = guardado.filter((k) => desbloqueados.has(k));
+      return filtrados.length ? filtrados : Array.from(desbloqueados);
+    }
+  } catch {}
+  if (Array.isArray(bebe?.modulos_visibles)) {
+    const filtrados = bebe.modulos_visibles.filter((k) => desbloqueados.has(k));
+    if (filtrados.length) return filtrados;
+  }
+  return Array.from(desbloqueados);
+}
+
+function guardarVisibilidadTabs(listaVisibles) {
+  const validos = listaVisibles.filter((k) => TABS[k]);
+  const final = validos.length ? validos : ['stats'];
+  localStorage.setItem('visibilidad_tabs', JSON.stringify(final));
+  if (bebe?.codigo) {
+    localStorage.setItem(`visibilidad_tabs_${bebe.codigo}`, JSON.stringify(final));
+  }
+}
+
 function leerOrdenTabs() {
   try {
     const guardado = JSON.parse(localStorage.getItem('orden_tabs') || 'null');
@@ -1648,8 +2058,15 @@ function leerOrdenTabs() {
   return ORDEN_DEFAULT.slice();
 }
 
+function obtenerTabsActivasBarra() {
+  const desbloqueados = new Set(obtenerModulosDesbloqueados());
+  const visibles = new Set(leerVisibilidadTabs());
+  const orden = leerOrdenTabs().filter((k) => desbloqueados.has(k) && visibles.has(k));
+  return orden.length ? orden : ['stats'];
+}
+
 function renderTabbar() {
-  const orden = leerOrdenTabs();
+  const orden = obtenerTabsActivasBarra();
   const barra = orden.slice(0, 4);
   const mas = orden.slice(4);
 
@@ -3479,15 +3896,17 @@ function renderAlertas() {
 }
 
 async function actualizarAlertasYBadge() {
-  if (typeof evaluarAlertasRutina === 'function') {
+  if (typeof evaluarAlertasRutina === 'function' && tieneWspYAlertasDesbloqueado()) {
     const res = evaluarAlertasRutina(cache);
     window.conteoAlertasActivas = res.conteoActivas;
+  } else {
+    window.conteoAlertasActivas = 0;
   }
   renderTabbar();
   if (currentTab === 'alertas') {
     renderAlertas();
   }
-  if (typeof verificarYDespacharAlertasWhatsApp === 'function' && bebe) {
+  if (typeof verificarYDespacharAlertasWhatsApp === 'function' && bebe && tieneWspYAlertasDesbloqueado()) {
     await verificarYDespacharAlertasWhatsApp(cache, { bebe, miRol, dbClient: db });
   }
 }
@@ -3501,7 +3920,14 @@ function renderTab(tab) {
   const tabName = TABS[tab]?.label || 'Rutinas';
   document.title = `${tabName} | Rutinas del Bebé`;
 
-  if (tab === 'stats') { if (statsDirty) renderCharts(); }
+  if (tab === 'stats') {
+    $('statsTabRutinaBtn')?.classList.toggle('active', statsSubTab === 'rutina');
+    $('statsTabCrecimientoBtn')?.classList.toggle('active', statsSubTab === 'crecimiento');
+    $('statsPanelRutina')?.classList.toggle('hidden', statsSubTab !== 'rutina');
+    $('statsPanelCrecimiento')?.classList.toggle('hidden', statsSubTab !== 'crecimiento');
+    if (statsSubTab === 'crecimiento') renderChartsCrecimiento();
+    else if (statsDirty) renderCharts();
+  }
   else if (tab === 'alertas') renderAlertas();
   else if (tab === 'leche') renderLeche();
   else if (tab === 'comidas') renderComidas();
@@ -3514,6 +3940,11 @@ function renderTab(tab) {
 }
 
 function activarTab(tab) {
+  const desbloqueados = obtenerModulosDesbloqueados();
+  if (!desbloqueados.includes(tab)) {
+    toast('🔒 Este módulo está bloqueado. Solicita acceso al administrador.', true);
+    tab = desbloqueados[0] || 'stats';
+  }
   currentTab = tab;
   localStorage.setItem('tab', tab);
   renderTabbar();
@@ -4017,7 +4448,25 @@ $('editGuardar').addEventListener('click', async () => {
   }
 });
 
-// ---------- Información del Bebé y Padres ----------
+// ---------- Controles de Niño Sano (MINSAL), Alergias e Información del Bebé ----------
+const SYSTEM_CONTROLES_SANO = '__controles_nino_sano__';
+
+const CATALOGO_CONTROLES_NINO_SANO = [
+  { key: 'rn', label: 'Recién Nacido (Alta)', dias: 0, meses: 0 },
+  { key: '10d', label: 'Control 10 días (Diada)', dias: 10, meses: 0.33 },
+  { key: '15d', label: 'Control 15 días', dias: 15, meses: 0.5 },
+  { key: '1m', label: 'Control 1 mes', dias: 30, meses: 1 },
+  { key: '2m', label: 'Control 2 meses', dias: 60, meses: 2 },
+  { key: '3m', label: 'Control 3 meses', dias: 90, meses: 3 },
+  { key: '4m', label: 'Control 4 meses', dias: 120, meses: 4 },
+  { key: '5m', label: 'Control 5 meses', dias: 150, meses: 5 },
+  { key: '6m', label: 'Control 6 meses', dias: 180, meses: 6 },
+  { key: '8m', label: 'Control 8 meses', dias: 240, meses: 8 },
+  { key: '12m', label: 'Control 12 meses (1 año)', dias: 365, meses: 12 },
+  { key: '18m', label: 'Control 18 meses (1a 6m)', dias: 547, meses: 18 },
+  { key: '24m', label: 'Control 24 meses (2 años)', dias: 730, meses: 24 },
+];
+
 function calcularEdad(fNac) {
   if (!fNac) return '';
   const nac = new Date(fNac + 'T12:00'), hoy = new Date();
@@ -4031,22 +4480,591 @@ function calcularEdad(fNac) {
   return `${meses} mes${meses === 1 ? '' : 'es'}`;
 }
 
+function calcularDiasEdad(fNac) {
+  if (!fNac) return null;
+  const nac = new Date(fNac + 'T12:00');
+  if (isNaN(nac.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - nac.getTime()) / 86400000));
+}
+
+function fechaEsperadaControl(fNac, diasCtrl) {
+  if (!fNac) return null;
+  const nac = new Date(fNac + 'T12:00');
+  if (isNaN(nac.getTime())) return null;
+  return new Date(nac.getTime() + diasCtrl * 86400000);
+}
+
+function leerControlesNinoSano() {
+  let mapa = {};
+  const rec = (cache.bitacora || []).find((r) => r.titulo === SYSTEM_CONTROLES_SANO);
+  if (rec?.notas) {
+    try {
+      const parsed = JSON.parse(rec.notas);
+      if (parsed && typeof parsed === 'object') mapa = parsed;
+    } catch {}
+  } else {
+    try {
+      const ls = JSON.parse(localStorage.getItem(`nebu_controles_sano_${bebe?.id || 'default'}`) || 'null');
+      if (ls && typeof ls === 'object') mapa = ls;
+    } catch {}
+  }
+
+  // Si aún no hay controles guardados pero el bebé ya tiene peso o talla (ej. 5D5005), inicializar el control acorde a su edad actual
+  if (Object.keys(mapa).length === 0 && bebe && (bebe.peso_kg || bebe.talla_cm)) {
+    const diasEdad = calcularDiasEdad(bebe.fecha_nacimiento) ?? 180;
+    let ctrlBase = CATALOGO_CONTROLES_NINO_SANO[0];
+    for (const c of CATALOGO_CONTROLES_NINO_SANO) {
+      if (c.dias <= diasEdad + 12) ctrlBase = c;
+    }
+    mapa[ctrlBase.key] = {
+      key: ctrlBase.key,
+      label: ctrlBase.label,
+      meses: ctrlBase.meses,
+      peso_kg: bebe.peso_kg ? Number(bebe.peso_kg) : null,
+      talla_cm: bebe.talla_cm ? Number(bebe.talla_cm) : null,
+      perimetro_cefalico_cm: bebe.perimetro_cefalico_cm ? Number(bebe.perimetro_cefalico_cm) : null,
+      observaciones: 'Medición base sincronizada del perfil del bebé.',
+      completado: true,
+      fecha_realizada: dayKey(new Date()),
+    };
+  }
+  return mapa;
+}
+
+async function guardarControlesNinoSano(mapa) {
+  if (!bebe?.id) return;
+  try {
+    localStorage.setItem(`nebu_controles_sano_${bebe.id}`, JSON.stringify(mapa));
+  } catch {}
+  const notasStr = JSON.stringify(mapa);
+  const today = dayKey(new Date());
+  const rec = (cache.bitacora || []).find((r) => r.titulo === SYSTEM_CONTROLES_SANO);
+  if (rec?.id) {
+    await db.from('bitacora').update({ notas: notasStr, fecha: today }).eq('id', rec.id);
+  } else {
+    await db.from('bitacora').insert({ bebe_id: bebe.id, titulo: SYSTEM_CONTROLES_SANO, fecha: today, notas: notasStr });
+  }
+  await loadData('bitacora');
+}
+
+function obtenerControlesConMediciones() {
+  const mapa = leerControlesNinoSano();
+  const lista = [];
+  for (const cat of CATALOGO_CONTROLES_NINO_SANO) {
+    const reg = mapa[cat.key];
+    if (reg && (reg.peso_kg > 0 || reg.talla_cm > 0 || reg.perimetro_cefalico_cm > 0)) {
+      lista.push({
+        ...cat,
+        ...reg,
+        meses: cat.meses,
+        label: cat.label,
+      });
+    }
+  }
+  return lista.sort((a, b) => a.dias - b.dias);
+}
+
+function obtenerUltimoControlConDatos() {
+  const med = obtenerControlesConMediciones();
+  return med.length ? med[med.length - 1] : null;
+}
+
+function obtenerProximoControlPendiente() {
+  if (!bebe?.fecha_nacimiento) return CATALOGO_CONTROLES_NINO_SANO.find((c) => c.key === '10d') || CATALOGO_CONTROLES_NINO_SANO[0];
+  const mapa = leerControlesNinoSano();
+  const diasEdad = calcularDiasEdad(bebe.fecha_nacimiento) ?? 0;
+
+  // Primero buscar el primer control cuya fecha sea futura o reciente y no esté completado
+  for (const cat of CATALOGO_CONTROLES_NINO_SANO) {
+    const reg = mapa[cat.key];
+    if (reg?.completado) continue;
+    if (cat.dias >= diasEdad - 15) return cat;
+  }
+  // Si todos los anteriores no están marcados, devolver el siguiente después de la edad actual
+  for (const cat of CATALOGO_CONTROLES_NINO_SANO) {
+    if (!mapa[cat.key]?.completado && cat.dias >= diasEdad) return cat;
+  }
+  return CATALOGO_CONTROLES_NINO_SANO[CATALOGO_CONTROLES_NINO_SANO.length - 1];
+}
+
+function renderControlesNinoSanoInfo() {
+  const listaEl = $('infoControlesLista');
+  const bannerEl = $('infoProximoControlBanner');
+  if (!listaEl) return;
+
+  const mapa = leerControlesNinoSano();
+  const sexo = obtenerSexoBebe();
+  const prox = obtenerProximoControlPendiente();
+
+  if (bannerEl && prox) {
+    const regProx = mapa[prox.key] || {};
+    const fEsp = fechaEsperadaControl(bebe?.fecha_nacimiento, prox.dias);
+    const fEspTxt = fEsp ? fEsp.toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Según fecha de nacimiento';
+    const tieneCita = Boolean(regProx.fecha_programada);
+    const citaDate = tieneCita ? new Date(regProx.fecha_programada) : null;
+    const citaTxt = (citaDate && !isNaN(citaDate.getTime()))
+      ? `${citaDate.toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' })} a las ${fmtTime(citaDate)} hrs`
+      : null;
+
+    bannerEl.classList.remove('hidden');
+    bannerEl.innerHTML = `
+      <div>
+        <strong>🗓️ Próximo control: ${escapeHtml(prox.label)}</strong>
+        <small>${citaTxt ? `Cita agendada para el <b>${escapeHtml(citaTxt)}</b>` : `Fecha estimada por edad: <b>${escapeHtml(fEspTxt)}</b> (aviso automático 5 días antes)`}</small>
+      </div>
+      <div class="info-proximo-actions">
+        <button type="button" class="btn-secondary" data-agendar-ctrl="${prox.key}" style="padding:6px 10px; font-size:0.76rem;">📅 ${tieneCita ? 'Cambiar fecha/hora' : 'Agendar fecha/hora'}</button>
+        <button type="button" class="btn-primary" data-registrar-ctrl="${prox.key}" style="padding:6px 12px; font-size:0.76rem; width:auto;">📝 Registrar datos</button>
+      </div>
+    `;
+  }
+
+  listaEl.innerHTML = CATALOGO_CONTROLES_NINO_SANO.map((cat) => {
+    const reg = mapa[cat.key];
+    const completado = Boolean(reg && (reg.completado || reg.peso_kg || reg.talla_cm || reg.perimetro_cefalico_cm));
+    const programado = Boolean(!completado && reg?.fecha_programada);
+    const fEsp = fechaEsperadaControl(bebe?.fecha_nacimiento, cat.dias);
+    const fEspStr = fEsp ? fEsp.toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+
+    let badgeHtml = `<span class="ctrl-sano-badge pendiente">⏳ Pendiente${fEspStr ? ` · ${fEspStr}` : ''}</span>`;
+    if (completado) {
+      badgeHtml = `<span class="ctrl-sano-badge completado">✅ Realizado${reg.fecha_realizada ? ` · ${reg.fecha_realizada}` : ''}</span>`;
+    } else if (programado) {
+      const dCita = new Date(reg.fecha_programada);
+      const txtCita = !isNaN(dCita.getTime()) ? `${dCita.toLocaleDateString('es', { day: '2-digit', month: 'short' })} ${fmtTime(dCita)}` : reg.fecha_programada;
+      badgeHtml = `<span class="ctrl-sano-badge programado">📅 Cita: ${escapeHtml(txtCita)}</span>`;
+    }
+
+    let metricsHtml = '';
+    if (completado) {
+      const diag = evaluarEstadoNutricionalMinsal(sexo, cat.meses, reg.peso_kg, reg.talla_cm, reg.perimetro_cefalico_cm);
+      metricsHtml = `
+        <div class="ctrl-sano-metrics">
+          <div class="ctrl-sano-metric"><span>Peso</span><strong>${reg.peso_kg ? `${reg.peso_kg} kg` : '—'}</strong></div>
+          <div class="ctrl-sano-metric"><span>Talla</span><strong>${reg.talla_cm ? `${reg.talla_cm} cm` : '—'}</strong></div>
+          <div class="ctrl-sano-metric"><span>P. Encefálico</span><strong>${reg.perimetro_cefalico_cm ? `${reg.perimetro_cefalico_cm} cm` : '—'}</strong></div>
+        </div>
+        ${diag ? `<div style="display:flex; flex-wrap:wrap; gap:6px; font-size:0.73rem;">
+          <span style="padding:2px 8px; border-radius:999px; background:rgba(255,255,255,0.06); color:${diag.colorNut}; font-weight:700;">Nutricional (${diag.indicadorPrincipal}): ${escapeHtml(diag.estadoNutricional)}</span>
+          <span style="padding:2px 8px; border-radius:999px; background:rgba(255,255,255,0.06); color:${diag.colorTalla}; font-weight:700;">Talla: ${escapeHtml(diag.estadoTalla)}</span>
+          ${reg.perimetro_cefalico_cm ? `<span style="padding:2px 8px; border-radius:999px; background:rgba(255,255,255,0.06); color:${diag.colorPce}; font-weight:700;">PCe: ${escapeHtml(diag.estadoPce)}</span>` : ''}
+        </div>` : ''}
+        ${reg.observaciones ? `<div class="ctrl-sano-obs"><strong>Observaciones:</strong> ${escapeHtml(reg.observaciones)}</div>` : ''}
+      `;
+    }
+
+    return `
+      <div class="ctrl-sano-card${completado ? ' completado' : (programado ? ' programado' : '')}">
+        <div class="ctrl-sano-head">
+          <div>
+            <div class="ctrl-sano-title">🩺 ${escapeHtml(cat.label)}</div>
+            <small style="color:var(--muted); font-size:0.72rem;">Edad referencia: ${cat.dias === 0 ? 'Nacimiento' : (cat.dias < 30 ? `${cat.dias} días` : `${cat.meses} mes${cat.meses === 1 ? '' : 'es'}`)}</small>
+          </div>
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            ${badgeHtml}
+            <button type="button" class="btn-secondary" data-agendar-ctrl="${cat.key}" style="padding:4px 8px; font-size:0.72rem;" title="Agendar fecha/hora">📅</button>
+            <button type="button" class="btn-secondary" data-registrar-ctrl="${cat.key}" style="padding:4px 9px; font-size:0.72rem;">✏️ ${completado ? 'Editar' : 'Registrar'}</button>
+          </div>
+        </div>
+        ${metricsHtml}
+      </div>
+    `;
+  }).join('');
+}
+
+function poblarSelectControlesModal(selectEl, selectedKey) {
+  if (!selectEl) return;
+  selectEl.innerHTML = CATALOGO_CONTROLES_NINO_SANO.map(
+    (c) => `<option value="${c.key}"${c.key === selectedKey ? ' selected' : ''}>${escapeHtml(c.label)}</option>`
+  ).join('');
+}
+
+function abrirModalAgendarControl(ctrlKey) {
+  const prox = CATALOGO_CONTROLES_NINO_SANO.find((c) => c.key === ctrlKey) || obtenerProximoControlPendiente();
+  if (!prox) return;
+  poblarSelectControlesModal($('controlAgendarKey'), prox.key);
+  const mapa = leerControlesNinoSano();
+  const reg = mapa[prox.key] || {};
+  const fEsp = fechaEsperadaControl(bebe?.fecha_nacimiento, prox.dias) || new Date();
+
+  if (reg.fecha_programada) {
+    const d = new Date(reg.fecha_programada);
+    if (!isNaN(d.getTime())) {
+      $('controlAgendarFecha').value = dayKey(d);
+      $('controlAgendarHora').value = fmtTime(d);
+    }
+  } else {
+    $('controlAgendarFecha').value = dayKey(fEsp);
+    $('controlAgendarHora').value = '10:00';
+  }
+  if ($('controlAgendarDesc')) {
+    $('controlAgendarDesc').textContent = `Faltan pocos días para el ${prox.label}. Indica la fecha y hora de tu cita médica para solicitarte los datos 1 hora después del control:`;
+  }
+  $('controlAgendarModal')?.classList.remove('hidden');
+}
+
+function cargarCamposModalRegistroControl(ctrlKey) {
+  const mapa = leerControlesNinoSano();
+  const reg = mapa[ctrlKey] || {};
+  const cat = CATALOGO_CONTROLES_NINO_SANO.find((c) => c.key === ctrlKey);
+  const fEsp = fechaEsperadaControl(bebe?.fecha_nacimiento, cat?.dias || 0) || new Date();
+  if ($('ctrlRegFecha')) $('ctrlRegFecha').value = reg.fecha_realizada || (reg.fecha_programada ? dayKey(new Date(reg.fecha_programada)) : dayKey(fEsp));
+  if ($('ctrlRegHora')) $('ctrlRegHora').value = reg.fecha_programada ? fmtTime(new Date(reg.fecha_programada)) : '10:00';
+  $('ctrlRegPeso').value = reg.peso_kg ?? '';
+  $('ctrlRegTalla').value = reg.talla_cm ?? '';
+  $('ctrlRegPerimetro').value = reg.perimetro_cefalico_cm ?? '';
+  $('ctrlRegObs').value = reg.observaciones || '';
+  if ($('ctrlRegObsCount')) $('ctrlRegObsCount').textContent = `${($('ctrlRegObs').value || '').length} / 1000`;
+}
+
+function abrirModalRegistroControl(ctrlKey, esAutomaticoPostCita = false) {
+  const prox = CATALOGO_CONTROLES_NINO_SANO.find((c) => c.key === ctrlKey) || obtenerProximoControlPendiente();
+  if (!prox) return;
+  poblarSelectControlesModal($('ctrlRegKey'), prox.key);
+  cargarCamposModalRegistroControl(prox.key);
+  if ($('controlRegistroDesc')) {
+    $('controlRegistroDesc').textContent = esAutomaticoPostCita
+      ? `¡Ya pasó más de 1 hora desde tu ${prox.label}! Ingresa el peso, talla, perímetro encefálico y observaciones que te entregaron en el control:`
+      : `Ingresa los datos antropométricos entregados en el ${prox.label} (peso, talla, perímetro encefálico y observaciones):`;
+  }
+  $('controlRegistroModal')?.classList.remove('hidden');
+}
+
+$('ctrlRegKey')?.addEventListener('change', (e) => {
+  cargarCamposModalRegistroControl(e.target.value);
+});
+
+$('ctrlRegObs')?.addEventListener('input', (e) => {
+  if ($('ctrlRegObsCount')) $('ctrlRegObsCount').textContent = `${(e.target.value || '').length} / 1000`;
+});
+
+$('controlAgendarClose')?.addEventListener('click', () => $('controlAgendarModal')?.classList.add('hidden'));
+$('controlAgendarPosponer')?.addEventListener('click', () => {
+  const k = $('controlAgendarKey')?.value || 'prox';
+  localStorage.setItem(`popup_agendar_pospuesto_${bebe?.id || ''}_${k}`, dayKey(new Date()));
+  $('controlAgendarModal')?.classList.add('hidden');
+});
+
+$('controlAgendarGuardar')?.addEventListener('click', async () => {
+  const k = $('controlAgendarKey')?.value;
+  const f = $('controlAgendarFecha')?.value;
+  const h = $('controlAgendarHora')?.value || '10:00';
+  if (!k || !f) {
+    toast('Selecciona la fecha y hora del control', true);
+    return;
+  }
+  const cat = CATALOGO_CONTROLES_NINO_SANO.find((c) => c.key === k);
+  const btn = $('controlAgendarGuardar');
+  if (btn) btn.disabled = true;
+  try {
+    const mapa = leerControlesNinoSano();
+    const prev = mapa[k] || {};
+    mapa[k] = {
+      ...prev,
+      key: k,
+      label: cat?.label || k,
+      meses: cat?.meses ?? 0,
+      fecha_programada: new Date(`${f}T${h}`).toISOString(),
+    };
+    await guardarControlesNinoSano(mapa);
+    $('controlAgendarModal')?.classList.add('hidden');
+    renderControlesNinoSanoInfo();
+    toast(`📅 Cita para ${cat?.label || 'Control'} agendada ✓`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
+
+const cerrarModalRegistroControl = () => {
+  const k = $('ctrlRegKey')?.value || 'prox';
+  sessionStorage.setItem(`popup_reg_visto_${bebe?.id || ''}_${k}`, '1');
+  $('controlRegistroModal')?.classList.add('hidden');
+};
+$('controlRegistroClose')?.addEventListener('click', cerrarModalRegistroControl);
+$('controlRegistroCancelar')?.addEventListener('click', cerrarModalRegistroControl);
+
+$('controlRegistroGuardar')?.addEventListener('click', async () => {
+  const k = $('ctrlRegKey')?.value;
+  if (!k) return;
+  const peso = Number($('ctrlRegPeso')?.value);
+  const talla = Number($('ctrlRegTalla')?.value);
+  const pce = Number($('ctrlRegPerimetro')?.value);
+  const obs = ($('ctrlRegObs')?.value || '').trim().slice(0, 1000);
+  const fechaReal = $('ctrlRegFecha')?.value || dayKey(new Date());
+
+  if (!(peso > 0) || !(talla > 0)) {
+    toast('Ingresa un peso y talla válidos', true);
+    return;
+  }
+
+  const cat = CATALOGO_CONTROLES_NINO_SANO.find((c) => c.key === k);
+  const btn = $('controlRegistroGuardar');
+  if (btn) btn.disabled = true;
+  try {
+    const mapa = leerControlesNinoSano();
+    const prev = mapa[k] || {};
+    mapa[k] = {
+      ...prev,
+      key: k,
+      label: cat?.label || k,
+      meses: cat?.meses ?? 0,
+      peso_kg: peso,
+      talla_cm: talla,
+      perimetro_cefalico_cm: pce > 0 ? pce : null,
+      observaciones: obs || null,
+      completado: true,
+      fecha_realizada: fechaReal,
+      actualizado_en: new Date().toISOString(),
+    };
+    await guardarControlesNinoSano(mapa);
+
+    // Sincronizar peso y talla del último control hacia el registro del bebé
+    const ultimo = obtenerUltimoControlConDatos();
+    if (ultimo) {
+      await actualizarBebe({
+        peso_kg: ultimo.peso_kg || bebe.peso_kg,
+        talla_cm: ultimo.talla_cm || bebe.talla_cm,
+      });
+    }
+    $('controlRegistroModal')?.classList.add('hidden');
+    renderInfoBebe();
+    if (currentTab === 'stats' && statsSubTab === 'crecimiento') {
+      renderChartsCrecimiento();
+    }
+    toast(`🩺 Datos de ${cat?.label || 'Control'} guardados ✓`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
+
+$('btnAbrirRegistroControlManual')?.addEventListener('click', () => {
+  const prox = obtenerProximoControlPendiente();
+  abrirModalRegistroControl(prox?.key);
+});
+
+document.addEventListener('click', (e) => {
+  const btnAg = e.target.closest('[data-agendar-ctrl]');
+  if (btnAg) {
+    abrirModalAgendarControl(btnAg.dataset.agendarCtrl);
+    return;
+  }
+  const btnReg = e.target.closest('[data-registrar-ctrl]');
+  if (btnReg) {
+    abrirModalRegistroControl(btnReg.dataset.registrarCtrl);
+  }
+});
+
+function verificarPopupsControlNinoSano() {
+  if (!bebe?.fecha_nacimiento) return;
+  const mapa = leerControlesNinoSano();
+  const ahoraMs = Date.now();
+
+  // 1. Verificar si algún control agendado ya cumplió >= 1 hora después de la fecha/hora indicada
+  for (const cat of CATALOGO_CONTROLES_NINO_SANO) {
+    const reg = mapa[cat.key];
+    if (reg && reg.fecha_programada && !reg.completado) {
+      const citaMs = new Date(reg.fecha_programada).getTime();
+      if (!isNaN(citaMs) && ahoraMs >= citaMs + 3600 * 1000) {
+        const vistoKey = `popup_reg_visto_${bebe.id}_${cat.key}`;
+        if (!sessionStorage.getItem(vistoKey)) {
+          sessionStorage.setItem(vistoKey, '1');
+          abrirModalRegistroControl(cat.key, true);
+          return;
+        }
+      }
+    }
+  }
+
+  // 2. Verificar si faltan 5 días o menos para el próximo control sin fecha/hora agendada
+  for (const cat of CATALOGO_CONTROLES_NINO_SANO) {
+    const reg = mapa[cat.key];
+    if (reg?.completado || reg?.fecha_programada) continue;
+    const fEsp = fechaEsperadaControl(bebe.fecha_nacimiento, cat.dias);
+    if (!fEsp) continue;
+    const diffDias = (fEsp.getTime() - ahoraMs) / 86400000;
+    if (diffDias <= 5 && diffDias >= -5) {
+      const pospKey = `popup_agendar_pospuesto_${bebe.id}_${cat.key}`;
+      if (localStorage.getItem(pospKey) !== dayKey(new Date())) {
+        abrirModalAgendarControl(cat.key);
+        return;
+      }
+    }
+  }
+}
+
+// ---------- Selector de Alergias con Iconos por Categoría ----------
+let alergiasDraftSet = new Set();
+
+function obtenerIdsAlergiasActuales() {
+  const set = new Set();
+  try {
+    const ctx = calcularContextoComidas();
+    for (const id of ctx.alergiasMap.keys()) set.add(id);
+  } catch {}
+  try {
+    const ls = JSON.parse(localStorage.getItem(`nebu_alergias_ids_${bebe?.id || 'default'}`) || '[]');
+    if (Array.isArray(ls)) ls.forEach((id) => set.add(id));
+  } catch {}
+  if (bebe?.alergias) {
+    const txt = bebe.alergias.toLowerCase();
+    for (const a of obtenerCatalogoAlimentos()) {
+      const nb = (a.nombreBase || a.nombre || '').toLowerCase();
+      if (nb && txt.split(/[,;·\n]/).map((s) => s.trim()).includes(nb)) {
+        set.add(a.id);
+      }
+    }
+  }
+  return set;
+}
+
+function renderAlergiasInfoIconos() {
+  const cont = $('infoAlergiasIconos');
+  if (!cont) return;
+  const ids = obtenerIdsAlergiasActuales();
+  const catalogoMap = new Map(obtenerCatalogoAlimentos().map((a) => [a.id, a]));
+  const items = Array.from(ids).map((id) => catalogoMap.get(id)).filter(Boolean);
+
+  if (!items.length) {
+    cont.innerHTML = `<span class="alergias-empty-msg">Sin alimentos alérgicos seleccionados. Usa el botón "🥗 Seleccionar alimentos alérgicos" para marcar si algún alimento produjo reacción.</span>`;
+    return;
+  }
+
+  cont.innerHTML = items.map((a) => `
+    <span class="alergia-info-chip" title="Alérgico a ${escapeHtml(a.nombreBase || a.nombre)}">
+      <img src="${alimentoSvgDataUri(a)}" alt="${escapeHtml(a.nombre)}">
+      <span>⚠️ ${escapeHtml(a.nombre)}</span>
+    </span>
+  `).join('');
+}
+
+function renderModalSelectorAlergiasCategorias() {
+  const cont = $('alergiasModalCategorias');
+  if (!cont) return;
+  const q = normalizarBusquedaAlimento($('alergiasModalSearch')?.value || '');
+  const catalogo = obtenerCatalogoAlimentos();
+  const categorias = [...GRUPOS_COMIDA, GRUPO_ALINOS];
+
+  const html = categorias.map((cat) => {
+    const delGrupo = catalogo.filter((a) => {
+      if (a.grupo !== cat.key) return false;
+      if (!q) return true;
+      return normalizarBusquedaAlimento(`${a.nombre} ${a.nombreBase || ''}`).includes(q);
+    });
+    if (!delGrupo.length) return '';
+    const selCount = delGrupo.filter((a) => alergiasDraftSet.has(a.id)).length;
+    return `
+      <div class="alergia-cat-block">
+        <div class="alergia-cat-title">
+          <span>${cat.icon} ${escapeHtml(cat.label)}</span>
+          <small style="color:var(--muted);">${selCount > 0 ? `<b style="color:#f87171;">${selCount} alérgico${selCount === 1 ? '' : 's'}</b> · ` : ''}${delGrupo.length} alimentos</small>
+        </div>
+        <div class="alergia-cat-grid">
+          ${delGrupo.map((a) => {
+            const isSel = alergiasDraftSet.has(a.id);
+            return `
+              <button type="button" class="alergia-food-btn${isSel ? ' selected' : ''}" data-alergia-id="${a.id}">
+                <img src="${alimentoSvgDataUri(a)}" alt="${escapeHtml(a.nombre)}">
+                <span>${escapeHtml(a.nombre)}</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }).filter(Boolean).join('');
+
+  cont.innerHTML = html || `<p class="hint" style="text-align:center; padding:16px;">No se encontraron alimentos para "${escapeHtml($('alergiasModalSearch')?.value || '')}".</p>`;
+}
+
+function abrirModalSelectorAlergias() {
+  alergiasDraftSet = new Set(obtenerIdsAlergiasActuales());
+  if ($('alergiasModalSearch')) $('alergiasModalSearch').value = '';
+  renderModalSelectorAlergiasCategorias();
+  $('alergiasSelectorModal')?.classList.remove('hidden');
+}
+
+$('btnAbrirModalAlergias')?.addEventListener('click', abrirModalSelectorAlergias);
+$('alergiasModalClose')?.addEventListener('click', () => $('alergiasSelectorModal')?.classList.add('hidden'));
+$('alergiasModalCancelar')?.addEventListener('click', () => $('alergiasSelectorModal')?.classList.add('hidden'));
+$('alergiasSelectorModal')?.addEventListener('click', (e) => {
+  if (e.target === $('alergiasSelectorModal')) $('alergiasSelectorModal')?.classList.add('hidden');
+});
+$('alergiasModalSearch')?.addEventListener('input', renderModalSelectorAlergiasCategorias);
+
+$('alergiasModalCategorias')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-alergia-id]');
+  if (!btn) return;
+  const id = btn.dataset.alergiaId;
+  if (alergiasDraftSet.has(id)) alergiasDraftSet.delete(id);
+  else alergiasDraftSet.add(id);
+  renderModalSelectorAlergiasCategorias();
+});
+
+$('alergiasModalGuardar')?.addEventListener('click', async () => {
+  const btn = $('alergiasModalGuardar');
+  if (btn) btn.disabled = true;
+  try {
+    const custom = leerComidaCustom();
+    const nuevoMapa = {};
+    const hoy = dayKey(new Date());
+    for (const id of alergiasDraftSet) {
+      nuevoMapa[id] = custom.manualAlergias?.[id] || { fecha: hoy, sintomas: ['Alergia registrada en ficha Info'], notas: '' };
+    }
+    custom.manualAlergias = nuevoMapa;
+    localStorage.setItem(`nebu_alergias_ids_${bebe?.id || 'default'}`, JSON.stringify(Array.from(alergiasDraftSet)));
+    await guardarComidaCustom(custom);
+
+    const catalogoMap = new Map(obtenerCatalogoAlimentos().map((a) => [a.id, a]));
+    const nombresAlergias = Array.from(alergiasDraftSet)
+      .map((id) => catalogoMap.get(id)?.nombreBase || catalogoMap.get(id)?.nombre)
+      .filter(Boolean);
+    const resumenAlergias = nombresAlergias.join(', ');
+    if ($('infoAlergias')) $('infoAlergias').value = resumenAlergias;
+    if (bebe) {
+      await actualizarBebe({ alergias: resumenAlergias || null });
+    }
+    $('alergiasSelectorModal')?.classList.add('hidden');
+    renderAlergiasInfoIconos();
+    if (currentTab === 'comidas') renderComidas();
+    toast('🚨 Alergias alimentarias actualizadas ✓');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
+
 function renderInfoBebe() {
   if (!bebe) return;
+  const ultimoCtrl = obtenerUltimoControlConDatos();
+  const pesoActual = ultimoCtrl?.peso_kg ?? bebe.peso_kg ?? '';
+  const tallaActual = ultimoCtrl?.talla_cm ?? bebe.talla_cm ?? '';
+
   $('infoNombre').value = bebe.nombre || '';
   $('infoNombreCompleto').value = bebe.nombre_completo || '';
   $('infoGrupo').value = bebe.grupo_sanguineo || '';
+  if ($('infoSexo')) $('infoSexo').value = obtenerSexoBebe();
   $('infoNacimiento').value = bebe.fecha_nacimiento || '';
-  $('infoPeso').value = bebe.peso_kg ?? '';
-  $('infoTalla').value = bebe.talla_cm ?? '';
+  // Fecha de nacimiento queda fija una vez establecida por primera vez
+  if (bebe.fecha_nacimiento) {
+    $('infoNacimiento').disabled = true;
+    $('infoNacimiento').title = 'La fecha de nacimiento queda fija una vez guardada por primera vez.';
+  } else {
+    $('infoNacimiento').disabled = false;
+    $('infoNacimiento').title = '';
+  }
+
+  $('infoPeso').value = pesoActual;
+  $('infoTalla').value = tallaActual;
+  $('infoPeso').disabled = true;
+  $('infoTalla').disabled = true;
+
   $('infoAlergias').value = bebe.alergias || '';
   $('infoRutinas').value = bebe.rutinas || '';
 
   const edad = calcularEdad(bebe.fecha_nacimiento);
   const partes = [];
   if (edad) partes.push(edad);
-  if (bebe.peso_kg) partes.push(`${bebe.peso_kg} kg`);
-  if (bebe.talla_cm) partes.push(`${bebe.talla_cm} cm`);
+  if (pesoActual) partes.push(`${pesoActual} kg`);
+  if (tallaActual) partes.push(`${tallaActual} cm`);
   if (bebe.grupo_sanguineo) partes.push(`GS: ${bebe.grupo_sanguineo}`);
   $('infoResumen').textContent = partes.join(' · ');
 
@@ -4058,6 +5076,9 @@ function renderInfoBebe() {
     $('infoFotoPreview').classList.add('hidden');
     $('infoAvatarFallback').classList.remove('hidden');
   }
+
+  renderAlergiasInfoIconos();
+  renderControlesNinoSanoInfo();
 }
 
 $('formInfo').addEventListener('submit', async (e) => {
@@ -4065,16 +5086,19 @@ $('formInfo').addEventListener('submit', async (e) => {
   const btn = e.target.querySelector('button[type="submit"]');
   if (btn) btn.disabled = true;
   try {
+    const sexoElegido = $('infoSexo')?.value === 'nina' ? 'nina' : 'nino';
+    localStorage.setItem('nebu_bebe_sexo', sexoElegido);
+    // La fecha de nacimiento solo se puede establecer si aún no tenía una guardada
+    const fechaNacFinal = bebe.fecha_nacimiento ? bebe.fecha_nacimiento : ($('infoNacimiento').value || null);
     await actualizarBebe({
       nombre: $('infoNombre').value.trim() || 'Mi bebé',
       nombre_completo: $('infoNombreCompleto').value.trim() || null,
       grupo_sanguineo: $('infoGrupo').value || null,
-      fecha_nacimiento: $('infoNacimiento').value || null,
-      peso_kg: Number($('infoPeso').value) > 0 ? Number($('infoPeso').value) : null,
-      talla_cm: Number($('infoTalla').value) > 0 ? Number($('infoTalla').value) : null,
+      fecha_nacimiento: fechaNacFinal,
       alergias: $('infoAlergias').value.trim() || null,
       rutinas: $('infoRutinas').value.trim() || null,
     });
+    bebe.sexo = sexoElegido;
     renderInfoBebe();
   } finally {
     if (btn) btn.disabled = false;
@@ -4159,7 +5183,8 @@ function aplicarBebe() {
   $('babyName').textContent = bebe.nombre || 'Mi bebé';
   const badge = $('rolBadge');
   if (miRol) {
-    badge.textContent = miRol === 'madre' ? '👩 Mamá' : '👨 Papá';
+    const adminTag = esAdminBebe() ? ' · 👑 Admin' : '';
+    badge.textContent = (miRol === 'madre' ? '👩 Mamá' : '👨 Papá') + adminTag;
     badge.classList.remove('hidden');
   } else badge.classList.add('hidden');
 
@@ -4186,15 +5211,61 @@ function aplicarBebe() {
 
 function renderOrdenTabsUI() {
   const orden = leerOrdenTabs();
-  $('ordenTabsUI').innerHTML = orden.map((k, i) => `
-    <div class="orden-item${i < 4 ? ' en-barra' : ''}">
-      <span>${TABS[k].icon} ${TABS[k].label} ${i < 4 ? '<strong>(Barra)</strong>' : ''}</span>
-      <div class="orden-btns">
-        <button type="button" class="icon-btn-sm" data-move="up" data-k="${k}" ${i === 0 ? 'disabled' : ''}>▲</button>
-        <button type="button" class="icon-btn-sm" data-move="down" data-k="${k}" ${i === orden.length - 1 ? 'disabled' : ''}>▼</button>
-      </div>
-    </div>`).join('');
+  const desbloqueados = new Set(obtenerModulosDesbloqueados());
+  const visibles = new Set(leerVisibilidadTabs());
+  const esAdmin = esAdminBebe();
+
+  if ($('ordenTabsLabelTxt')) {
+    $('ordenTabsLabelTxt').textContent = esAdmin
+      ? `Visibilidad y orden de módulos 👑 (Admin ${bebe?.codigo || CODIGO_ADMIN_BEBE})`
+      : 'Visibilidad y orden de módulos (Principales habilitados)';
+  }
+
+  let visIndex = 0;
+  $('ordenTabsUI').innerHTML = orden.map((k, i) => {
+    const estaDesbloqueado = desbloqueados.has(k);
+    const esVisible = estaDesbloqueado && visibles.has(k);
+    const enBarra = esVisible && visIndex < 4;
+    if (esVisible) visIndex++;
+
+    return `
+      <div class="orden-item${enBarra ? ' en-barra' : ''}${!estaDesbloqueado ? ' bloqueado' : ''}">
+        <label class="orden-check-wrap" title="${estaDesbloqueado ? 'Mostrar / ocultar este módulo' : 'Módulo bloqueado por administrador'}">
+          <input type="checkbox" class="orden-vis-check" data-vis-tab="${k}" ${esVisible ? 'checked' : ''} ${!estaDesbloqueado ? 'disabled' : ''}>
+          <span>${TABS[k].icon} ${TABS[k].label}</span>
+          ${enBarra ? '<strong>(Barra)</strong>' : ''}
+          ${!estaDesbloqueado ? '<span class="badge-lock-mod">🔒 Bloqueado</span>' : (esAdmin ? '<span class="badge-admin-mod">👑 Admin</span>' : '')}
+        </label>
+        <div class="orden-btns">
+          <button type="button" class="icon-btn-sm" data-move="up" data-k="${k}" ${i === 0 ? 'disabled' : ''}>▲</button>
+          <button type="button" class="icon-btn-sm" data-move="down" data-k="${k}" ${i === orden.length - 1 ? 'disabled' : ''}>▼</button>
+        </div>
+      </div>`;
+  }).join('');
 }
+
+$('ordenTabsUI').addEventListener('change', (e) => {
+  const chk = e.target.closest('[data-vis-tab]');
+  if (!chk) return;
+  const k = chk.dataset.visTab;
+  const actuales = new Set(leerVisibilidadTabs());
+  if (chk.checked) {
+    actuales.add(k);
+  } else {
+    if (actuales.size <= 1) {
+      chk.checked = true;
+      toast('Debe quedar al menos 1 módulo visible', true);
+      return;
+    }
+    actuales.delete(k);
+  }
+  guardarVisibilidadTabs(Array.from(actuales));
+  renderOrdenTabsUI();
+  renderTabbar();
+  if (!actuales.has(currentTab)) {
+    activarTab(Array.from(actuales)[0] || 'stats');
+  }
+});
 
 $('ordenTabsUI').addEventListener('click', (e) => {
   const b = e.target.closest('[data-move]');
@@ -4214,11 +5285,22 @@ $('ordenTabsUI').addEventListener('click', (e) => {
 
 $('settingsBtn').addEventListener('click', () => {
   if (!bebe) return;
+  const ultimoCtrl = obtenerUltimoControlConDatos();
   $('cfgCodigo').textContent = bebe.codigo || '——————';
   $('cfgNombre').value = bebe.nombre || '';
   $('cfgNacimiento').value = bebe.fecha_nacimiento || '';
-  $('cfgPeso').value = bebe.peso_kg ?? '';
-  $('cfgTalla').value = bebe.talla_cm ?? '';
+  if (bebe.fecha_nacimiento) {
+    $('cfgNacimiento').disabled = true;
+    if ($('cfgNacimientoLabelTxt')) $('cfgNacimientoLabelTxt').textContent = 'Nacimiento 🔒 (Fijo)';
+  } else {
+    $('cfgNacimiento').disabled = false;
+    if ($('cfgNacimientoLabelTxt')) $('cfgNacimientoLabelTxt').textContent = 'Nacimiento (Se fijará al guardar)';
+  }
+  $('cfgPeso').value = ultimoCtrl?.peso_kg ?? bebe.peso_kg ?? '';
+  $('cfgTalla').value = ultimoCtrl?.talla_cm ?? bebe.talla_cm ?? '';
+  $('cfgPeso').disabled = true;
+  $('cfgTalla').disabled = true;
+
   const rRadio = document.querySelector(`input[name="cfgRol"][value="${miRol}"]`);
   if (rRadio) rRadio.checked = true;
 
@@ -4229,9 +5311,13 @@ $('settingsBtn').addEventListener('click', () => {
   document.querySelectorAll('.swatch').forEach((s) => s.classList.toggle('selected', s.dataset.palette === (bebe.paleta || 'celeste')));
   renderOrdenTabsUI();
 
+  // Mostrar/ocultar sección de WhatsApp según permisos de Admin / desbloqueo BD
+  const wspPermitido = tieneWspYAlertasDesbloqueado();
+  $('cfgWspSectionWrap')?.classList.toggle('hidden', !wspPermitido);
+
   // Cargar configuración de WhatsApp
   const wspCfg = typeof getWhatsAppConfig === 'function' ? getWhatsAppConfig(bebe) : {};
-  if ($('cfgWspEnabled')) {
+  if ($('cfgWspEnabled') && wspPermitido) {
     $('cfgWspEnabled').checked = !!wspCfg.enabled;
     $('cfgWspPanel').classList.toggle('hidden', !wspCfg.enabled);
     $('cfgWspTarget').value = wspCfg.target || '120363414573336812@g.us';
@@ -4324,12 +5410,12 @@ $('cfgGuardar').addEventListener('click', async () => {
     const nombre = $('cfgNombre').value.trim() || 'Mi bebé';
     const paleta = document.querySelector('.swatch.selected')?.dataset?.palette || bebe.paleta || 'celeste';
     const nuevoRol = document.querySelector('input[name="cfgRol"]:checked')?.value || miRol;
+    // Fecha de nacimiento queda fija una vez establecida; Peso y Talla provienen de Controles de Niño Sano
+    const fechaNacFinal = bebe.fecha_nacimiento ? bebe.fecha_nacimiento : ($('cfgNacimiento').value || null);
     const patch = {
       nombre,
       paleta,
-      fecha_nacimiento: $('cfgNacimiento').value || null,
-      peso_kg: Number($('cfgPeso').value) > 0 ? Number($('cfgPeso').value) : null,
-      talla_cm: Number($('cfgTalla').value) > 0 ? Number($('cfgTalla').value) : null,
+      fecha_nacimiento: fechaNacFinal,
     };
     if ($('cfgFoto').dataset.nuevo) {
       patch.foto_base64 = $('cfgFoto').dataset.nuevo;
@@ -4340,8 +5426,8 @@ $('cfgGuardar').addEventListener('click', async () => {
       if (!eRol) miRol = nuevoRol;
     }
 
-    // Guardar configuración de WhatsApp
-    if ($('cfgWspEnabled')) {
+    // Guardar configuración de WhatsApp (solo si está desbloqueado para este bebé)
+    if ($('cfgWspEnabled') && tieneWspYAlertasDesbloqueado()) {
       const rawTarget = $('cfgWspTarget').value.trim();
       const parsedTargets = typeof normalizarDestinatarios === 'function'
         ? normalizarDestinatarios(rawTarget).filter((t) => t.endsWith('@g.us'))
@@ -4938,6 +6024,7 @@ function iniciarApp(b, rol) {
       actualizarAlertasYBadge();
     }
     renderTab(currentTab);
+    verificarPopupsControlNinoSano();
   });
 }
 

@@ -162,70 +162,146 @@
       <!-- ========== PESTAÑA 1: ESTADÍSTICAS ========== -->
       <section id="tab-stats" class="tab active">
         <span class="eyebrow-badge">★ Panel Analítico</span>
-        <div class="card seg-card">
-          <div class="seg">
-            <button class="seg-btn" data-range="1d">1 día</button>
-            <button class="seg-btn active" data-range="7d">7 días</button>
-            <button class="seg-btn" data-range="14d">14 días</button>
-            <button class="seg-btn" data-range="30d">1 mes</button>
+
+        <!-- Sub-pestañas del Módulo Stats -->
+        <div class="card stats-subtabs-card">
+          <div class="stats-subtabs" role="tablist">
+            <button type="button" class="stats-subtab-btn active" id="statsTabRutinaBtn" data-stats-sub="rutina">📊 Rutina Diaria</button>
+            <button type="button" class="stats-subtab-btn" id="statsTabCrecimientoBtn" data-stats-sub="crecimiento">📈 Curvas de Crecimiento (MINSAL)</button>
           </div>
-          <p class="form-hint seg-hint" id="segHint">Pellizca o usa la rueda para acercar/alejar, arrastra para moverte · ⟲ restablece</p>
-        </div>
-        
-        <div class="card chart-card">
-          <div class="chart-head">
-            <h2 id="tituloLeche">🍼 Leche · últimos 7 días (ml)</h2>
-            <div class="chart-actions">
-              <div class="chart-type-toggle" data-chart="leche">
-                <button type="button" class="type-btn active" data-type="bar" title="Ver en barras">📊</button>
-                <button type="button" class="type-btn" data-type="line" title="Ver en línea">📈</button>
-              </div>
-              <button class="zoom-reset" data-key="leche" title="Restablecer zoom">⟲</button>
-            </div>
-          </div>
-          <div class="chart-wrap"><canvas id="chartLeche"></canvas></div>
         </div>
 
-        <div class="card chart-card">
-          <div class="chart-head">
-            <h2 id="tituloVitaminas">💊 Vitaminas · últimos 7 días (gotas)</h2>
-            <div class="chart-actions">
-              <div class="chart-type-toggle" data-chart="vitaminas">
-                <button type="button" class="type-btn active" data-type="bar" title="Ver en barras">📊</button>
-                <button type="button" class="type-btn" data-type="line" title="Ver en línea">📈</button>
-              </div>
-              <button class="zoom-reset" data-key="vitaminas" title="Restablecer zoom">⟲</button>
+        <!-- SUBMÓDULO 1A: GRÁFICOS DE RUTINA DIARIA -->
+        <div id="statsPanelRutina">
+          <div class="card seg-card">
+            <div class="seg">
+              <button class="seg-btn" data-range="1d">1 día</button>
+              <button class="seg-btn active" data-range="7d">7 días</button>
+              <button class="seg-btn" data-range="14d">14 días</button>
+              <button class="seg-btn" data-range="30d">1 mes</button>
             </div>
+            <p class="form-hint seg-hint" id="segHint">Pellizca o usa la rueda para acercar/alejar, arrastra para moverte · ⟲ restablece</p>
           </div>
-          <div class="chart-wrap"><canvas id="chartVitaminas"></canvas></div>
+          
+          <div class="card chart-card">
+            <div class="chart-head">
+              <h2 id="tituloLeche">🍼 Leche · últimos 7 días (ml)</h2>
+              <div class="chart-actions">
+                <div class="chart-type-toggle" data-chart="leche">
+                  <button type="button" class="type-btn active" data-type="bar" title="Ver en barras">📊</button>
+                  <button type="button" class="type-btn" data-type="line" title="Ver en línea">📈</button>
+                </div>
+                <button class="zoom-reset" data-key="leche" title="Restablecer zoom">⟲</button>
+              </div>
+            </div>
+            <div class="chart-wrap"><canvas id="chartLeche"></canvas></div>
+          </div>
+
+          <div class="card chart-card">
+            <div class="chart-head">
+              <h2 id="tituloVitaminas">💊 Vitaminas · últimos 7 días (gotas)</h2>
+              <div class="chart-actions">
+                <div class="chart-type-toggle" data-chart="vitaminas">
+                  <button type="button" class="type-btn active" data-type="bar" title="Ver en barras">📊</button>
+                  <button type="button" class="type-btn" data-type="line" title="Ver en línea">📈</button>
+                </div>
+                <button class="zoom-reset" data-key="vitaminas" title="Restablecer zoom">⟲</button>
+              </div>
+            </div>
+            <div class="chart-wrap"><canvas id="chartVitaminas"></canvas></div>
+          </div>
+
+          <div class="card chart-card">
+            <div class="chart-head">
+              <h2 id="tituloPanales">🧷 Pañales · últimos 7 días</h2>
+              <div class="chart-actions">
+                <div class="chart-type-toggle" data-chart="panales">
+                  <button type="button" class="type-btn active" data-type="bar" title="Ver en barras">📊</button>
+                  <button type="button" class="type-btn" data-type="line" title="Ver en línea">📈</button>
+                </div>
+                <button class="zoom-reset" data-key="panales" title="Restablecer zoom">⟲</button>
+              </div>
+            </div>
+            <div class="chart-wrap"><canvas id="chartPanales"></canvas></div>
+          </div>
+
+          <div class="card chart-card">
+            <div class="chart-head">
+              <h2 id="tituloSueno">😴 Sueño · últimos 7 días (horas)</h2>
+              <div class="chart-actions">
+                <div class="chart-type-toggle" data-chart="sueno">
+                  <button type="button" class="type-btn active" data-type="bar" title="Ver en barras">📊</button>
+                  <button type="button" class="type-btn" data-type="line" title="Ver en línea">📈</button>
+                </div>
+                <button class="zoom-reset" data-key="sueno" title="Restablecer zoom">⟲</button>
+              </div>
+            </div>
+            <div class="chart-wrap"><canvas id="chartSueno"></canvas></div>
+          </div>
         </div>
 
-        <div class="card chart-card">
-          <div class="chart-head">
-            <h2 id="tituloPanales">🧷 Pañales · últimos 7 días</h2>
-            <div class="chart-actions">
-              <div class="chart-type-toggle" data-chart="panales">
-                <button type="button" class="type-btn active" data-type="bar" title="Ver en barras">📊</button>
-                <button type="button" class="type-btn" data-type="line" title="Ver en línea">📈</button>
+        <!-- SUBMÓDULO 1B: PATRONES DE CRECIMIENTO MINSAL / OMS -->
+        <div id="statsPanelCrecimiento" class="hidden">
+          <div class="card" style="margin-bottom:12px;">
+            <div class="comida-header-actions" style="margin-bottom:8px;">
+              <div>
+                <h2 style="margin:0;">📈 Patrones de Crecimiento Infantil (MINSAL / OMS)</h2>
+                <p style="font-size:0.78rem; color:var(--text-2); margin:2px 0 0;">Evaluación nutricional, estatural y perímetro cefálico según controles de Niño Sano (0 a 24 meses).</p>
               </div>
-              <button class="zoom-reset" data-key="panales" title="Restablecer zoom">⟲</button>
+              <div class="crec-sexo-switch">
+                <button type="button" class="chip-filter" id="crecSexoNino" data-sexo-pat="nino">👦 Niño</button>
+                <button type="button" class="chip-filter" id="crecSexoNina" data-sexo-pat="nina">👧 Niña</button>
+              </div>
             </div>
-          </div>
-          <div class="chart-wrap"><canvas id="chartPanales"></canvas></div>
-        </div>
 
-        <div class="card chart-card">
-          <div class="chart-head">
-            <h2 id="tituloSueno">😴 Sueño · últimos 7 días (horas)</h2>
-            <div class="chart-actions">
-              <div class="chart-type-toggle" data-chart="sueno">
-                <button type="button" class="type-btn active" data-type="bar" title="Ver en barras">📊</button>
-                <button type="button" class="type-btn" data-type="line" title="Ver en línea">📈</button>
-              </div>
-              <button class="zoom-reset" data-key="sueno" title="Restablecer zoom">⟲</button>
+            <!-- Resumen de Calificación MINSAL según último control -->
+            <div id="crecimientoDiagnosticoWrap" class="crec-diag-grid"></div>
+
+            <!-- Filtro de curvas de crecimiento -->
+            <div id="crecimientoIndTabs" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;">
+              <button type="button" class="chip-filter active" data-crec-ind="todos">📋 Todos los gráficos</button>
+              <button type="button" class="chip-filter" data-crec-ind="pe">⚖️ Peso / Edad (P/E)</button>
+              <button type="button" class="chip-filter" data-crec-ind="te">📏 Longitud / Edad (T/E)</button>
+              <button type="button" class="chip-filter" data-crec-ind="pce">🧠 Perímetro Cefálico (PCe/E)</button>
+              <button type="button" class="chip-filter" data-crec-ind="pt">📐 Peso / Longitud (P/T)</button>
             </div>
           </div>
-          <div class="chart-wrap"><canvas id="chartSueno"></canvas></div>
+
+          <div class="card chart-card" id="cardChartCrecPE">
+            <div class="chart-head">
+              <h2>⚖️ Peso por Edad (P/E) · 0 a 24 meses (kg)</h2>
+              <button class="zoom-reset" data-key="crecPE" title="Restablecer zoom">⟲</button>
+            </div>
+            <p class="form-hint" style="margin-top:-4px; margin-bottom:6px;">Curvas oficiales MINSAL/OMS: Mediana (verde), ±1 DE (ámbar), ±2 DE (rojo) y evolución de tu bebé (★).</p>
+            <div class="chart-wrap"><canvas id="chartCrecimientoPE"></canvas></div>
+          </div>
+
+          <div class="card chart-card" id="cardChartCrecTE">
+            <div class="chart-head">
+              <h2>📏 Longitud / Talla por Edad (T/E) · 0 a 24 meses (cm)</h2>
+              <button class="zoom-reset" data-key="crecTE" title="Restablecer zoom">⟲</button>
+            </div>
+            <p class="form-hint" style="margin-top:-4px; margin-bottom:6px;">Evalúa el crecimiento estatural: Talla Normal (entre -1 DE y +1 DE), Normal Baja/Alta y Baja/Alta (±2 DE).</p>
+            <div class="chart-wrap"><canvas id="chartCrecimientoTE"></canvas></div>
+          </div>
+
+          <div class="card chart-card" id="cardChartCrecPCE">
+            <div class="chart-head">
+              <h2>🧠 Perímetro Cefálico por Edad (PCe/E) · 0 a 24 meses (cm)</h2>
+              <button class="zoom-reset" data-key="crecPCE" title="Restablecer zoom">⟲</button>
+            </div>
+            <p class="form-hint" style="margin-top:-4px; margin-bottom:6px;">Rango normal MINSAL: entre -2 DE y +2 DE para la edad y sexo del lactante.</p>
+            <div class="chart-wrap"><canvas id="chartCrecimientoPCE"></canvas></div>
+          </div>
+
+          <div class="card chart-card" id="cardChartCrecPT">
+            <div class="chart-head">
+              <h2>📐 Peso por Longitud / Talla (P/T) · 45 a 95 cm (kg)</h2>
+              <button class="zoom-reset" data-key="crecPT" title="Restablecer zoom">⟲</button>
+            </div>
+            <p class="form-hint" style="margin-top:-4px; margin-bottom:6px;">Relación armónica Peso/Longitud (determina Sobrepeso ≥ +1 DE u Obesidad ≥ +2 DE).</p>
+            <div class="chart-wrap"><canvas id="chartCrecimientoPT"></canvas></div>
+          </div>
         </div>
       </section>
 
@@ -826,9 +902,17 @@
 
         <form id="formInfo" class="card form-card">
           <h2>Datos del bebé</h2>
-          <label class="field-label">Nombre (el que se muestra arriba)
-            <input type="text" id="infoNombre" maxlength="40" placeholder="Mi bebé">
-          </label>
+          <div class="peso-talla-row">
+            <label class="field-label">Nombre (el que se muestra arriba)
+              <input type="text" id="infoNombre" maxlength="40" placeholder="Mi bebé">
+            </label>
+            <label class="field-label">Sexo biológico (curvas MINSAL)
+              <select id="infoSexo">
+                <option value="nino">👦 Niño</option>
+                <option value="nina">👧 Niña</option>
+              </select>
+            </label>
+          </div>
           <label class="field-label">Nombre completo
             <input type="text" id="infoNombreCompleto" maxlength="80" placeholder="Nombre y apellidos">
           </label>
@@ -842,26 +926,49 @@
                 <option>AB+</option><option>AB-</option>
               </select>
             </label>
-            <label class="field-label">Fecha de nacimiento
+            <label class="field-label"><span id="infoNacimientoLabelTxt">Fecha de nacimiento</span>
               <input type="date" id="infoNacimiento">
             </label>
           </div>
           <div class="peso-talla-row">
-            <label class="field-label">Peso actual (kg)
-              <input type="number" id="infoPeso" step="any" inputmode="decimal" placeholder="6.2">
+            <label class="field-label">Peso actual (kg) 🔒
+              <input type="number" id="infoPeso" step="any" inputmode="decimal" placeholder="—" disabled title="Se actualiza en los Controles de Niño Sano">
             </label>
-            <label class="field-label">Talla actual (cm)
-              <input type="number" id="infoTalla" step="any" inputmode="decimal" placeholder="62">
+            <label class="field-label">Talla actual (cm) 🔒
+              <input type="number" id="infoTalla" step="any" inputmode="decimal" placeholder="—" disabled title="Se actualiza en los Controles de Niño Sano">
             </label>
           </div>
-          <label class="field-label">Alergias / alérgenos
-            <textarea id="infoAlergias" rows="2" maxlength="500" placeholder="Ninguna conocida"></textarea>
-          </label>
+          <p class="form-hint" style="margin-top:-4px;">🩺 El peso, la talla y el perímetro cefálico se registran por cada <strong>Control de Niño Sano</strong> más abajo.</p>
+
+          <!-- Alergias / alérgenos con iconos referenciales como en Comidas -->
+          <div class="field-label">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span>🚨 Alergias / alérgenos alimentarios</span>
+              <button type="button" id="btnAbrirModalAlergias" class="btn-secondary" style="padding:5px 10px; font-size:0.76rem;">＋ Escoger alimentos alérgicos</button>
+            </div>
+            <div id="infoAlergiasIconos" class="comida-ing-mini info-alergias-box"></div>
+            <input type="hidden" id="infoAlergias">
+          </div>
+
           <label class="field-label">Rutinas / mañas
             <textarea id="infoRutinas" rows="2" maxlength="500" placeholder="Ej: duerme con música, chupete azul…"></textarea>
           </label>
           <button type="submit" class="btn-primary">Guardar datos</button>
         </form>
+
+        <!-- Tarjeta de Controles de Niño Sano (Salud Pública MINSAL) -->
+        <div class="card form-card" id="cardControlesNinoSano">
+          <div class="comida-header-actions">
+            <div>
+              <h2 style="margin:0;">🩺 Controles de Niño Sano (MINSAL)</h2>
+              <p style="font-size:0.78rem; color:var(--text-2); margin:2px 0 0;">Registro oficial por control (10 días, 15 días, 1 mes, 2 meses, etc.) con Peso, Talla, Perímetro Encefálico y Observaciones.</p>
+            </div>
+            <button type="button" id="btnAbrirRegistroControlManual" class="btn-primary" style="width:auto; padding:8px 14px; font-size:0.8rem;">＋ Registrar control</button>
+          </div>
+
+          <div id="infoProximoControlBanner" class="comida-rule-banner"></div>
+          <div id="infoControlesLista" class="controles-sano-lista"></div>
+        </div>
 
         <div class="card">
           <h2>Padres</h2>
@@ -880,8 +987,8 @@
               <p>Copia o comparte el código único de 6 caracteres desde Configuración. El otro padre debe iniciar sesión y elegir "Unirme con el código".</p>
             </div>
             <div class="faq-item">
-              <strong>¿Cómo se calculan los tarros de leche?</strong>
-              <p>La app suma todos los ml ingeridos desde la primera toma registrada. Con la proporción de 4,3 g cada 30 ml, calcula los gramos de fórmula y los tarros abiertos.</p>
+              <strong>¿Cómo se actualizan el peso y la talla del bebé?</strong>
+              <p>Se actualizan a través de cada Control de Niño Sano (10 días, 15 días, 1 mes, 2 meses, etc.). La app te recordará agendar el próximo control 5 días antes y te pedirá los resultados 1 hora después de la cita.</p>
             </div>
             <div class="faq-item">
               <strong>¿Cómo funciona el sueño que cruza medianoche?</strong>
@@ -986,18 +1093,19 @@
         <input type="text" id="cfgNombre" maxlength="40" placeholder="Mi bebé">
       </label>
 
-      <label class="field-label">Fecha de nacimiento
+      <label class="field-label"><span id="cfgNacimientoLabelTxt">Fecha de nacimiento</span>
         <input type="date" id="cfgNacimiento">
       </label>
 
       <div class="peso-talla-row">
-        <label class="field-label">Peso actual (kg)
-          <input type="number" id="cfgPeso" step="any" inputmode="decimal" placeholder="6.2">
+        <label class="field-label">Peso actual (kg) 🔒
+          <input type="number" id="cfgPeso" step="any" inputmode="decimal" placeholder="Por control" disabled title="Solo modificable por Control de Niño Sano">
         </label>
-        <label class="field-label">Talla actual (cm)
-          <input type="number" id="cfgTalla" step="any" inputmode="decimal" placeholder="62">
+        <label class="field-label">Talla actual (cm) 🔒
+          <input type="number" id="cfgTalla" step="any" inputmode="decimal" placeholder="Por control" disabled title="Solo modificable por Control de Niño Sano">
         </label>
       </div>
+      <p class="form-hint" style="margin-top:-6px;">🔒 El peso y la talla solo se actualizan mediante los <strong>Controles de Niño Sano</strong> (pestaña Info).</p>
 
       <div class="field-label">Foto del bebé
         <div class="photo-row">
@@ -1029,11 +1137,12 @@
         </div>
       </div>
 
-      <div class="field-label">Orden de las pestañas (las primeras 4 van en la barra)
+      <div class="field-label"><span id="ordenTabsLabelTxt">Módulos visibles y orden de pestañas (las primeras 4 visibles van en la barra)</span>
         <div id="ordenTabsUI" class="orden-lista"></div>
       </div>
 
-      <!-- ==================== NOTIFICACIONES WHATSAPP ==================== -->
+      <!-- ==================== NOTIFICACIONES WHATSAPP (SOLO ADMIN / DESBLOQUEADOS) ==================== -->
+      <div id="cfgWspSectionWrap">
       <div class="field-label" style="border-top:1px solid var(--border); padding-top:16px; margin-top:8px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <span>💬 Notificaciones de WhatsApp</span>
@@ -1130,6 +1239,7 @@
         </div>
         <p id="cfgWspTestResult" class="form-hint hidden" style="text-align:center; font-weight:600;"></p>
       </div>
+      </div>
 
       <button id="cfgGuardar" class="btn-primary">Guardar</button>
       <button id="logoutBtn" class="btn-danger">Cerrar sesión</button>
@@ -1214,14 +1324,110 @@
     </div>
   </div>
 
+  <!-- ==================== POP-UP 1: AGENDAR PRÓXIMO CONTROL DE NIÑO SANO (5 DÍAS ANTES) ==================== -->
+  <div id="controlAgendarModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="controlAgendarTitulo">📅 Próximo Control de Niño Sano</h2>
+        <button type="button" id="controlAgendarClose" class="icon-btn">✕</button>
+      </div>
+      <p id="controlAgendarDesc" style="font-size:0.84rem; color:var(--text-2); margin:0; line-height:1.45;">
+        Faltan pocos días para el próximo Control de Niño Sano de tu bebé. Indica en qué fecha y hora tendrás la cita para recordarte registrar sus mediciones al salir:
+      </p>
+      <label class="field-label">Control correspondiente
+        <select id="controlAgendarKey"></select>
+      </label>
+      <div class="fila-2">
+        <label class="field-label">Fecha del control
+          <input type="date" id="controlAgendarFecha" required>
+        </label>
+        <label class="field-label">Hora del control
+          <input type="time" id="controlAgendarHora" value="10:00" required>
+        </label>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button type="button" id="controlAgendarPosponer" class="btn-secondary" style="flex:1;">Más tarde</button>
+        <button type="button" id="controlAgendarGuardar" class="btn-primary" style="flex:1;">📅 Guardar cita</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== POP-UP 2: REGISTRAR RESULTADOS DEL CONTROL DE NIÑO SANO (1H DESPUÉS) ==================== -->
+  <div id="controlRegistroModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="controlRegistroTitulo">🩺 Datos del Control de Niño Sano</h2>
+        <button type="button" id="controlRegistroClose" class="icon-btn">✕</button>
+      </div>
+      <p id="controlRegistroDesc" style="font-size:0.83rem; color:var(--text-2); margin:0; line-height:1.45;">
+        Ingresa las mediciones entregadas en el Control de Niño Sano para actualizar la ficha clínica y las curvas de crecimiento MINSAL:
+      </p>
+      <label class="field-label">Control de Niño Sano
+        <select id="ctrlRegKey"></select>
+      </label>
+      <div class="fila-2">
+        <label class="field-label">Fecha del control
+          <input type="date" id="ctrlRegFecha" required>
+        </label>
+        <label class="field-label">Hora del control
+          <input type="time" id="ctrlRegHora" value="10:00" required>
+        </label>
+      </div>
+      <div class="form-grid">
+        <label class="field-label">Peso (kg)
+          <input type="number" id="ctrlRegPeso" step="any" inputmode="decimal" placeholder="Ej: 7.2" required>
+        </label>
+        <label class="field-label">Talla / Longitud (cm)
+          <input type="number" id="ctrlRegTalla" step="any" inputmode="decimal" placeholder="Ej: 65.5" required>
+        </label>
+        <label class="field-label">Perímetro encefálico (cm)
+          <input type="number" id="ctrlRegPerimetro" step="any" inputmode="decimal" placeholder="Ej: 43.2">
+        </label>
+      </div>
+      <label class="field-label">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span>Observaciones del control</span>
+          <small id="ctrlRegObsCount" style="color:var(--muted);">0 / 1000</small>
+        </div>
+        <textarea id="ctrlRegObs" rows="3" maxlength="1000" placeholder="Indicaciones del pediatra/enfermera, vacunas, alimentación, desarrollo psicomotor…"></textarea>
+      </label>
+      <div style="display:flex; gap:8px;">
+        <button type="button" id="controlRegistroCancelar" class="btn-secondary" style="flex:1;">Cancelar</button>
+        <button type="button" id="controlRegistroGuardar" class="btn-primary" style="flex:1;">💾 Guardar control</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL SELECTOR DE ALERGIAS POR CATEGORÍAS (CON ICONOS) ==================== -->
+  <div id="alergiasSelectorModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>🚨 Seleccionar Alimentos Alérgicos</h2>
+        <button type="button" id="alergiasModalClose" class="icon-btn">✕</button>
+      </div>
+      <p style="font-size:0.82rem; color:var(--text-2); margin:0;">
+        Escoge los alimentos a los cuales tu bebé presenta alergia o intolerancia. En la ficha clínica solo se mostrarán los seleccionados:
+      </p>
+      <div class="search-lupa-wrap">
+        <span class="search-lupa-icon" aria-hidden="true">🔍</span>
+        <input type="search" id="alergiasModalSearch" placeholder="Buscar alimento por nombre…">
+      </div>
+      <div id="alergiasModalCategorias" class="alergias-modal-categorias"></div>
+      <div style="display:flex; gap:8px;">
+        <button type="button" id="alergiasModalCancelar" class="btn-secondary" style="flex:1;">Cancelar</button>
+        <button type="button" id="alergiasModalGuardar" class="btn-primary" style="flex:1;">💾 Guardar alergias</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
-  <script src="config.js?v=3.0.0"></script>
-  <script src="whatsapp.js?v=3.0.0"></script>
-  <script src="app.js?v=3.0.0"></script>
+  <script src="config.js?v=3.1.0"></script>
+  <script src="whatsapp.js?v=3.1.0"></script>
+  <script src="app.js?v=3.1.0"></script>
 </body>
 </html>

@@ -2153,3 +2153,155 @@ tr.month-row td {
   margin-left: 4px;
 }
 
+/* ---------- 18. Subpestañas Stats (Curvas MINSAL), Controles Niño Sano y Alergias ---------- */
+.stats-subtabs-card {
+  padding: 8px;
+  margin-bottom: 12px;
+}
+.stats-subtabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.stats-subtab-btn {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.stats-subtab-btn.active {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  color: var(--accent-ink);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--brand-primary) 35%, transparent);
+}
+.crec-sexo-switch {
+  display: inline-flex;
+  gap: 6px;
+}
+.crec-diag-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+@media (min-width: 520px) {
+  .crec-diag-grid { grid-template-columns: repeat(3, 1fr); }
+}
+.crec-diag-item {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.crec-diag-item small {
+  font-size: 0.72rem;
+  color: var(--text-2);
+  font-weight: 700;
+}
+.crec-diag-item strong {
+  font-size: 0.88rem;
+  color: var(--text);
+}
+.info-alergias-box {
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  margin-top: 4px;
+}
+.alergias-modal-categorias {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 55vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.alergias-cat-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.alergias-cat-title {
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: var(--text);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.controles-sano-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.control-sano-card {
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--ctrl-color, var(--border));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.control-sano-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.control-sano-head strong {
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.control-sano-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.control-metric-pill {
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--text);
+}
+.control-sano-obs {
+  font-size: 0.8rem;
+  color: var(--text-2);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.control-sano-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.orden-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.orden-item-left input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--brand-primary);
+  cursor: pointer;
+}
+
