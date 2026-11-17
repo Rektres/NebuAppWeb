@@ -3,10 +3,35 @@
    Rutinas del Bebé — Arquitectura de Tokens Dinámicos & Mobile-First
    ============================================================ */
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid var(--scrollbar-track);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
 
 /* ---------- 1. Capa de Tokens Semánticos Dinámicos ---------- */
 :root {
+  color-scheme: dark;
+
   /* Tipografía y Espaciado */
   --shell-font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --shell-display: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -16,6 +41,15 @@
   --surface-card: rgba(18, 20, 38, 0.78);
   --surface-2: rgba(255, 255, 255, 0.055);
   --surface-alt: #0d0f22;
+  --input-bg: #14182e;
+  --option-bg: #14182e;
+  --option-text: #f8fafc;
+  --icon-box-bg: rgba(255, 255, 255, 0.075);
+  --icon-box-border: rgba(255, 255, 255, 0.14);
+  --scrollbar-track: #0d0f22;
+  --scrollbar-thumb: rgba(148, 163, 184, 0.35);
+  --scrollbar-thumb-hover: var(--brand-accent);
+  --select-chevron: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23cbd5e1' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
   
   --bg: var(--surface-base);
   --surface: var(--surface-card);
@@ -37,10 +71,21 @@
 
 /* Modo Claro (Light Luxury) */
 :root[data-theme="light"] {
+  color-scheme: light;
+
   --surface-base: #f8fafc;
   --surface-card: rgba(255, 255, 255, 0.88);
   --surface-2: #f1f5f9;
   --surface-alt: #e2e8f0;
+  --input-bg: #f1f5f9;
+  --option-bg: #ffffff;
+  --option-text: #0f172a;
+  --icon-box-bg: #ffffff;
+  --icon-box-border: rgba(15, 23, 42, 0.12);
+  --scrollbar-track: #e2e8f0;
+  --scrollbar-thumb: rgba(71, 85, 105, 0.38);
+  --scrollbar-thumb-hover: var(--brand-primary);
+  --select-chevron: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
   
   --bg: var(--surface-base);
   --surface: var(--surface-card);
@@ -380,6 +425,7 @@ details.card > form { margin-top: 4px; }
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+  align-items: end;
   margin-bottom: 10px;
 }
 .form-grid label:first-child { grid-column: 1 / -1; }
@@ -387,6 +433,7 @@ details.card > form { margin-top: 4px; }
 label {
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   gap: 7px;
   font-size: 0.82rem;
   font-weight: 600;
@@ -395,32 +442,70 @@ label {
 }
 
 input[type="number"], input[type="date"], input[type="time"], input[type="datetime-local"],
-input[type="email"], input[type="password"], input[type="text"], input[type="tel"], select {
+input[type="email"], input[type="password"], input[type="text"], input[type="tel"], input[type="search"], select {
   appearance: none;
   -webkit-appearance: none;
-  background: var(--surface-2);
+  -moz-appearance: none;
+  background-color: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 12px;
   height: 48px;
-  padding: 0 14px;
-  font-size: 1rem;
+  min-height: 48px;
+  padding: 10px 14px;
+  line-height: 26px;
+  font-size: 0.96rem;
   font-family: inherit;
   color: var(--text);
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  vertical-align: middle;
   color-scheme: dark;
   transition: all 0.2s ease;
+}
+
+select {
+  padding: 11px 40px 11px 14px !important;
+  line-height: 24px !important;
+  background-color: var(--input-bg) !important;
+  background-image: var(--select-chevron) !important;
+  background-repeat: no-repeat !important;
+  background-position: right 14px center !important;
+  background-size: 16px 16px !important;
+  color: var(--text) !important;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+select::-ms-expand {
+  display: none;
+}
+select::picker-icon {
+  display: none;
+}
+select option,
+select optgroup {
+  background-color: var(--option-bg) !important;
+  color: var(--option-text) !important;
+  font-size: 0.95rem;
+  padding: 8px 12px;
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+  background-color: color-mix(in srgb, var(--input-bg) 75%, var(--bg));
 }
 
 textarea {
   appearance: none;
   -webkit-appearance: none;
-  background: var(--surface-2);
+  background-color: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 12px 14px;
-  font-size: 1rem;
+  font-size: 0.96rem;
   font-family: inherit;
   color: var(--text);
   width: 100%;
@@ -569,22 +654,53 @@ input:focus, select:focus, textarea:focus {
   border-color: color-mix(in srgb, var(--brand-accent) 40%, var(--border));
   background: color-mix(in srgb, var(--brand-primary) 10%, var(--surface-2));
 }
-.orden-btns { display: flex; gap: 6px; }
+.orden-btns { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .icon-btn-sm {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   width: 32px;
   height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   font-size: 0.85rem;
   color: var(--text);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
 }
 .icon-btn-sm:disabled { opacity: 0.3; cursor: not-allowed; }
 
-/* Normalizaciones iOS */
-input::-webkit-date-and-time-value { text-align: left; }
-input[type="date"], input[type="time"] { display: block; line-height: 48px; }
+/* Normalizaciones de centrado vertical en date y time */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 14px;
+  line-height: 26px;
+}
+input[type="date"]::-webkit-datetime-edit,
+input[type="time"]::-webkit-datetime-edit,
+input[type="datetime-local"]::-webkit-datetime-edit,
+input::-webkit-date-and-time-value {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  line-height: 26px;
+  padding: 0;
+  text-align: left;
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.8;
+  margin-left: auto;
+}
 
 .form-hint { font-size: 0.78rem; color: var(--muted); margin-bottom: 12px; }
 
@@ -1206,12 +1322,24 @@ tr.month-row td {
   flex: 1;
 }
 
-.peso-talla-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.peso-talla-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: end;
+}
+
+.fila-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: end;
+}
 
 .siesta-info { font-size: 0.95rem; color: var(--text-2); margin-bottom: 12px; }
 
 .edit-campos { display: flex; flex-direction: column; gap: 14px; }
-.edit-campos .fila-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.edit-campos .fila-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
 
 /* ---------- 13. Modales Luxury ---------- */
 .modal {
@@ -1553,24 +1681,35 @@ tr.month-row td {
   margin-top: auto;
 }
 .alimento-thumb {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  max-width: 34px;
+  max-height: 34px;
+  border-radius: 9px;
+  background: var(--icon-box-bg);
+  border: 1px solid var(--icon-box-border);
   object-fit: contain;
-  padding: 2px;
+  padding: 3px;
   flex-shrink: 0;
+  display: block;
 }
 .alimento-thumb-sm {
   width: 22px;
   height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  max-width: 22px;
+  max-height: 22px;
   border-radius: 6px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background: var(--icon-box-bg);
+  border: 1px solid var(--icon-box-border);
   object-fit: contain;
-  padding: 1px;
+  padding: 2px;
   vertical-align: middle;
+  flex-shrink: 0;
+  display: inline-block;
 }
 .comida-selector-box {
   background: color-mix(in srgb, var(--surface-2) 88%, transparent);
@@ -2172,6 +2311,11 @@ tr.month-row td {
   font-size: 0.82rem;
   font-weight: 800;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.2;
   transition: all 0.2s ease;
 }
 .stats-subtab-btn.active {
@@ -2182,6 +2326,7 @@ tr.month-row td {
 }
 .crec-sexo-switch {
   display: inline-flex;
+  align-items: center;
   gap: 6px;
 }
 .crec-diag-grid {
@@ -2211,75 +2356,230 @@ tr.month-row td {
   font-size: 0.88rem;
   color: var(--text);
 }
+
+/* Alergias en Ficha Info y Modal Selector por Categorías */
 .info-alergias-box {
-  min-height: 44px;
-  padding: 8px 10px;
+  min-height: 48px;
+  padding: 10px 12px;
   border-radius: 12px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
+.alergias-empty-msg {
+  font-size: 0.79rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.alergia-info-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+  border-radius: 999px;
+  background: rgba(244, 63, 94, 0.14);
+  border: 1px solid rgba(244, 63, 94, 0.48);
+  color: var(--text);
+  font-size: 0.77rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.alergia-info-chip img {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  max-width: 22px;
+  max-height: 22px;
+  border-radius: 6px;
+  background: var(--icon-box-bg);
+  border: 1px solid var(--icon-box-border);
+  object-fit: contain;
+  padding: 2px;
+  flex-shrink: 0;
+  display: block;
+}
+
 .alergias-modal-categorias {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   max-height: 55vh;
   overflow-y: auto;
-  padding-right: 4px;
+  padding-right: 6px;
 }
+.alergia-cat-block,
 .alergias-cat-block {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
+.alergia-cat-title,
 .alergias-cat-title {
-  font-size: 0.84rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
   font-weight: 800;
   color: var(--text);
-  padding-bottom: 4px;
+  padding-bottom: 6px;
   border-bottom: 1px solid var(--border);
+}
+.alergia-cat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+  gap: 8px;
+}
+.alergia-food-btn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  min-height: 52px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: left;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+.alergia-food-btn:hover {
+  border-color: var(--brand-accent);
+  background: color-mix(in srgb, var(--brand-primary) 10%, var(--surface-2));
+}
+.alergia-food-btn.selected {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 18%, var(--surface-2));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 28%, transparent);
+}
+.alergia-food-btn img {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  max-width: 34px;
+  max-height: 34px;
+  border-radius: 9px;
+  background: var(--icon-box-bg);
+  border: 1px solid var(--icon-box-border);
+  object-fit: contain;
+  padding: 3px;
+  flex-shrink: 0;
+  display: block;
+}
+.alergia-food-btn span {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+  color: var(--text);
+}
+
+/* Controles de Niño Sano (MINSAL) */
+.info-proximo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
 }
 .controles-sano-lista {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
+.ctrl-sano-card,
 .control-sano-card {
-  padding: 12px;
+  padding: 12px 14px;
   border-radius: 14px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-left: 4px solid var(--ctrl-color, var(--border));
+  border-left: 4px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
 }
+.ctrl-sano-card.completado {
+  border-left-color: #199e70;
+}
+.ctrl-sano-card.programado {
+  border-left-color: var(--brand-primary);
+}
+.ctrl-sano-head,
 .control-sano-head {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
-.control-sano-head strong {
+.ctrl-sano-title {
   font-size: 0.9rem;
+  font-weight: 800;
   color: var(--text);
 }
+.ctrl-sano-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+}
+.ctrl-sano-badge.completado {
+  background: rgba(25, 158, 112, 0.16);
+  border-color: rgba(25, 158, 112, 0.45);
+  color: #199e70;
+}
+.ctrl-sano-badge.programado {
+  background: color-mix(in srgb, var(--brand-primary) 16%, transparent);
+  border-color: color-mix(in srgb, var(--brand-primary) 45%, transparent);
+  color: var(--brand-accent);
+}
+.ctrl-sano-metrics,
 .control-sano-metrics {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
+.ctrl-sano-metric,
 .control-metric-pill {
-  padding: 4px 9px;
-  border-radius: 8px;
+  padding: 6px 9px;
+  border-radius: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
-  font-size: 0.78rem;
-  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
+.ctrl-sano-metric span {
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.ctrl-sano-metric strong {
+  font-size: 0.84rem;
+  color: var(--text);
+  font-weight: 800;
+}
+.ctrl-sano-obs,
 .control-sano-obs {
-  font-size: 0.8rem;
+  font-size: 0.79rem;
   color: var(--text-2);
   background: var(--surface);
   border-radius: 10px;
@@ -2288,20 +2588,51 @@ tr.month-row td {
   white-space: pre-wrap;
   word-break: break-word;
 }
-.control-sano-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.orden-item-left {
-  display: flex;
-  align-items: center;
+
+/* Checkboxes de visibilidad de módulos y badges Admin */
+.orden-check-wrap {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
   gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
 }
-.orden-item-left input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+.orden-vis-check {
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  min-height: 18px !important;
+  padding: 0 !important;
   accent-color: var(--brand-primary);
   cursor: pointer;
+  flex-shrink: 0;
 }
+.orden-item.bloqueado {
+  opacity: 0.52;
+}
+.badge-admin-mod,
+.badge-lock-mod {
+  font-size: 0.66rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.badge-admin-mod {
+  background: color-mix(in srgb, var(--brand-primary) 18%, transparent);
+  color: var(--brand-accent);
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 40%, transparent);
+}
+.badge-lock-mod {
+  background: rgba(244, 63, 94, 0.14);
+  color: var(--danger);
+  border: 1px solid rgba(244, 63, 94, 0.35);
+}
+
 

@@ -1714,9 +1714,46 @@ const PATRONES_MINSAL = {
   },
 };
 
+function parseDecimalComa(val) {
+  if (val == null || val === '') return null;
+  const clean = String(val).trim().replace(/,/g, '.');
+  const n = Number(clean);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+function fmtDecimalComa(val) {
+  if (val == null || val === '') return '';
+  const n = Number(String(val).trim().replace(/,/g, '.'));
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const rounded = Math.round(n * 100) / 100;
+  return String(rounded).replace('.', ',');
+}
+
+function vincularInputDecimalComa(inputEl) {
+  if (!inputEl || inputEl.dataset.decimalComaBound === '1') return;
+  inputEl.dataset.decimalComaBound = '1';
+  inputEl.addEventListener('input', () => {
+    let v = inputEl.value.replace(/\./g, ',').replace(/[^0-9,]/g, '');
+    const parts = v.split(',');
+    if (parts.length > 2) {
+      v = parts[0] + ',' + parts.slice(1).join('');
+    }
+    const [entero, dec] = v.split(',');
+    if (dec !== undefined) {
+      v = `${entero},${dec.slice(0, 2)}`;
+    }
+    if (inputEl.value !== v) inputEl.value = v;
+  });
+}
+
 function obtenerSexoBebe() {
-  const s = (bebe?.sexo || localStorage.getItem('nebu_bebe_sexo') || 'nino').toLowerCase();
-  return s === 'nina' ? 'nina' : 'nino';
+  const guardado = (bebe?.sexo || localStorage.getItem('nebu_bebe_sexo') || '').toLowerCase();
+  if (guardado === 'nina' || guardado === 'nino') return guardado;
+  if (String(bebe?.codigo || '').trim().toUpperCase() === '5D5005' || (bebe?.nombre_completo || '').toLowerCase().includes('marina')) {
+    return 'nina';
+  }
+  return 'nino';
 }
 
 function interpolarCurvaMinsal(tabla, xVal) {
@@ -1821,10 +1858,11 @@ function optsCurvaMinsal(xLabel, yLabel, unidadY) {
     callbacks: {
       title: (items) => {
         const raw = items[0]?.raw;
-        if (raw?.ctrlLabel) return `${raw.ctrlLabel} (${raw.x} ${xLabel})`;
-        return `${items[0]?.parsed?.x} ${xLabel}`;
+        const xStr = String(raw?.x ?? items[0]?.parsed?.x ?? '').replace('.', ',');
+        if (raw?.ctrlLabel) return `${raw.ctrlLabel} (${xStr} ${xLabel})`;
+        return `${xStr} ${xLabel}`;
       },
-      label: (c) => ` ${c.dataset.label}: ${c.parsed.y} ${unidadY}`,
+      label: (c) => ` ${c.dataset.label}: ${String(c.parsed.y).replace('.', ',')} ${unidadY}`,
     },
   });
   opts.scales.x = {
@@ -1881,17 +1919,17 @@ function renderChartsCrecimiento() {
         <div class="crec-diag-item" style="border-left:4px solid ${diag.nutricional.color};">
           <small>⚖️ Estado Nutricional (${escapeHtml(ult.label || ult.nombre || 'Último control')})</small>
           <strong style="color:${diag.nutricional.color};">${escapeHtml(diag.nutricional.texto)}</strong>
-          <small>${ult.peso_kg ? ult.peso_kg + ' kg' : '—'}</small>
+          <small>${ult.peso_kg ? fmtDecimalComa(ult.peso_kg) + ' kg' : '—'}</small>
         </div>
         <div class="crec-diag-item" style="border-left:4px solid ${diag.estatural.color};">
           <small>📏 Calificación Estatural (T/E)</small>
           <strong style="color:${diag.estatural.color};">${escapeHtml(diag.estatural.texto)}</strong>
-          <small>${ult.talla_cm ? ult.talla_cm + ' cm' : '—'}</small>
+          <small>${ult.talla_cm ? fmtDecimalComa(ult.talla_cm) + ' cm' : '—'}</small>
         </div>
         <div class="crec-diag-item" style="border-left:4px solid ${diag.cefalico.color};">
           <small>🧠 Perímetro Cefálico (PCe/E)</small>
           <strong style="color:${diag.cefalico.color};">${escapeHtml(diag.cefalico.texto)}</strong>
-          <small>${ultPce ? ultPce + ' cm' : 'Pendiente de medir'}</small>
+          <small>${ultPce ? fmtDecimalComa(ultPce) + ' cm' : 'Pendiente de medir'}</small>
         </div>
       `;
     } else {
@@ -4641,9 +4679,9 @@ function renderControlesNinoSanoInfo() {
       const diag = evaluarEstadoNutricionalMinsal(cat.meses, reg.peso_kg, reg.talla_cm, reg.perimetro_cefalico_cm, sexo);
       metricsHtml = `
         <div class="ctrl-sano-metrics">
-          <div class="ctrl-sano-metric"><span>Peso</span><strong>${reg.peso_kg ? `${reg.peso_kg} kg` : '—'}</strong></div>
-          <div class="ctrl-sano-metric"><span>Talla</span><strong>${reg.talla_cm ? `${reg.talla_cm} cm` : '—'}</strong></div>
-          <div class="ctrl-sano-metric"><span>P. Encefálico</span><strong>${reg.perimetro_cefalico_cm ? `${reg.perimetro_cefalico_cm} cm` : '—'}</strong></div>
+          <div class="ctrl-sano-metric"><span>Peso</span><strong>${reg.peso_kg ? `${fmtDecimalComa(reg.peso_kg)} kg` : '—'}</strong></div>
+          <div class="ctrl-sano-metric"><span>Talla</span><strong>${reg.talla_cm ? `${fmtDecimalComa(reg.talla_cm)} cm` : '—'}</strong></div>
+          <div class="ctrl-sano-metric"><span>P. Encefálico</span><strong>${reg.perimetro_cefalico_cm ? `${fmtDecimalComa(reg.perimetro_cefalico_cm)} cm` : '—'}</strong></div>
         </div>
         ${diag ? `<div style="display:flex; flex-wrap:wrap; gap:6px; font-size:0.73rem;">
           <span style="padding:2px 8px; border-radius:999px; background:rgba(255,255,255,0.06); color:${diag.nutricional.color}; font-weight:700;">Nutricional: ${escapeHtml(diag.nutricional.texto)}</span>
@@ -4711,9 +4749,12 @@ function cargarCamposModalRegistroControl(ctrlKey) {
   const fEsp = fechaEsperadaControl(bebe?.fecha_nacimiento, cat?.dias || 0) || new Date();
   if ($('ctrlRegFecha')) $('ctrlRegFecha').value = reg.fecha_realizada || (reg.fecha_programada ? dayKey(new Date(reg.fecha_programada)) : dayKey(fEsp));
   if ($('ctrlRegHora')) $('ctrlRegHora').value = reg.fecha_programada ? fmtTime(new Date(reg.fecha_programada)) : '10:00';
-  $('ctrlRegPeso').value = reg.peso_kg ?? '';
-  $('ctrlRegTalla').value = reg.talla_cm ?? '';
-  $('ctrlRegPerimetro').value = reg.perimetro_cefalico_cm ?? '';
+  $('ctrlRegPeso').value = fmtDecimalComa(reg.peso_kg);
+  $('ctrlRegTalla').value = fmtDecimalComa(reg.talla_cm);
+  $('ctrlRegPerimetro').value = fmtDecimalComa(reg.perimetro_cefalico_cm);
+  vincularInputDecimalComa($('ctrlRegPeso'));
+  vincularInputDecimalComa($('ctrlRegTalla'));
+  vincularInputDecimalComa($('ctrlRegPerimetro'));
   $('ctrlRegObs').value = reg.observaciones || '';
   if ($('ctrlRegObsCount')) $('ctrlRegObsCount').textContent = `${($('ctrlRegObs').value || '').length} / 1000`;
 }
@@ -4787,14 +4828,14 @@ $('controlRegistroCancelar')?.addEventListener('click', cerrarModalRegistroContr
 $('controlRegistroGuardar')?.addEventListener('click', async () => {
   const k = $('ctrlRegKey')?.value;
   if (!k) return;
-  const peso = Number($('ctrlRegPeso')?.value);
-  const talla = Number($('ctrlRegTalla')?.value);
-  const pce = Number($('ctrlRegPerimetro')?.value);
+  const peso = parseDecimalComa($('ctrlRegPeso')?.value);
+  const talla = parseDecimalComa($('ctrlRegTalla')?.value);
+  const pce = parseDecimalComa($('ctrlRegPerimetro')?.value);
   const obs = ($('ctrlRegObs')?.value || '').trim().slice(0, 1000);
   const fechaReal = $('ctrlRegFecha')?.value || dayKey(new Date());
 
-  if (!(peso > 0) || !(talla > 0)) {
-    toast('Ingresa un peso y talla válidos', true);
+  if (!peso || !talla) {
+    toast('Ingresa un peso y talla válidos (ej: 7,3 y 65,1)', true);
     return;
   }
 
@@ -5061,8 +5102,8 @@ function renderInfoBebe() {
     $('infoNacimiento').title = '';
   }
 
-  $('infoPeso').value = pesoActual;
-  $('infoTalla').value = tallaActual;
+  $('infoPeso').value = fmtDecimalComa(pesoActual);
+  $('infoTalla').value = fmtDecimalComa(tallaActual);
   $('infoPeso').disabled = true;
   $('infoTalla').disabled = true;
 
@@ -5072,8 +5113,8 @@ function renderInfoBebe() {
   const edad = calcularEdad(bebe.fecha_nacimiento);
   const partes = [];
   if (edad) partes.push(edad);
-  if (pesoActual) partes.push(`${pesoActual} kg`);
-  if (tallaActual) partes.push(`${tallaActual} cm`);
+  if (pesoActual) partes.push(`${fmtDecimalComa(pesoActual)} kg`);
+  if (tallaActual) partes.push(`${fmtDecimalComa(tallaActual)} cm`);
   if (bebe.grupo_sanguineo) partes.push(`GS: ${bebe.grupo_sanguineo}`);
   $('infoResumen').textContent = partes.join(' · ');
 
@@ -5200,8 +5241,8 @@ function aplicarBebe() {
   const edad = calcularEdad(bebe.fecha_nacimiento);
   const partes = [];
   if (edad) partes.push(edad);
-  if (bebe.peso_kg) partes.push(`${bebe.peso_kg} kg`);
-  if (bebe.talla_cm) partes.push(`${bebe.talla_cm} cm`);
+  if (bebe.peso_kg) partes.push(`${fmtDecimalComa(bebe.peso_kg)} kg`);
+  if (bebe.talla_cm) partes.push(`${fmtDecimalComa(bebe.talla_cm)} cm`);
   const bStats = $('babyStats');
   if (partes.length) { bStats.textContent = partes.join(' · '); bStats.classList.remove('hidden'); }
   else bStats.classList.add('hidden');
@@ -5305,8 +5346,8 @@ $('settingsBtn').addEventListener('click', () => {
     $('cfgNacimiento').disabled = false;
     if ($('cfgNacimientoLabelTxt')) $('cfgNacimientoLabelTxt').textContent = 'Nacimiento (Se fijará al guardar)';
   }
-  $('cfgPeso').value = ultimoCtrl?.peso_kg ?? bebe.peso_kg ?? '';
-  $('cfgTalla').value = ultimoCtrl?.talla_cm ?? bebe.talla_cm ?? '';
+  $('cfgPeso').value = fmtDecimalComa(ultimoCtrl?.peso_kg ?? bebe.peso_kg ?? '');
+  $('cfgTalla').value = fmtDecimalComa(ultimoCtrl?.talla_cm ?? bebe.talla_cm ?? '');
   $('cfgPeso').disabled = true;
   $('cfgTalla').disabled = true;
 
@@ -5877,7 +5918,10 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   $('themeBtn').textContent = theme === 'dark' ? '☀️' : '🌙';
   localStorage.setItem('tema', theme);
-  if (appStarted && currentTab === 'stats') renderCharts();
+  if (appStarted && currentTab === 'stats') {
+    if (statsSubTab === 'crecimiento') renderChartsCrecimiento();
+    else renderCharts();
+  }
 }
 function applyPalette(pal) { document.documentElement.dataset.palette = pal; }
 

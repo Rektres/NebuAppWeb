@@ -73,7 +73,7 @@
   }
   </script>
 
-  <link rel="stylesheet" href="styles.css?v=3.1.2">
+  <link rel="stylesheet" href="styles.css?v=3.2.0">
   <link rel="icon" type="image/png" sizes="512x512" href="logo.png">
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-180x180.png">
   <link rel="apple-touch-icon" sizes="512x512" href="apple-touch-icon.png">
@@ -932,13 +932,13 @@
           </div>
           <div class="peso-talla-row">
             <label class="field-label">Peso actual (kg) 🔒
-              <input type="number" id="infoPeso" step="any" inputmode="decimal" placeholder="—" disabled title="Se actualiza en los Controles de Niño Sano">
+              <input type="text" id="infoPeso" inputmode="decimal" placeholder="Ej: 7,3 o 7,35 (usa coma)" disabled title="Se actualiza en los Controles de Niño Sano (hasta 2 decimales con coma)">
             </label>
             <label class="field-label">Talla actual (cm) 🔒
-              <input type="number" id="infoTalla" step="any" inputmode="decimal" placeholder="—" disabled title="Se actualiza en los Controles de Niño Sano">
+              <input type="text" id="infoTalla" inputmode="decimal" placeholder="Ej: 65,1 o 65,25 (usa coma)" disabled title="Se actualiza en los Controles de Niño Sano (hasta 2 decimales con coma)">
             </label>
           </div>
-          <p class="form-hint" style="margin-top:-4px;">🩺 El peso, la talla y el perímetro cefálico se registran por cada <strong>Control de Niño Sano</strong> más abajo.</p>
+          <p class="form-hint" style="margin-top:-4px;">🩺 El peso, la talla y el perímetro cefálico se registran por cada <strong>Control de Niño Sano</strong> más abajo (puedes usar hasta 2 decimales separados por coma, ej: <strong>7,3 kg</strong> o <strong>65,1 cm</strong>).</p>
 
           <!-- Alergias / alérgenos con iconos referenciales como en Comidas -->
           <div class="field-label">
@@ -1099,13 +1099,13 @@
 
       <div class="peso-talla-row">
         <label class="field-label">Peso actual (kg) 🔒
-          <input type="number" id="cfgPeso" step="any" inputmode="decimal" placeholder="Por control" disabled title="Solo modificable por Control de Niño Sano">
+          <input type="text" id="cfgPeso" inputmode="decimal" placeholder="Ej: 7,3 o 7,35 (usa coma)" disabled title="Solo modificable por Control de Niño Sano">
         </label>
         <label class="field-label">Talla actual (cm) 🔒
-          <input type="number" id="cfgTalla" step="any" inputmode="decimal" placeholder="Por control" disabled title="Solo modificable por Control de Niño Sano">
+          <input type="text" id="cfgTalla" inputmode="decimal" placeholder="Ej: 65,1 o 65,25 (usa coma)" disabled title="Solo modificable por Control de Niño Sano">
         </label>
       </div>
-      <p class="form-hint" style="margin-top:-6px;">🔒 El peso y la talla solo se actualizan mediante los <strong>Controles de Niño Sano</strong> (pestaña Info).</p>
+      <p class="form-hint" style="margin-top:-6px;">🔒 El peso y la talla solo se actualizan mediante los <strong>Controles de Niño Sano</strong> en la pestaña Info (hasta 2 decimales con coma, ej: 7,3 kg o 65,1 cm).</p>
 
       <div class="field-label">Foto del bebé
         <div class="photo-row">
@@ -1375,15 +1375,16 @@
       </div>
       <div class="form-grid">
         <label class="field-label">Peso (kg)
-          <input type="number" id="ctrlRegPeso" step="any" inputmode="decimal" placeholder="Ej: 7.2" required>
+          <input type="text" id="ctrlRegPeso" inputmode="decimal" placeholder="Ej: 7,3 o 7,35 (usa coma)" required>
         </label>
         <label class="field-label">Talla / Longitud (cm)
-          <input type="number" id="ctrlRegTalla" step="any" inputmode="decimal" placeholder="Ej: 65.5" required>
+          <input type="text" id="ctrlRegTalla" inputmode="decimal" placeholder="Ej: 65,1 o 65,25 (usa coma)" required>
         </label>
         <label class="field-label">Perímetro encefálico (cm)
-          <input type="number" id="ctrlRegPerimetro" step="any" inputmode="decimal" placeholder="Ej: 43.2">
+          <input type="text" id="ctrlRegPerimetro" inputmode="decimal" placeholder="Ej: 43,2 o 43,25 (usa coma)">
         </label>
       </div>
+      <p class="form-hint" style="margin-top:-6px; margin-bottom:0;">💡 Puedes ingresar hasta 2 decimales separados por una coma (ej: <strong>7,3 kg</strong> · <strong>65,1 cm</strong> · <strong>43,25 cm</strong>).</p>
       <label class="field-label">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <span>Observaciones del control</span>
@@ -1426,8 +1427,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
-  <script src="config.js?v=3.1.2"></script>
-  <script src="whatsapp.js?v=3.1.2"></script>
-  <script src="app.js?v=3.1.2"></script>
+  <script src="config.js?v=3.2.0"></script>
+  <script src="whatsapp.js?v=3.2.0"></script>
+  <script src="app.js?v=3.2.0"></script>
 </body>
 </html>
