@@ -1860,25 +1860,26 @@ function renderChartsCrecimiento() {
 
   const ptsPE = controlesRealizados
     .filter((c) => c.peso_kg > 0)
-    .map((c) => ({ x: c.meses, y: Number(c.peso_kg), ctrlLabel: c.nombre }));
+    .map((c) => ({ x: c.meses, y: Number(c.peso_kg), ctrlLabel: c.label || c.nombre }));
   const ptsTE = controlesRealizados
     .filter((c) => c.talla_cm > 0)
-    .map((c) => ({ x: c.meses, y: Number(c.talla_cm), ctrlLabel: c.nombre }));
+    .map((c) => ({ x: c.meses, y: Number(c.talla_cm), ctrlLabel: c.label || c.nombre }));
   const ptsPCE = controlesRealizados
-    .filter((c) => c.perimetro_cm > 0)
-    .map((c) => ({ x: c.meses, y: Number(c.perimetro_cm), ctrlLabel: c.nombre }));
+    .filter((c) => (c.perimetro_cefalico_cm || c.perimetro_cm) > 0)
+    .map((c) => ({ x: c.meses, y: Number(c.perimetro_cefalico_cm || c.perimetro_cm), ctrlLabel: c.label || c.nombre }));
   const ptsPT = controlesRealizados
     .filter((c) => c.talla_cm > 0 && c.peso_kg > 0)
-    .map((c) => ({ x: Number(c.talla_cm), y: Number(c.peso_kg), ctrlLabel: c.nombre }));
+    .map((c) => ({ x: Number(c.talla_cm), y: Number(c.peso_kg), ctrlLabel: c.label || c.nombre }));
 
   const ult = controlesRealizados[controlesRealizados.length - 1] || null;
   const diagWrap = $('crecimientoDiagnosticoWrap');
   if (diagWrap) {
     if (ult) {
-      const diag = evaluarEstadoNutricionalMinsal(ult.meses, ult.peso_kg, ult.talla_cm, ult.perimetro_cm, sexo);
+      const ultPce = ult.perimetro_cefalico_cm || ult.perimetro_cm;
+      const diag = evaluarEstadoNutricionalMinsal(ult.meses, ult.peso_kg, ult.talla_cm, ultPce, sexo);
       diagWrap.innerHTML = `
         <div class="crec-diag-item" style="border-left:4px solid ${diag.nutricional.color};">
-          <small>⚖️ Estado Nutricional (${escapeHtml(ult.nombre)})</small>
+          <small>⚖️ Estado Nutricional (${escapeHtml(ult.label || ult.nombre || 'Último control')})</small>
           <strong style="color:${diag.nutricional.color};">${escapeHtml(diag.nutricional.texto)}</strong>
           <small>${ult.peso_kg ? ult.peso_kg + ' kg' : '—'}</small>
         </div>
@@ -1890,7 +1891,7 @@ function renderChartsCrecimiento() {
         <div class="crec-diag-item" style="border-left:4px solid ${diag.cefalico.color};">
           <small>🧠 Perímetro Cefálico (PCe/E)</small>
           <strong style="color:${diag.cefalico.color};">${escapeHtml(diag.cefalico.texto)}</strong>
-          <small>${ult.perimetro_cm ? ult.perimetro_cm + ' cm' : 'Pendiente de medir'}</small>
+          <small>${ultPce ? ultPce + ' cm' : 'Pendiente de medir'}</small>
         </div>
       `;
     } else {
@@ -4637,7 +4638,7 @@ function renderControlesNinoSanoInfo() {
 
     let metricsHtml = '';
     if (completado) {
-      const diag = evaluarEstadoNutricionalMinsal(sexo, cat.meses, reg.peso_kg, reg.talla_cm, reg.perimetro_cefalico_cm);
+      const diag = evaluarEstadoNutricionalMinsal(cat.meses, reg.peso_kg, reg.talla_cm, reg.perimetro_cefalico_cm, sexo);
       metricsHtml = `
         <div class="ctrl-sano-metrics">
           <div class="ctrl-sano-metric"><span>Peso</span><strong>${reg.peso_kg ? `${reg.peso_kg} kg` : '—'}</strong></div>
@@ -4645,9 +4646,9 @@ function renderControlesNinoSanoInfo() {
           <div class="ctrl-sano-metric"><span>P. Encefálico</span><strong>${reg.perimetro_cefalico_cm ? `${reg.perimetro_cefalico_cm} cm` : '—'}</strong></div>
         </div>
         ${diag ? `<div style="display:flex; flex-wrap:wrap; gap:6px; font-size:0.73rem;">
-          <span style="padding:2px 8px; border-radius:999px; background:rgba(255,255,255,0.06); color:${diag.colorNut}; font-weight:700;">Nutricional (${diag.indicadorPrincipal}): ${escapeHtml(diag.estadoNutricional)}</span>
-          <span style="padding:2px 8px; border-radius:999px; background:rgba(255,255,255,0.06); color:${diag.colorTalla}; font-weight:700;">Talla: ${escapeHtml(diag.estadoTalla)}</span>
-          ${reg.perimetro_cefalico_cm ? `<span style="padding:2px 8px; border-radius:999px; background:rgba(255,255,255,0.06); color:${diag.colorPce}; font-weight:700;">PCe: ${escapeHtml(diag.estadoPce)}</span>` : ''}
+          <span style="padding:2px 8px; border-radius:999px; background:rgba(255,255,255,0.06); color:${diag.nutricional.color}; font-weight:700;">Nutricional: ${escapeHtml(diag.nutricional.texto)}</span>
+          <span style="padding:2px 8px; border-radius:999px; background:rgba(255,255,255,0.06); color:${diag.estatural.color}; font-weight:700;">Talla: ${escapeHtml(diag.estatural.texto)}</span>
+          ${reg.perimetro_cefalico_cm ? `<span style="padding:2px 8px; border-radius:999px; background:rgba(255,255,255,0.06); color:${diag.cefalico.color}; font-weight:700;">PCe: ${escapeHtml(diag.cefalico.texto)}</span>` : ''}
         </div>` : ''}
         ${reg.observaciones ? `<div class="ctrl-sano-obs"><strong>Observaciones:</strong> ${escapeHtml(reg.observaciones)}</div>` : ''}
       `;
@@ -4894,6 +4895,10 @@ function verificarPopupsControlNinoSano() {
 
 // ---------- Selector de Alergias con Iconos por Categoría ----------
 let alergiasDraftSet = new Set();
+
+function normalizarBusquedaAlimento(str) {
+  return String(str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+}
 
 function obtenerIdsAlergiasActuales() {
   const set = new Set();
