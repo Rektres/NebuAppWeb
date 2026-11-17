@@ -4942,6 +4942,8 @@ function renderAlergiasInfoIconos() {
   `).join('');
 }
 
+const GRUPO_ALINOS = { key: 'alino', nombre: 'Aliños y Hierbas', icono: '🧂', color: '#16a34a' };
+
 function renderModalSelectorAlergiasCategorias() {
   const cont = $('alergiasModalCategorias');
   if (!cont) return;
@@ -4957,10 +4959,12 @@ function renderModalSelectorAlergiasCategorias() {
     });
     if (!delGrupo.length) return '';
     const selCount = delGrupo.filter((a) => alergiasDraftSet.has(a.id)).length;
+    const catIcon = cat.icono || cat.icon || '🥗';
+    const catNombre = cat.nombre || cat.label || cat.key;
     return `
       <div class="alergia-cat-block">
         <div class="alergia-cat-title">
-          <span>${cat.icon} ${escapeHtml(cat.label)}</span>
+          <span>${catIcon} ${escapeHtml(catNombre)}</span>
           <small style="color:var(--muted);">${selCount > 0 ? `<b style="color:#f87171;">${selCount} alérgico${selCount === 1 ? '' : 's'}</b> · ` : ''}${delGrupo.length} alimentos</small>
         </div>
         <div class="alergia-cat-grid">
