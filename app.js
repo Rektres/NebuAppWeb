@@ -6189,6 +6189,515 @@ $('bgPauseBtn').addEventListener('click', () => {
   aplicarFondo();
 });
 
+// ---------- Tutoriales Interactivos en Todos los Módulos (Shepherd.js) ----------
+let shepherdTourActivo = null;
+
+const TUTORIALES_MODULOS = {
+  stats: {
+    nombre: '📊 Estadísticas y Curvas MINSAL',
+    pasos: [
+      {
+        titulo: '📊 Submódulos de Estadísticas',
+        texto: 'Aquí puedes alternar entre los gráficos de <strong>📊 Rutina Diaria</strong> (Leche, Vitaminas, Pañales y Sueño) y las <strong>📈 Curvas de Crecimiento Infantil (MINSAL / OMS)</strong>.',
+        selector: '.stats-subtabs-card',
+        posicion: 'bottom',
+        preparar: () => cambiarSubTabStats('rutina'),
+      },
+      {
+        titulo: '🗓️ Rango de Tiempo y Zoom',
+        texto: 'Filtra tus estadísticas por <strong>1 día, 7 días, 14 días o 1 mes</strong>. Además, puedes pellizcar o usar la rueda del mouse sobre cualquier gráfico para hacer zoom.',
+        selector: '#statsPanelRutina .seg-card',
+        posicion: 'bottom',
+        preparar: () => cambiarSubTabStats('rutina'),
+      },
+      {
+        titulo: '📈 Gráficos Interactivos de Rutina',
+        texto: 'Visualiza el historial de <strong>Leche (ml), Vitaminas, Pañales y Sueño (horas)</strong>. Usa los botones <strong>📊 / 📈</strong> para cambiar entre barras y líneas, o <strong>⟲</strong> para restablecer el zoom.',
+        selector: '#statsPanelRutina .chart-card',
+        posicion: 'top',
+        preparar: () => cambiarSubTabStats('rutina'),
+      },
+      {
+        titulo: '🩺 Curvas de Crecimiento (MINSAL / OMS)',
+        texto: 'En esta segunda subpestaña se grafican los indicadores oficiales del <strong>Ministerio de Salud (0 a 24 meses)</strong> a partir de cada Control de Niño Sano.',
+        selector: '#statsTabCrecimientoBtn',
+        posicion: 'bottom',
+        preparar: () => cambiarSubTabStats('crecimiento'),
+      },
+      {
+        titulo: '⚖️ Diagnóstico Nutricional, Estatural y Cefálico',
+        texto: 'Calcula automáticamente el <strong>Estado Nutricional (P/E o P/T)</strong>, la <strong>Calificación Estatural (T/E)</strong> y el <strong>Perímetro Cefálico (PCe/E)</strong> según el último control registrado.',
+        selector: '#crecimientoDiagnosticoWrap',
+        posicion: 'bottom',
+        preparar: () => cambiarSubTabStats('crecimiento'),
+      },
+      {
+        titulo: '🔍 Filtros por Indicador y Sexo Biológico',
+        texto: 'Filtra una curva específica (<strong>P/E, T/E, PCe/E, P/T</strong>) o alterna entre los patrones oficiales de <strong>👦 Niño</strong> y <strong>👧 Niña</strong>.',
+        selector: '#crecimientoIndTabs',
+        posicion: 'bottom',
+        preparar: () => cambiarSubTabStats('crecimiento'),
+      },
+      {
+        titulo: '📐 Carriles de Desviación Estándar (-2 DE a +2 DE)',
+        texto: 'La línea verde indica la <strong>Mediana (0 DE)</strong>, las ámbar <strong>±1 DE</strong>, las rojas <strong>±2 DE</strong> y la línea celeste (<strong>★</strong>) traza la evolución real de tu bebé.',
+        selector: '#cardChartCrecPE',
+        posicion: 'top',
+        preparar: () => cambiarSubTabStats('crecimiento'),
+      },
+    ],
+  },
+  alertas: {
+    nombre: '🚨 Monitor de Alertas y WhatsApp',
+    pasos: [
+      {
+        titulo: '🚨 Estado Global de Rutinas',
+        texto: 'Supervisa en tiempo real si todas las rutinas están al día (<strong>🟢 Todo al día</strong>) o si alguna regla requiere atención.',
+        selector: '#alertasBadgeGlobal',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '🍼 Regla de Alimentación',
+        texto: 'Monitorea el tiempo desde la última toma de leche: alerta tras <strong>04:00 hrs despierto</strong> (o más de 8 hrs si está durmiendo).',
+        selector: '#cardAlertaHambre',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '💊 Alertas de Hierro, B12 y Vitaminas',
+        texto: 'Supervisa automáticamente los horarios clave de suplementación: <strong>Hierro (08:00 am)</strong>, <strong>Vitamina B12 (17:30 pm)</strong> y <strong>Vitaminas (20:15 pm)</strong>.',
+        selector: '#cardAlertaHierro',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '😴 Ventana de Sueño y Cambio de Pañal',
+        texto: 'Verifica que la ventana de vigilia no supere las <strong>02:00 hrs despierto</strong>, el cambio de pañal las <strong>4 hrs</strong> y las deposiciones los <strong>3 días</strong>.',
+        selector: '#cardAlertaSueno',
+        posicion: 'top',
+      },
+      {
+        titulo: '📊 Informe Diario Automático (23:00 hrs)',
+        texto: 'Consulta la comparativa en vivo respecto al día anterior o pulsa <strong>🚀 Enviar informe diario</strong> para despachar el resumen al grupo de WhatsApp al instante.',
+        selector: '#cardInformeDiario',
+        posicion: 'top',
+      },
+    ],
+  },
+  leche: {
+    nombre: '🍼 Tomas de Leche y Fórmula',
+    pasos: [
+      {
+        titulo: '⏱️ Tiempo desde la Última Toma',
+        texto: 'Visualiza al instante cuánto tiempo ha transcurrido desde la última toma de leche y cuántos mililitros tomó.',
+        selector: '#tab-leche .dash-grid',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '🎯 Meta Diaria de Leche',
+        texto: 'Monitorea los mililitros acumulados hoy frente a tu <strong>Objetivo diario (ml)</strong> con barra de progreso dinámica.',
+        selector: '#tab-leche .goal-card',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '➕ Registrar Nueva Toma',
+        texto: 'Ingresa los <strong>ml</strong> de la toma, ajusta la fecha/hora si fue antes o pulsa <strong>🕒 Registrar ahora</strong> para actualizar la hora actual.',
+        selector: '#formLeche',
+        posicion: 'top',
+      },
+      {
+        titulo: '📋 Historial Agrupado por Día y Semana',
+        texto: 'Explora todas las tomas organizadas por día, semana y mes. Puedes editar (<strong>✏️</strong>) o eliminar (<strong>🗑</strong>) cualquier registro.',
+        selector: '#tablaLeche',
+        posicion: 'top',
+      },
+      {
+        titulo: '🥫 Control de Tarros de Fórmula',
+        texto: 'Calcula automáticamente los gramos de fórmula consumidos (4,3 g cada 30 ml), cuántos tarros has abierto y cuántos gramos restan en el tarro actual.',
+        selector: '#lataCard',
+        posicion: 'top',
+      },
+    ],
+  },
+  comidas: {
+    nombre: '🍽️ Alimentación Complementaria',
+    pasos: [
+      {
+        titulo: '🗓️ Ciclo Semanal Editable',
+        texto: 'Ajusta con <strong>− / ＋</strong> o escribe directamente el número de <strong>Semana</strong> en el que vas, además de consultar cuántos alimentos ha probado tu bebé.',
+        selector: '#tab-comidas .semana-edit-card',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '🌾 Simbología Nutricional y Alérgenos',
+        texto: 'Cada alimento indica con iconos al final de su nombre si es alto en <strong>fibra (🌾)</strong>, <strong>calcio (🦷)</strong>, <strong>hierro (🌿)</strong> o si es un <strong>alérgeno común (❗)</strong>.',
+        selector: '.comida-leyenda-badges',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '🔍 Buscador Rápido con Lupa',
+        texto: 'Busca cualquier ingrediente por nombre para agregarlo o quitarlo inmediatamente del plato del día sin restricción de cantidad.',
+        selector: '.plato-busqueda-rapida-box',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '🥗 Plato Dinámico de 5 Grupos y Botón "Nuevo"',
+        texto: 'Toca cada categoría (<strong>Verdura, Fruta, Proteína, Grasa, Cereal/Tubérculo</strong>) para elegir uno o varios ingredientes. En cada alimento agregado puedes pulsar <strong>＋ Nuevo</strong> (<strong>✨ Nuevo ✓</strong>) para marcar si fue nuevo en ese plato.',
+        selector: '#platoVisualSlots',
+        posicion: 'top',
+      },
+      {
+        titulo: '🧂 Aliños y Hierbas Opcionales',
+        texto: 'Agrega opcionalmente hierbas o especias suaves (orégano, comino, canela, albahaca, ajo, etc.) según tu preferencia en cada plato.',
+        selector: '.alinos-opcionales-box',
+        posicion: 'top',
+      },
+      {
+        titulo: '👁️ Historial de Platos, Edición y Alergias',
+        texto: 'En cada plato guardado puedes tocar <strong>✏️ Editar</strong> para cambiar sus ingredientes o <strong>👁️ Ver</strong> para abrir su ficha y registrar si algún alimento provocó <strong>reacción alérgica</strong>.',
+        selector: '#tablaComidas',
+        posicion: 'top',
+      },
+      {
+        titulo: '🧺 Lista Maestra de 144 Alimentos',
+        texto: 'Consulta todo el catálogo con iconos referenciales, filtra por grupo o con la lupa, marca alimentos ya probados o agrega alimentos personalizados.',
+        selector: '#comidaCatalogoGrid',
+        posicion: 'top',
+      },
+    ],
+  },
+  vitaminas: {
+    nombre: '💊 Vitaminas y Suplementos',
+    pasos: [
+      {
+        titulo: '✅ Checklist Diario en Un Toque',
+        texto: 'Marca con un toque las vitaminas que tomó tu bebé en la fecha y hora seleccionadas. Las vitaminas tomadas se iluminan con su dosis y hora.',
+        selector: '#vitTipoHoy',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '🧪 Unidades de Medida y Hora Sugerida',
+        texto: 'Agrega nuevas vitaminas configurando su <strong>cantidad</strong>, <strong>unidad de medida</strong> (gotas, ml, medida, pastilla, cápsula, porción, gramos, sobre, puff) y su <strong>hora sugerida</strong>.',
+        selector: '#formVitaminaTipo',
+        posicion: 'top',
+      },
+      {
+        titulo: '📖 Historial Detallado por Vitamina',
+        texto: 'Revisa todas las tomas registradas para cada suplemento con su unidad correspondiente y botones de edición.',
+        selector: '#tablaVitaminaTipos',
+        posicion: 'top',
+      },
+      {
+        titulo: '⚡ Registro Rápido de Gotas',
+        texto: 'También cuentas con un formulario directo para anotar dosis puntuales sueltas con fecha y hora.',
+        selector: '#formVitaminas',
+        posicion: 'top',
+      },
+    ],
+  },
+  panales: {
+    nombre: '🧷 Pañales y Escala de Bristol',
+    pasos: [
+      {
+        titulo: '⏱️ Tiempo desde el Último Cambio y Feca',
+        texto: 'Monitorea cuánto tiempo lleva con el pañal actual y cuándo fue su última deposición (<strong>💩</strong>).',
+        selector: '#tab-panales .dash-grid',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '🧷 Tipo de Cambio (Heces y Orina)',
+        texto: 'Selecciona si el cambio de pañal corresponde a <strong>💩 Heces</strong>, <strong>💧 Orina</strong> o ambos.',
+        selector: '#formPanales .check-row',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '💩 Escala de Bristol Pediátrica (1 al 7)',
+        texto: 'Al marcar <strong>💩 Heces</strong>, se despliega la Escala de Bristol Pediátrica con sus 7 tipos visuales. Al elegir uno, verás el <strong>diagnóstico del estado de las heces</strong> y un <strong>tip práctico</strong> para mejorar.',
+        selector: '#formPanales',
+        posicion: 'top',
+      },
+      {
+        titulo: '📋 Historial de Cambios de Pañal',
+        texto: 'Consulta todos los cambios agrupados por día junto con la insignia del tipo de Bristol registrado.',
+        selector: '#tablaPanales',
+        posicion: 'top',
+      },
+    ],
+  },
+  sueno: {
+    nombre: '😴 Descanso y Siestas',
+    pasos: [
+      {
+        titulo: '🌅 Ventana de Vigilia y Último Sueño',
+        texto: 'Observa cuánto tiempo lleva despierto (o durmiendo actualmente) y el resumen de su último tramo de sueño.',
+        selector: '#tab-sueno .dash-grid',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '😴 Siesta en Vivo en Un Toque',
+        texto: 'Pulsa <strong>😴 Se durmió ahora</strong> cuando tu bebé inicie una siesta; el contador quedará activo en vivo hasta que toques <strong>🌅 Despertó</strong>.',
+        selector: '#siestaCard',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '🌙 Registro Manual y Cruce de Medianoche',
+        texto: 'Agrega sueños anteriores indicando hora de inicio y fin. Si el sueño cruza las <strong>00:00 hrs</strong>, la app reparte automáticamente las horas de cada día.',
+        selector: '#formSueno',
+        posicion: 'top',
+      },
+      {
+        titulo: '📋 Historial de Horas de Sueño',
+        texto: 'Revisa todos los sueños registrados y el subtotal de horas dormidas en cada jornada.',
+        selector: '#tablaSueno',
+        posicion: 'top',
+      },
+    ],
+  },
+  info: {
+    nombre: '👶 Ficha Clínica y Controles MINSAL',
+    pasos: [
+      {
+        titulo: '📸 Fotografía y Resumen Clínico',
+        texto: 'Actualiza la foto de perfil de tu bebé y consulta de un vistazo su edad exacta, peso actual, talla y grupo sanguíneo.',
+        selector: '#tab-info .photo-row',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '🔒 Datos del Bebé, Fecha Fija y Decimales con Coma',
+        texto: 'Configura nombre, <strong>Sexo biológico</strong> (para curvas MINSAL) y <strong>Grupo sanguíneo</strong>. La <strong>Fecha de nacimiento</strong> queda fija una vez establecida, y el <strong>Peso/Talla</strong> admiten hasta 2 decimales con coma (ej: <strong>7,3 kg</strong> o <strong>65,1 cm</strong>) actualizados por Control de Niño Sano.',
+        selector: '#formInfo',
+        posicion: 'top',
+      },
+      {
+        titulo: '🚨 Alergias Alimentarias por Categoría',
+        texto: 'Aquí se muestran únicamente los iconos SVG de los alimentos a los cuales tu bebé es alérgico. Pulsa <strong>＋ Escoger alimentos alérgicos</strong> para abrir el modal organizado por categorías.',
+        selector: '#infoAlergiasIconos',
+        posicion: 'top',
+      },
+      {
+        titulo: '🩺 Controles de Niño Sano (Salud Pública MINSAL)',
+        texto: 'Registra cada control oficial (<strong>10 días, 15 días, 1 mes, 2 meses, ..., 24 meses</strong>) con Peso, Talla, Perímetro Encefálico (con hasta 2 decimales separados por coma) y hasta 1000 caracteres de Observaciones.',
+        selector: '#cardControlesNinoSano',
+        posicion: 'top',
+      },
+      {
+        titulo: '🗓️ Avisos Automáticos (5 días antes y 1h después)',
+        texto: 'La app te mostrará un pop-up <strong>5 días antes</strong> del próximo control para agendar la fecha/hora de la cita, y otro pop-up <strong>1 hora después</strong> del control para registrar las mediciones entregadas.',
+        selector: '#infoProximoControlBanner',
+        posicion: 'top',
+      },
+      {
+        titulo: '👩👨 Fichas de Madre, Padre y FAQ',
+        texto: 'Consulta los datos de contacto de ambos padres y resuelve dudas rápidas en las Preguntas Frecuentes.',
+        selector: '#verMadreBtn',
+        posicion: 'top',
+      },
+    ],
+  },
+  bitacora: {
+    nombre: '📖 Bitácora del Bebé',
+    pasos: [
+      {
+        titulo: '✍️ Registrar Hitos y Anotaciones',
+        texto: 'Guarda momentos especiales del desarrollo (primera sonrisa, primeros pasos, visitas médicas o notas) con título, fecha y hasta 1000 caracteres.',
+        selector: '#formBitacora',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '📚 Historial Cronológico de la Bitácora',
+        texto: 'Revisa todas tus anotaciones agrupadas por fecha con opciones para editar o eliminar cuando lo necesites.',
+        selector: '#bitLista',
+        posicion: 'top',
+      },
+    ],
+  },
+  juegos: {
+    nombre: '🧸 Juegos y Estimulación',
+    pasos: [
+      {
+        titulo: '🧸 Actividad de Estimulación Temprana',
+        texto: 'Ingresa el nombre del juego o ejercicio de estimulación realizado con tu bebé.',
+        selector: '#juegoNombre',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '⏱️ Cronómetro de Sesión en Vivo',
+        texto: 'Inicia o pausa el temporizador mientras juegan; el tiempo queda guardado automáticamente incluso si cambias de módulo.',
+        selector: '.crono-row',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '📷 Álbum de Fotos y Observaciones',
+        texto: 'Adjunta fotografías de la sesión y escribe observaciones sobre sus avances psicomotores.',
+        selector: '#juegoFotoBtn',
+        posicion: 'top',
+      },
+      {
+        titulo: '🗂️ Historial de Juegos',
+        texto: 'Consulta las sesiones previas con su duración, notas y galería fotográfica.',
+        selector: '#juegoLista',
+        posicion: 'top',
+      },
+    ],
+  },
+  configuracion: {
+    nombre: '⚙️ Configuración y Módulos',
+    pasos: [
+      {
+        titulo: '🔑 Código de Vinculación Familiar',
+        texto: 'Copia o envía por WhatsApp este código único de 6 caracteres para que el otro padre o madre se vincule al mismo bebé.',
+        selector: '#settingsModal .codigo-box',
+        posicion: 'bottom',
+      },
+      {
+        titulo: '🎨 Tema, Fondo Animado y Paleta de Color',
+        texto: 'Elige entre 5 paletas cromáticas (Celeste, Rosa, Verde, Lila, Ámbar) y fondos animados relajantes (Mar o Espacio).',
+        selector: '#swatchRow',
+        posicion: 'top',
+      },
+      {
+        titulo: '☑️ Visibilidad y Orden de Módulos',
+        texto: 'Marca o desmarca qué módulos deseas mostrar y utiliza <strong>▲ / ▼</strong> para elegir cuáles aparecen como accesos principales en la barra inferior.',
+        selector: '#ordenTabsUI',
+        posicion: 'top',
+      },
+      {
+        titulo: '💾 Guardar Preferencias',
+        texto: 'Pulsa <strong>Guardar</strong> para sincronizar todos los cambios de configuración.',
+        selector: '#cfgGuardar',
+        posicion: 'top',
+      },
+    ],
+  },
+};
+
+function iniciarTutorialModulo(modKey) {
+  if (typeof window.Shepherd === 'undefined') {
+    toast('Cargando librería de tutorial Shepherd.js…', true);
+    return;
+  }
+
+  if (shepherdTourActivo) {
+    try { shepherdTourActivo.cancel(); } catch {}
+    shepherdTourActivo = null;
+  }
+
+  let clave = modKey;
+  if (!clave) {
+    const settingsAbierto = !$('settingsModal')?.classList.contains('hidden');
+    clave = settingsAbierto ? 'configuracion' : (currentTab || 'stats');
+  }
+
+  // Si se pide tutorial de un tab de navegación y no estamos en él, activarlo primero
+  if (clave !== 'configuracion' && TABS[clave] && currentTab !== clave) {
+    activarTab(clave);
+  }
+
+  const config = TUTORIALES_MODULOS[clave] || TUTORIALES_MODULOS.stats;
+  const pasosDef = config.pasos || [];
+  if (!pasosDef.length) return;
+
+  const tour = new window.Shepherd.Tour({
+    useModalOverlay: true,
+    defaultStepOptions: {
+      cancelIcon: { enabled: true, label: 'Cerrar tutorial' },
+      scrollTo: { behavior: 'smooth', block: 'center' },
+      modalOverlayOpeningPadding: 6,
+      modalOverlayOpeningRadius: 14,
+    },
+  });
+
+  // Determinar cuál es el siguiente módulo visible para ofrecer salto directo al finalizar
+  const tabsVisibles = leerVisibilidadTabs();
+  const idxActual = tabsVisibles.indexOf(clave);
+  const sigModKey = (clave !== 'configuracion' && idxActual >= 0 && tabsVisibles.length > 1)
+    ? tabsVisibles[(idxActual + 1) % tabsVisibles.length]
+    : null;
+
+  pasosDef.forEach((p, idx) => {
+    const esPrimero = idx === 0;
+    const esUltimo = idx === pasosDef.length - 1;
+    const botones = [];
+
+    if (esPrimero) {
+      botones.push({
+        text: 'Cerrar',
+        classes: 'shepherd-button-secondary',
+        action: () => tour.cancel(),
+      });
+    } else {
+      botones.push({
+        text: '← Anterior',
+        classes: 'shepherd-button-secondary',
+        action: () => tour.back(),
+      });
+    }
+
+    if (!esUltimo) {
+      botones.push({
+        text: 'Siguiente ➔',
+        action: () => tour.next(),
+      });
+    } else {
+      if (sigModKey && TABS[sigModKey]) {
+        botones.push({
+          text: `Ir a ${TABS[sigModKey].icon} ${TABS[sigModKey].label} ➔`,
+          classes: 'shepherd-button-secondary',
+          action: () => {
+            tour.complete();
+            setTimeout(() => iniciarTutorialModulo(sigModKey), 180);
+          },
+        });
+      }
+      botones.push({
+        text: '¡Entendido! ✓',
+        action: () => tour.complete(),
+      });
+    }
+
+    tour.addStep({
+      id: `${clave}-step-${idx + 1}`,
+      title: p.titulo,
+      text: `
+        <div class="shepherd-step-meta">🎓 ${escapeHtml(config.nombre)} · Paso ${idx + 1} de ${pasosDef.length}</div>
+        <p>${p.texto}</p>
+      `,
+      attachTo: {
+        element: () => {
+          const el = document.querySelector(p.selector);
+          return (el && !el.closest('.hidden')) ? el : null;
+        },
+        on: p.posicion || 'bottom',
+      },
+      beforeShowPromise: () => new Promise((resolve) => {
+        if (typeof p.preparar === 'function') {
+          try { p.preparar(); } catch {}
+        }
+        setTimeout(resolve, 80);
+      }),
+      buttons: botones,
+    });
+  });
+
+  const limpiarEstadoTour = () => {
+    if (shepherdTourActivo === tour) shepherdTourActivo = null;
+  };
+  tour.on('complete', limpiarEstadoTour);
+  tour.on('cancel', limpiarEstadoTour);
+
+  shepherdTourActivo = tour;
+  tour.start();
+}
+
+$('tutorialBtn')?.addEventListener('click', () => {
+  const settingsAbierto = !$('settingsModal')?.classList.contains('hidden');
+  iniciarTutorialModulo(settingsAbierto ? 'configuracion' : (currentTab || 'stats'));
+});
+
+document.addEventListener('click', (e) => {
+  const btnTut = e.target.closest('[data-tutorial-mod]');
+  if (!btnTut) return;
+  iniciarTutorialModulo(btnTut.dataset.tutorialMod);
+});
+
 // ---------- Inicialización ----------
 applyTheme(localStorage.getItem('tema') || 'dark');
 bgResize();

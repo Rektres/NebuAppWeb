@@ -2635,4 +2635,212 @@ tr.month-row td {
   border: 1px solid rgba(244, 63, 94, 0.35);
 }
 
+/* ---------- 19. Tutoriales Interactivos con Shepherd.js (Dark & Light Mode) ---------- */
+.eyebrow-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-tutorial-mod {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  font-family: inherit;
+  line-height: 1.2;
+  color: var(--brand-accent);
+  background: color-mix(in srgb, var(--brand-primary) 16%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--brand-accent) 42%, var(--border));
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
+}
+.btn-tutorial-mod:hover {
+  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--brand-primary) 26%, var(--surface-2));
+  border-color: var(--brand-accent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--brand-primary) 30%, transparent);
+}
+.btn-tutorial-mod:active {
+  transform: scale(0.96);
+}
+
+.shepherd-modal-overlay-container {
+  z-index: 9990 !important;
+  fill: #02040a !important;
+}
+.shepherd-modal-overlay-container.shepherd-modal-is-visible {
+  opacity: 0.68 !important;
+}
+:root[data-theme="light"] .shepherd-modal-overlay-container.shepherd-modal-is-visible {
+  opacity: 0.52 !important;
+}
+
+.shepherd-element {
+  z-index: 9999 !important;
+  max-width: min(370px, 92vw) !important;
+  background: var(--input-bg) !important;
+  border: 1.5px solid color-mix(in srgb, var(--brand-accent) 50%, var(--border)) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.68), 0 0 28px color-mix(in srgb, var(--brand-primary) 28%, transparent) !important;
+  color: var(--text) !important;
+  font-family: var(--shell-font) !important;
+  overflow: visible !important;
+}
+:root[data-theme="light"] .shepherd-element {
+  background: #ffffff !important;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18), 0 0 20px color-mix(in srgb, var(--brand-primary) 16%, transparent) !important;
+}
+
+.shepherd-content {
+  border-radius: 18px !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+.shepherd-header {
+  background: color-mix(in srgb, var(--brand-primary) 15%, transparent) !important;
+  padding: 13px 16px 11px !important;
+  border-radius: 17px 17px 0 0 !important;
+  border-bottom: 1px solid var(--border) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+}
+
+.shepherd-title {
+  color: var(--text) !important;
+  font-size: 0.94rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.25 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin: 0 !important;
+}
+
+.shepherd-cancel-icon {
+  color: var(--text-2) !important;
+  font-size: 1.2rem !important;
+  font-weight: 700 !important;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  border-radius: 8px !important;
+  background: var(--surface-2) !important;
+  border: 1px solid var(--border) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  padding: 0 !important;
+  transition: all 0.15s ease !important;
+}
+.shepherd-cancel-icon:hover {
+  color: var(--text) !important;
+  border-color: var(--brand-accent) !important;
+}
+
+.shepherd-text {
+  color: var(--text-2) !important;
+  font-size: 0.85rem !important;
+  line-height: 1.5 !important;
+  padding: 14px 16px !important;
+}
+.shepherd-text p {
+  margin: 0 0 8px 0 !important;
+  text-align: left !important;
+  hyphens: none !important;
+  color: var(--text-2) !important;
+}
+.shepherd-text p:last-child {
+  margin-bottom: 0 !important;
+}
+.shepherd-text strong {
+  color: var(--text) !important;
+  font-weight: 700 !important;
+}
+
+.shepherd-step-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--brand-accent);
+  background: color-mix(in srgb, var(--brand-primary) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand-accent) 32%, transparent);
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+
+.shepherd-footer {
+  padding: 10px 16px 14px !important;
+  border-top: 1px solid var(--border) !important;
+  border-radius: 0 0 17px 17px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  flex-wrap: wrap !important;
+}
+
+.shepherd-button {
+  border-radius: 10px !important;
+  padding: 8px 14px !important;
+  font-size: 0.8rem !important;
+  font-weight: 700 !important;
+  font-family: inherit !important;
+  line-height: 1.2 !important;
+  margin: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary)) !important;
+  color: var(--accent-ink) !important;
+  border: 1px solid color-mix(in srgb, var(--brand-accent) 45%, transparent) !important;
+  box-shadow: 0 3px 12px color-mix(in srgb, var(--brand-primary) 35%, transparent) !important;
+  cursor: pointer !important;
+  transition: all 0.18s ease !important;
+}
+.shepherd-button:hover {
+  transform: translateY(-1px) !important;
+  filter: brightness(1.07) !important;
+}
+.shepherd-button.shepherd-button-secondary {
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+}
+.shepherd-button.shepherd-button-secondary:hover {
+  border-color: var(--brand-accent) !important;
+  background: color-mix(in srgb, var(--brand-primary) 14%, var(--surface-2)) !important;
+}
+
+.shepherd-arrow,
+.shepherd-arrow::before {
+  background: var(--input-bg) !important;
+  border-color: color-mix(in srgb, var(--brand-accent) 50%, var(--border)) !important;
+}
+:root[data-theme="light"] .shepherd-arrow,
+:root[data-theme="light"] .shepherd-arrow::before {
+  background: #ffffff !important;
+}
+
+
 

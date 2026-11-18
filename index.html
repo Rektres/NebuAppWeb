@@ -73,7 +73,8 @@
   }
   </script>
 
-  <link rel="stylesheet" href="styles.css?v=3.2.0">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/shepherd.js@11.2.0/dist/css/shepherd.css">
+  <link rel="stylesheet" href="styles.css?v=3.3.0">
   <link rel="icon" type="image/png" sizes="512x512" href="logo.png">
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-180x180.png">
   <link rel="apple-touch-icon" sizes="512x512" href="apple-touch-icon.png">
@@ -151,6 +152,7 @@
         </div>
       </div>
       <div class="header-actions">
+        <button id="tutorialBtn" class="icon-btn" title="Tutorial interactivo del módulo actual">🎓</button>
         <button id="themeBtn" class="icon-btn" title="Cambiar tema">☀️</button>
         <button id="reloadBtn" class="icon-btn" title="Recargar">🔄</button>
         <button id="settingsBtn" class="icon-btn" title="Configuración">⚙️</button>
@@ -161,7 +163,10 @@
 
       <!-- ========== PESTAÑA 1: ESTADÍSTICAS ========== -->
       <section id="tab-stats" class="tab active">
-        <span class="eyebrow-badge">★ Panel Analítico</span>
+        <div class="eyebrow-row">
+          <span class="eyebrow-badge">★ Panel Analítico</span>
+          <button type="button" class="btn-tutorial-mod" data-tutorial-mod="stats">🎓 Tutorial</button>
+        </div>
 
         <!-- Sub-pestañas del Módulo Stats -->
         <div class="card stats-subtabs-card">
@@ -307,7 +312,10 @@
 
       <!-- ========== PESTAÑA: ALERTAS PROACTIVAS (SOLO VISUALIZACIÓN) ========== -->
       <section id="tab-alertas" class="tab">
-        <span class="eyebrow-badge">★ Supervisión Médica y de Rutina</span>
+        <div class="eyebrow-row">
+          <span class="eyebrow-badge">★ Supervisión Médica y de Rutina</span>
+          <button type="button" class="btn-tutorial-mod" data-tutorial-mod="alertas">🎓 Tutorial</button>
+        </div>
         
         <div class="card" style="margin-bottom:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -441,7 +449,10 @@
 
       <!-- ========== PESTAÑA 2: TOMAS DE LECHE ========== -->
       <section id="tab-leche" class="tab">
-        <span class="eyebrow-badge">★ Nutrición y Fórmula</span>
+        <div class="eyebrow-row">
+          <span class="eyebrow-badge">★ Nutrición y Fórmula</span>
+          <button type="button" class="btn-tutorial-mod" data-tutorial-mod="leche">🎓 Tutorial</button>
+        </div>
         <div class="dash-grid">
           <div class="card dash-card">
             <span class="stat-label">Última toma hace</span>
@@ -526,7 +537,10 @@
 
       <!-- ========== PESTAÑA: COMIDAS (PLATO DINÁMICO Y ROTACIÓN SEMANAL) ========== -->
       <section id="tab-comidas" class="tab">
-        <span class="eyebrow-badge">★ Alimentación Complementaria</span>
+        <div class="eyebrow-row">
+          <span class="eyebrow-badge">★ Alimentación Complementaria</span>
+          <button type="button" class="btn-tutorial-mod" data-tutorial-mod="comidas">🎓 Tutorial</button>
+        </div>
 
         <div class="dash-grid">
           <div class="card dash-card semana-edit-card">
@@ -721,7 +735,10 @@
 
       <!-- ========== PESTAÑA 3: VITAMINAS ========== -->
       <section id="tab-vitaminas" class="tab">
-        <span class="eyebrow-badge">★ Salud y Suplementos</span>
+        <div class="eyebrow-row">
+          <span class="eyebrow-badge">★ Salud y Suplementos</span>
+          <button type="button" class="btn-tutorial-mod" data-tutorial-mod="vitaminas">🎓 Tutorial</button>
+        </div>
         <div class="card">
           <h2 id="vitHoyTitulo">Hoy — marca qué vitaminas tomó</h2>
           <div class="past-fh">
@@ -801,7 +818,10 @@
 
       <!-- ========== PESTAÑA 4: PAÑALES ========== -->
       <section id="tab-panales" class="tab">
-        <span class="eyebrow-badge">★ Control de Cambios</span>
+        <div class="eyebrow-row">
+          <span class="eyebrow-badge">★ Control de Cambios</span>
+          <button type="button" class="btn-tutorial-mod" data-tutorial-mod="panales">🎓 Tutorial</button>
+        </div>
         <div class="dash-grid">
           <div class="card dash-card">
             <span class="stat-label">Último cambio hace</span>
@@ -842,7 +862,10 @@
 
       <!-- ========== PESTAÑA 5: SUEÑO ========== -->
       <section id="tab-sueno" class="tab">
-        <span class="eyebrow-badge">★ Descanso y Siestas</span>
+        <div class="eyebrow-row">
+          <span class="eyebrow-badge">★ Descanso y Siestas</span>
+          <button type="button" class="btn-tutorial-mod" data-tutorial-mod="sueno">🎓 Tutorial</button>
+        </div>
         <div class="dash-grid">
           <div class="card dash-card">
             <span class="stat-label" id="despiertoHaceLabel">Despierto hace</span>
@@ -887,7 +910,10 @@
 
       <!-- ========== PESTAÑA 6: INFO DEL BEBÉ ========== -->
       <section id="tab-info" class="tab">
-        <span class="eyebrow-badge">★ Ficha Clínica del Bebé</span>
+        <div class="eyebrow-row">
+          <span class="eyebrow-badge">★ Ficha Clínica del Bebé</span>
+          <button type="button" class="btn-tutorial-mod" data-tutorial-mod="info">🎓 Tutorial</button>
+        </div>
         <div class="card">
           <div class="photo-row">
             <div class="avatar avatar-lg" id="infoAvatarWrap">
@@ -1000,7 +1026,10 @@
 
       <!-- ========== PESTAÑA 7: BITÁCORA ========== -->
       <section id="tab-bitacora" class="tab">
-        <span class="eyebrow-badge">★ Hitos del Desarrollo</span>
+        <div class="eyebrow-row">
+          <span class="eyebrow-badge">★ Hitos del Desarrollo</span>
+          <button type="button" class="btn-tutorial-mod" data-tutorial-mod="bitacora">🎓 Tutorial</button>
+        </div>
         <form id="formBitacora" class="card form-card">
           <h2>Nueva anotación</h2>
           <label class="field-label">Título
@@ -1023,7 +1052,10 @@
 
       <!-- ========== PESTAÑA 8: JUEGOS ========== -->
       <section id="tab-juegos" class="tab">
-        <span class="eyebrow-badge">★ Estimulación Temprana</span>
+        <div class="eyebrow-row">
+          <span class="eyebrow-badge">★ Estimulación Temprana</span>
+          <button type="button" class="btn-tutorial-mod" data-tutorial-mod="juegos">🎓 Tutorial</button>
+        </div>
         <form id="formJuegos" class="card form-card">
           <h2>Registrar juego</h2>
           <label class="field-label">Nombre del juego
@@ -1068,7 +1100,10 @@
     <div class="modal-card">
       <div class="modal-head">
         <h2>Configuración</h2>
-        <button id="settingsClose" class="icon-btn">✕</button>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" class="btn-tutorial-mod" data-tutorial-mod="configuracion">🎓 Tutorial</button>
+          <button id="settingsClose" class="icon-btn">✕</button>
+        </div>
       </div>
 
       <div class="field-label">Código del bebé · compártelo para vincular al otro padre/madre
@@ -1427,8 +1462,9 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
-  <script src="config.js?v=3.2.0"></script>
-  <script src="whatsapp.js?v=3.2.0"></script>
-  <script src="app.js?v=3.2.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/shepherd.js@11.2.0/dist/js/shepherd.min.js"></script>
+  <script src="config.js?v=3.3.0"></script>
+  <script src="whatsapp.js?v=3.3.0"></script>
+  <script src="app.js?v=3.3.0"></script>
 </body>
 </html>
