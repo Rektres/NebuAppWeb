@@ -74,7 +74,7 @@
   </script>
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/shepherd.js@11.2.0/dist/css/shepherd.css">
-  <link rel="stylesheet" href="styles.css?v=3.3.0">
+  <link rel="stylesheet" href="styles.css?v=3.4.0">
   <link rel="icon" type="image/png" sizes="512x512" href="logo.png">
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-180x180.png">
   <link rel="apple-touch-icon" sizes="512x512" href="apple-touch-icon.png">
@@ -106,6 +106,10 @@
       </form>
       <p id="authError" class="auth-error hidden"></p>
       <button id="authToggle" class="link-btn">¿No tienes cuenta? Regístrate</button>
+      <div class="auth-access-box">
+        <span>¿Aún no estás en la lista autorizada?</span>
+        <button type="button" id="btnAbrirSolicitudAcceso" class="link-btn auth-access-link">📩 Solicitar acceso a la app</button>
+      </div>
     </div>
   </div>
 
@@ -1100,8 +1104,9 @@
     <div class="modal-card">
       <div class="modal-head">
         <h2>Configuración</h2>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <button type="button" class="btn-tutorial-mod" data-tutorial-mod="configuracion">🎓 Tutorial</button>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <button type="button" id="btnRepetirTutorialInicial" class="btn-tutorial-mod" title="Iniciar el tutorial obligatorio de módulos base">🎓 Tutorial Inicial</button>
+          <button type="button" class="btn-tutorial-mod" data-tutorial-mod="configuracion">🎓 Tutorial Config</button>
           <button id="settingsClose" class="icon-btn">✕</button>
         </div>
       </div>
@@ -1456,6 +1461,45 @@
     </div>
   </div>
 
+  <!-- ==================== MODAL SOLICITAR ACCESO A LA APP (LOGIN) ==================== -->
+  <div id="solicitudAccesoModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>📩 Solicitar Acceso a NebuApp</h2>
+        <button type="button" id="solicitudAccesoClose" class="icon-btn">✕</button>
+      </div>
+      <p style="font-size:0.84rem; color:var(--text-2); margin:0; line-height:1.45;">
+        Completa los datos de ambos padres y del bebé. La solicitud se enviará al correo del administrador para autorizar sus cuentas en la base de datos:
+      </p>
+      <form id="formSolicitudAcceso" style="display:flex; flex-direction:column; gap:12px;">
+        <label class="field-label">👶 Nombre del bebé
+          <input type="text" id="solNombreBebe" maxlength="60" placeholder="Ej: Sofía / Mateo" required>
+        </label>
+        <div class="fila-2">
+          <label class="field-label">👩 Nombre completo Madre / Padre 1
+            <input type="text" id="solNombrePadre1" maxlength="100" placeholder="Nombre y apellidos" required>
+          </label>
+          <label class="field-label">👨 Nombre completo Padre / Madre 2
+            <input type="text" id="solNombrePadre2" maxlength="100" placeholder="Nombre y apellidos" required>
+          </label>
+        </div>
+        <div class="fila-2">
+          <label class="field-label">✉️ Correo Madre / Padre 1
+            <input type="email" id="solCorreoPadre1" maxlength="120" placeholder="madre@ejemplo.com" required>
+          </label>
+          <label class="field-label">✉️ Correo Padre / Madre 2
+            <input type="email" id="solCorreoPadre2" maxlength="120" placeholder="padre@ejemplo.com" required>
+          </label>
+        </div>
+        <div id="solAccesoFeedback" class="sol-acceso-feedback hidden"></div>
+        <div style="display:flex; gap:8px;">
+          <button type="button" id="solicitudAccesoCancelar" class="btn-secondary" style="flex:1;">Cancelar</button>
+          <button type="submit" id="solicitudAccesoEnviar" class="btn-primary" style="flex:1;">📨 Enviar solicitud</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1463,8 +1507,8 @@
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/shepherd.js@11.2.0/dist/js/shepherd.min.js"></script>
-  <script src="config.js?v=3.3.0"></script>
-  <script src="whatsapp.js?v=3.3.0"></script>
-  <script src="app.js?v=3.3.0"></script>
+  <script src="config.js?v=3.4.0"></script>
+  <script src="whatsapp.js?v=3.4.0"></script>
+  <script src="app.js?v=3.4.0"></script>
 </body>
 </html>

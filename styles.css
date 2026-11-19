@@ -2842,5 +2842,69 @@ tr.month-row td {
   background: #ffffff !important;
 }
 
+.shepherd-step-meta.obligatorio {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.55);
+  color: #fbbf24;
+}
+:root[data-theme="light"] .shepherd-step-meta.obligatorio {
+  color: #b45309;
+}
+
+/* ---------- 20. Solicitud de Acceso desde Login ---------- */
+.auth-access-box {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.auth-access-box span {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.auth-access-link {
+  margin-top: 0 !important;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-primary) 16%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--brand-accent) 42%, var(--border));
+  color: var(--brand-accent);
+  font-size: 0.84rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+.auth-access-link:hover {
+  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--brand-primary) 26%, var(--surface-2));
+  border-color: var(--brand-accent);
+}
+.sol-acceso-feedback {
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.sol-acceso-feedback.ok {
+  background: rgba(25, 158, 112, 0.14);
+  border-color: rgba(25, 158, 112, 0.45);
+  color: #199e70;
+}
+.sol-acceso-feedback.err {
+  background: rgba(244, 63, 94, 0.14);
+  border-color: rgba(244, 63, 94, 0.45);
+  color: var(--danger);
+}
+
+
 
 

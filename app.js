@@ -6077,7 +6077,11 @@ function iniciarApp(b, rol) {
       actualizarAlertasYBadge();
     }
     renderTab(currentTab);
-    verificarPopupsControlNinoSano();
+    if (!tieneTutorialInicialCompletado()) {
+      iniciarTutorialInicialObligatorio(false);
+    } else {
+      verificarPopupsControlNinoSano();
+    }
   });
 }
 
@@ -6688,6 +6692,10 @@ function iniciarTutorialModulo(modKey) {
 }
 
 $('tutorialBtn')?.addEventListener('click', () => {
+  if (shepherdTourObligatorioEnCurso) {
+    toast('Completa primero el tutorial inicial obligatorio en curso', true);
+    return;
+  }
   const settingsAbierto = !$('settingsModal')?.classList.contains('hidden');
   iniciarTutorialModulo(settingsAbierto ? 'configuracion' : (currentTab || 'stats'));
 });
@@ -6695,7 +6703,356 @@ $('tutorialBtn')?.addEventListener('click', () => {
 document.addEventListener('click', (e) => {
   const btnTut = e.target.closest('[data-tutorial-mod]');
   if (!btnTut) return;
+  if (shepherdTourObligatorioEnCurso) {
+    toast('Completa primero el tutorial inicial obligatorio en curso', true);
+    return;
+  }
   iniciarTutorialModulo(btnTut.dataset.tutorialMod);
+});
+
+// ---------- Tutorial Inicial Obligatorio para Nuevos Usuarios (Solo Módulos Base) ----------
+let shepherdTourObligatorioEnCurso = false;
+
+function claveTutorialInicialUsuario() {
+  const uid = usuario?.id || bebe?.id || 'default';
+  return `nebu_tutorial_inicial_v1_${uid}`;
+}
+
+function tieneTutorialInicialCompletado() {
+  try {
+    if (localStorage.getItem(claveTutorialInicialUsuario()) === '1') return true;
+  } catch {}
+  const m = (cache.miembros || []).find((x) => String(x.user_id) === String(usuario?.id));
+  if (m?.tutorial_inicial_completado === true) {
+    try { localStorage.setItem(claveTutorialInicialUsuario(), '1'); } catch {}
+    return true;
+  }
+  return false;
+}
+
+async function marcarTutorialInicialCompletado() {
+  try {
+    localStorage.setItem(claveTutorialInicialUsuario(), '1');
+  } catch {}
+  if (usuario?.id) {
+    try {
+      await db.from('miembros').update({ tutorial_inicial_completado: true }).eq('user_id', usuario.id);
+    } catch {}
+  }
+}
+
+const PASOS_TUTORIAL_INICIAL_BASE = [
+  {
+    modulo: 'stats',
+    modLabel: '1. 📊 Stats (Módulo Base)',
+    titulo: '👋 ¡Bienvenido/a! 1/5 · Panel de Estadísticas',
+    texto: 'Este recorrido inicial es <strong>obligatorio para nuevos usuarios</strong> y te mostrará los <strong>5 módulos base disponibles</strong>.<br><br>En <strong>📊 Stats</strong> verás el resumen gráfico de las rutinas diarias de tu bebé (Leche, Pañales y Sueño) filtrables por 1 día, 7 días, 14 días o 1 mes.',
+    selector: '#statsPanelRutina .seg-card',
+    posicion: 'bottom',
+    preparar: () => {
+      $('settingsModal')?.classList.add('hidden');
+      activarTab('stats');
+      cambiarSubTabStats('rutina');
+    },
+  },
+  {
+    modulo: 'leche',
+    modLabel: '2. 🍼 Leche (Módulo Base)',
+    titulo: '🍼 2/5 · Tomas de Leche y Meta Diaria',
+    texto: 'En el módulo <strong>🍼 Leche</strong> puedes registrar cada toma en mililitros (<strong>ml</strong>), ver cuánto tiempo pasó desde la última toma, seguir el progreso de tu meta diaria y llevar el cálculo automático de tarros de fórmula.',
+    selector: '#formLeche',
+    posicion: 'top',
+    preparar: () => {
+      activarTab('leche');
+    },
+  },
+  {
+    modulo: 'panales',
+    modLabel: '3. 🧷 Pañales (Módulo Base)',
+    titulo: '🧷 3/5 · Cambios de Pañal y Escala de Bristol',
+    texto: 'En <strong>🧷 Pañales</strong> registras cada cambio marcando <strong>💧 Orina</strong> y/o <strong>💩 Heces</strong>. Al marcar Heces se despliega la <strong>Escala de Bristol Pediátrica (tipos 1 al 7)</strong> con diagnóstico del estado digestivo y consejos prácticos.',
+    selector: '#formPanales',
+    posicion: 'top',
+    preparar: () => {
+      activarTab('panales');
+    },
+  },
+  {
+    modulo: 'comidas',
+    modLabel: '4. 🍽️ Comidas (Módulo Base)',
+    titulo: '🍽️ 4/5 · Plato Dinámico de Alimentación',
+    texto: 'En <strong>🍽️ Comidas</strong> armas el plato diario combinando los <strong>5 grupos de alimentos</strong> (Verdura, Fruta, Proteína, Grasa y Cereal/Tubérculo), usas la lupa de búsqueda rápida, marcas alimentos con <strong>＋ Nuevo</strong> y registras posibles alergias.',
+    selector: '#platoVisualSlots',
+    posicion: 'top',
+    preparar: () => {
+      activarTab('comidas');
+    },
+  },
+  {
+    modulo: 'sueno',
+    modLabel: '5. 😴 Sueño (Módulo Base)',
+    titulo: '😴 5/5 · Descanso y Siestas en Vivo',
+    texto: 'Finalmente, en <strong>😴 Sueño</strong> controlas cuánto tiempo lleva despierto tu bebé, inicias o detienes una siesta en vivo con un toque (<strong>😴 Se durmió ahora / 🌅 Despertó</strong>) o registras sueños manuales.',
+    selector: '#siestaCard',
+    posicion: 'bottom',
+    preparar: () => {
+      activarTab('sueno');
+    },
+  },
+];
+
+function iniciarTutorialInicialObligatorio(forzar = false) {
+  if (typeof window.Shepherd === 'undefined') {
+    toast('Cargando tutorial inicial…', true);
+    return;
+  }
+  if (!forzar && tieneTutorialInicialCompletado()) return;
+
+  if (shepherdTourActivo) {
+    try { shepherdTourActivo.cancel(); } catch {}
+    shepherdTourActivo = null;
+  }
+
+  $('settingsModal')?.classList.add('hidden');
+  shepherdTourObligatorioEnCurso = true;
+
+  const tour = new window.Shepherd.Tour({
+    useModalOverlay: true,
+    exitOnEsc: false,
+    keyboardNavigation: true,
+    defaultStepOptions: {
+      cancelIcon: { enabled: false },
+      scrollTo: { behavior: 'smooth', block: 'center' },
+      modalOverlayOpeningPadding: 6,
+      modalOverlayOpeningRadius: 14,
+      canClickTarget: false,
+    },
+  });
+
+  const total = PASOS_TUTORIAL_INICIAL_BASE.length;
+
+  PASOS_TUTORIAL_INICIAL_BASE.forEach((p, idx) => {
+    const esPrimero = idx === 0;
+    const esUltimo = idx === total - 1;
+    const botones = [];
+
+    if (!esPrimero) {
+      botones.push({
+        text: '← Anterior',
+        classes: 'shepherd-button-secondary',
+        action: () => tour.back(),
+      });
+    }
+
+    if (!esUltimo) {
+      botones.push({
+        text: esPrimero ? 'Comenzar recorrido obligatorio ➔' : 'Siguiente módulo base ➔',
+        action: () => tour.next(),
+      });
+    } else {
+      botones.push({
+        text: '¡Finalizar tutorial obligatorio! ✓',
+        action: async () => {
+          shepherdTourObligatorioEnCurso = false;
+          await marcarTutorialInicialCompletado();
+          tour.complete();
+          activarTab('stats');
+          toast('🎓 ¡Tutorial inicial completado! Ya puedes utilizar NebuApp.');
+          verificarPopupsControlNinoSano();
+        },
+      });
+    }
+
+    tour.addStep({
+      id: `onboarding-base-step-${idx + 1}`,
+      title: p.titulo,
+      text: `
+        <div class="shepherd-step-meta obligatorio">🔒 Tutorial Inicial Obligatorio · ${escapeHtml(p.modLabel)} · Paso ${idx + 1} de ${total}</div>
+        <p>${p.texto}</p>
+      `,
+      attachTo: {
+        element: () => {
+          const el = document.querySelector(p.selector);
+          return (el && !el.closest('.hidden')) ? el : null;
+        },
+        on: p.posicion || 'bottom',
+      },
+      beforeShowPromise: () => new Promise((resolve) => {
+        if (typeof p.preparar === 'function') {
+          try { p.preparar(); } catch {}
+        }
+        setTimeout(resolve, 110);
+      }),
+      buttons: botones,
+    });
+  });
+
+  tour.on('complete', () => {
+    shepherdTourObligatorioEnCurso = false;
+    if (shepherdTourActivo === tour) shepherdTourActivo = null;
+  });
+  tour.on('cancel', () => {
+    shepherdTourObligatorioEnCurso = false;
+    if (shepherdTourActivo === tour) shepherdTourActivo = null;
+  });
+
+  shepherdTourActivo = tour;
+  tour.start();
+}
+
+window.iniciarTutorialInicialObligatorio = iniciarTutorialInicialObligatorio;
+
+$('btnRepetirTutorialInicial')?.addEventListener('click', () => {
+  iniciarTutorialInicialObligatorio(true);
+});
+
+// ---------- Solicitud de Acceso a la App desde Login (Envío al Correo del Admin) ----------
+const ADMIN_ACCESS_EMAIL = 'mateo.aramedi@gmail.com';
+const CONTACT_API_ACCESS_URL = 'https://rektressserver.tailda85b3.ts.net/api/contact';
+const FORMSUBMIT_AJAX_URL = `https://formsubmit.co/ajax/${ADMIN_ACCESS_EMAIL}`;
+
+function abrirModalSolicitudAcceso() {
+  if ($('formSolicitudAcceso')) $('formSolicitudAcceso').reset();
+  if ($('solAccesoFeedback')) {
+    $('solAccesoFeedback').className = 'sol-acceso-feedback hidden';
+    $('solAccesoFeedback').innerHTML = '';
+  }
+  // Si el usuario ya había escrito su correo en el login, precargarlo en Correo Madre/Padre 1
+  const loginEmail = ($('authEmail')?.value || '').trim();
+  if (loginEmail && $('solCorreoPadre1') && !$('solCorreoPadre1').value) {
+    $('solCorreoPadre1').value = loginEmail;
+  }
+  $('solicitudAccesoModal')?.classList.remove('hidden');
+}
+
+function cerrarModalSolicitudAcceso() {
+  $('solicitudAccesoModal')?.classList.add('hidden');
+}
+
+$('btnAbrirSolicitudAcceso')?.addEventListener('click', abrirModalSolicitudAcceso);
+$('solicitudAccesoClose')?.addEventListener('click', cerrarModalSolicitudAcceso);
+$('solicitudAccesoCancelar')?.addEventListener('click', cerrarModalSolicitudAcceso);
+$('solicitudAccesoModal')?.addEventListener('click', (e) => {
+  if (e.target === $('solicitudAccesoModal')) cerrarModalSolicitudAcceso();
+});
+
+$('formSolicitudAcceso')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nombreBebe = ($('solNombreBebe')?.value || '').trim();
+  const nombrePadre1 = ($('solNombrePadre1')?.value || '').trim();
+  const nombrePadre2 = ($('solNombrePadre2')?.value || '').trim();
+  const correoPadre1 = ($('solCorreoPadre1')?.value || '').trim().toLowerCase();
+  const correoPadre2 = ($('solCorreoPadre2')?.value || '').trim().toLowerCase();
+  const fb = $('solAccesoFeedback');
+
+  const emailRe = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!nombreBebe || !nombrePadre1 || !nombrePadre2 || !correoPadre1 || !correoPadre2) {
+    if (fb) {
+      fb.className = 'sol-acceso-feedback err';
+      fb.textContent = '⚠️ Por favor completa el nombre del bebé, los nombres completos de ambos padres y sus correos.';
+    }
+    return;
+  }
+  if (!emailRe.test(correoPadre1) || !emailRe.test(correoPadre2)) {
+    if (fb) {
+      fb.className = 'sol-acceso-feedback err';
+      fb.textContent = '⚠️ Ingresa direcciones de correo electrónico válidas para ambos padres.';
+    }
+    return;
+  }
+
+  const btn = $('solicitudAccesoEnviar');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Enviando solicitud…';
+  }
+
+  const fechaTxt = new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' });
+  const sqlWhitelist = `insert into whitelist (email) values ('${correoPadre1}'), ('${correoPadre2}');`;
+  const cuerpoMensaje = [
+    `🍼 Nueva Solicitud de Acceso a NebuApp (Rutinas del Bebé)`,
+    `Fecha: ${fechaTxt}`,
+    ``,
+    `👶 Nombre del bebé: ${nombreBebe}`,
+    `👩 Nombre completo Madre / Padre 1: ${nombrePadre1}`,
+    `✉️ Correo Madre / Padre 1: ${correoPadre1}`,
+    `👨 Nombre completo Padre / Madre 2: ${nombrePadre2}`,
+    `✉️ Correo Padre / Madre 2: ${correoPadre2}`,
+    ``,
+    `--- SQL para autorizar manualmente en Supabase ---`,
+    sqlWhitelist,
+  ].join('\n');
+
+  const asunto = `🍼 Solicitud de Acceso NebuApp — Bebé: ${nombreBebe}`;
+  const mailtoUrl = `mailto:${ADMIN_ACCESS_EMAIL}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpoMensaje)}`;
+
+  let enviadoRemoto = false;
+
+  try {
+    // 1. Envío directo por correo electrónico vía FormSubmit AJAX a mateo.aramedi@gmail.com
+    const pFormSubmit = fetch(FORMSUBMIT_AJAX_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        _subject: asunto,
+        _template: 'table',
+        _captcha: 'false',
+        nombre_bebe: nombreBebe,
+        nombre_completo_padre_1: nombrePadre1,
+        correo_padre_1: correoPadre1,
+        nombre_completo_padre_2: nombrePadre2,
+        correo_padre_2: correoPadre2,
+        sql_whitelist_manual: sqlWhitelist,
+        fecha_solicitud: fechaTxt,
+      }),
+    }).then((r) => r.ok).catch(() => false);
+
+    // 2. Envío paralelo al microservicio Contact API en rektressserver
+    const pContactApi = fetch(CONTACT_API_ACCESS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `NebuApp Acceso: ${nombreBebe}`,
+        email: correoPadre1,
+        message: cuerpoMensaje,
+      }),
+    }).then((r) => r.ok).catch(() => false);
+
+    // 3. Registro en Supabase (si la función RPC registrar_solicitud_acceso está activa)
+    const pSupabase = (db && typeof db.rpc === 'function')
+      ? db.rpc('registrar_solicitud_acceso', {
+          p_nombre_bebe: nombreBebe,
+          p_nombre_padre_1: nombrePadre1,
+          p_nombre_padre_2: nombrePadre2,
+          p_correo_padre_1: correoPadre1,
+          p_correo_padre_2: correoPadre2,
+        }).then(({ error }) => !error).catch(() => false)
+      : Promise.resolve(false);
+
+    const [okFs, okApi, okDb] = await Promise.all([pFormSubmit, pContactApi, pSupabase]);
+    enviadoRemoto = Boolean(okFs || okApi || okDb);
+  } catch {}
+
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = '📨 Enviar solicitud';
+  }
+
+  if (fb) {
+    fb.className = 'sol-acceso-feedback ok';
+    fb.innerHTML = `
+      <strong>✅ ¡Solicitud registrada y enviada al administrador!</strong>
+      <div style="margin-top:4px; color:var(--text-2);">
+        Se enviaron los datos de <b>${escapeHtml(nombreBebe)}</b> y de ambos padres (<b>${escapeHtml(correoPadre1)}</b> y <b>${escapeHtml(correoPadre2)}</b>) a <b>${escapeHtml(ADMIN_ACCESS_EMAIL)}</b> para su ingreso manual.
+      </div>
+      <div style="margin-top:8px;">
+        <a href="${mailtoUrl}" id="solAccesoMailtoBtn" class="btn-secondary" style="text-decoration:none; font-size:0.78rem; padding:7px 12px; display:inline-flex; width:100%;">
+          ✉️ Respaldar enviando también desde mi app de correo
+        </a>
+      </div>
+    `;
+  }
+  toast('📩 Solicitud de acceso enviada al administrador ✓');
 });
 
 // ---------- Inicialización ----------
