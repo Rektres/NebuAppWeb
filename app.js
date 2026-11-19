@@ -6722,8 +6722,8 @@ function tieneTutorialInicialCompletado() {
   try {
     if (localStorage.getItem(claveTutorialInicialUsuario()) === '1') return true;
   } catch {}
-  const m = (cache.miembros || []).find((x) => String(x.user_id) === String(usuario?.id));
-  if (m?.tutorial_inicial_completado === true) {
+  const uid = String(usuario?.id || 'default');
+  if (bebe?.whatsapp_config?.tutorial_inicial_completado?.[uid] === true) {
     try { localStorage.setItem(claveTutorialInicialUsuario(), '1'); } catch {}
     return true;
   }
@@ -6734,9 +6734,19 @@ async function marcarTutorialInicialCompletado() {
   try {
     localStorage.setItem(claveTutorialInicialUsuario(), '1');
   } catch {}
-  if (usuario?.id) {
+  if (bebe?.id && usuario?.id) {
     try {
-      await db.from('miembros').update({ tutorial_inicial_completado: true }).eq('user_id', usuario.id);
+      const uid = String(usuario.id);
+      const prevCfg = (bebe.whatsapp_config && typeof bebe.whatsapp_config === 'object') ? bebe.whatsapp_config : {};
+      const prevMap = (prevCfg.tutorial_inicial_completado && typeof prevCfg.tutorial_inicial_completado === 'object')
+        ? prevCfg.tutorial_inicial_completado
+        : {};
+      const nextCfg = {
+        ...prevCfg,
+        tutorial_inicial_completado: { ...prevMap, [uid]: true },
+      };
+      bebe.whatsapp_config = nextCfg;
+      await db.from('bebes').update({ whatsapp_config: nextCfg }).eq('id', bebe.id);
     } catch {}
   }
 }
