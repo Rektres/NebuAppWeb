@@ -7,7 +7,7 @@ alter table bebes
   add column if not exists perimetro_cefalico_cm numeric,
   add column if not exists es_admin boolean not null default false,
   add column if not exists wsp_desbloqueado boolean not null default false,
-  add column if not exists modulos_desbloqueados jsonb default '["stats","leche","panales","comidas","sueno"]'::jsonb,
+  add column if not exists modulos_desbloqueados jsonb default '["stats","leche","panales","comidas","sueno","info"]'::jsonb,
   add column if not exists modulos_visibles jsonb default '["stats","alertas","leche","comidas","vitaminas","panales","sueno","info","bitacora","juegos"]'::jsonb;
 
 alter table vitaminas_tipos

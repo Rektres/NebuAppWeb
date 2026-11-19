@@ -26,7 +26,7 @@ create table bebes (
   latas_usadas integer default 0,       -- contador de latas abiertas
   es_admin boolean not null default false,
   wsp_desbloqueado boolean not null default false,
-  modulos_desbloqueados jsonb default '["stats","leche","panales","comidas","sueno"]'::jsonb,
+  modulos_desbloqueados jsonb default '["stats","leche","panales","comidas","sueno","info"]'::jsonb,
   modulos_visibles jsonb default '["stats","alertas","leche","comidas","vitaminas","panales","sueno","info","bitacora","juegos"]'::jsonb,
   created_at timestamptz default now()
 );

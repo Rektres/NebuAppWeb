@@ -2019,7 +2019,7 @@ document.querySelectorAll('[data-sexo-pat]').forEach((btn) => {
 
 // ---------- Tabs, Permisos de Módulos y Administrador (5D5005) ----------
 const CODIGO_ADMIN_BEBE = '5D5005';
-const MODULOS_PRINCIPALES_DEFAULT = ['stats', 'leche', 'panales', 'comidas', 'sueno'];
+const MODULOS_PRINCIPALES_DEFAULT = ['stats', 'leche', 'panales', 'comidas', 'sueno', 'info'];
 
 const TABS = {
   stats: { icon: '📊', label: 'Stats' },
@@ -2052,7 +2052,9 @@ function obtenerModulosDesbloqueados() {
   const desdeBebe = Array.isArray(bebe.modulos_desbloqueados)
     ? bebe.modulos_desbloqueados
     : (Array.isArray(bebe.whatsapp_config?.modulos_desbloqueados) ? bebe.whatsapp_config.modulos_desbloqueados : null);
-  const base = desdeBebe ? desdeBebe.filter((k) => TABS[k]) : MODULOS_PRINCIPALES_DEFAULT.slice();
+  const base = desdeBebe
+    ? Array.from(new Set([...MODULOS_PRINCIPALES_DEFAULT, ...desdeBebe.filter((k) => TABS[k])]))
+    : MODULOS_PRINCIPALES_DEFAULT.slice();
   if (!tieneWspYAlertasDesbloqueado()) {
     return base.filter((k) => k !== 'alertas');
   }
@@ -5268,7 +5270,7 @@ function renderOrdenTabsUI() {
   if ($('ordenTabsLabelTxt')) {
     $('ordenTabsLabelTxt').textContent = esAdmin
       ? `Visibilidad y orden de módulos 👑 (Admin ${bebe?.codigo || CODIGO_ADMIN_BEBE})`
-      : 'Visibilidad y orden de módulos (Principales habilitados)';
+      : 'Visibilidad y orden de módulos (6 módulos base habilitados)';
   }
 
   let visIndex = 0;
@@ -6198,11 +6200,11 @@ let shepherdTourActivo = null;
 
 const TUTORIALES_MODULOS = {
   stats: {
-    nombre: '📊 Estadísticas y Curvas MINSAL',
+    nombre: '📊 Estadísticas y Curvas MINSAL (Módulo Base)',
     pasos: [
       {
-        titulo: '📊 Submódulos de Estadísticas',
-        texto: 'Aquí puedes alternar entre los gráficos de <strong>📊 Rutina Diaria</strong> (Leche, Vitaminas, Pañales y Sueño) y las <strong>📈 Curvas de Crecimiento Infantil (MINSAL / OMS)</strong>.',
+        titulo: '📊 Submódulos de Estadísticas (Módulo Base 1/6)',
+        texto: 'Aquí puedes alternar entre los gráficos de <strong>📊 Rutina Diaria</strong> (Leche, Vitaminas, Pañales y Sueño) y las <strong>📈 Curvas de Crecimiento Infantil (MINSAL / OMS)</strong> alimentadas desde el módulo base <strong>👶 Info</strong>.',
         selector: '.stats-subtabs-card',
         posicion: 'bottom',
         preparar: () => cambiarSubTabStats('rutina'),
@@ -6223,28 +6225,28 @@ const TUTORIALES_MODULOS = {
       },
       {
         titulo: '🩺 Curvas de Crecimiento (MINSAL / OMS)',
-        texto: 'En esta segunda subpestaña se grafican los indicadores oficiales del <strong>Ministerio de Salud (0 a 24 meses)</strong> a partir de cada Control de Niño Sano.',
+        texto: 'En esta segunda subpestaña se grafican los indicadores oficiales del <strong>Ministerio de Salud (0 a 24 meses)</strong> a partir de cada <strong>Control de Niño Sano</strong> registrado en el módulo base <strong>👶 Info</strong>.',
         selector: '#statsTabCrecimientoBtn',
         posicion: 'bottom',
         preparar: () => cambiarSubTabStats('crecimiento'),
       },
       {
         titulo: '⚖️ Diagnóstico Nutricional, Estatural y Cefálico',
-        texto: 'Calcula automáticamente el <strong>Estado Nutricional (P/E o P/T)</strong>, la <strong>Calificación Estatural (T/E)</strong> y el <strong>Perímetro Cefálico (PCe/E)</strong> según el último control registrado.',
+        texto: 'Calcula automáticamente el <strong>Estado Nutricional (P/E o P/T)</strong>, la <strong>Calificación Estatural (T/E)</strong> y el <strong>Perímetro Cefálico (PCe/E)</strong> según el último control registrado (con soporte para hasta 2 decimales con coma).',
         selector: '#crecimientoDiagnosticoWrap',
         posicion: 'bottom',
         preparar: () => cambiarSubTabStats('crecimiento'),
       },
       {
         titulo: '🔍 Filtros por Indicador y Sexo Biológico',
-        texto: 'Filtra una curva específica (<strong>P/E, T/E, PCe/E, P/T</strong>) o alterna entre los patrones oficiales de <strong>👦 Niño</strong> y <strong>👧 Niña</strong>.',
+        texto: 'Filtra una curva específica (<strong>P/E, T/E, PCe/E, P/T</strong>) o alterna entre los patrones oficiales de <strong>👦 Niño</strong> y <strong>👧 Niña</strong> sincronizados con <strong>👶 Info</strong>.',
         selector: '#crecimientoIndTabs',
         posicion: 'bottom',
         preparar: () => cambiarSubTabStats('crecimiento'),
       },
       {
         titulo: '📐 Carriles de Desviación Estándar (-2 DE a +2 DE)',
-        texto: 'La línea verde indica la <strong>Mediana (0 DE)</strong>, las ámbar <strong>±1 DE</strong>, las rojas <strong>±2 DE</strong> y la línea celeste (<strong>★</strong>) traza la evolución real de tu bebé.',
+        texto: 'La línea verde indica la <strong>Mediana (0 DE)</strong>, las ámbar <strong>±1 DE</strong>, las rojas <strong>±2 DE</strong> y la línea celeste (<strong>★</strong>) traza la evolución real de tu bebé en cada Control de Niño Sano.',
         selector: '#cardChartCrecPE',
         posicion: 'top',
         preparar: () => cambiarSubTabStats('crecimiento'),
@@ -6252,11 +6254,11 @@ const TUTORIALES_MODULOS = {
     ],
   },
   alertas: {
-    nombre: '🚨 Monitor de Alertas y WhatsApp',
+    nombre: '🚨 Monitor de Alertas y WhatsApp (Módulo Avanzado)',
     pasos: [
       {
         titulo: '🚨 Estado Global de Rutinas',
-        texto: 'Supervisa en tiempo real si todas las rutinas están al día (<strong>🟢 Todo al día</strong>) o si alguna regla requiere atención.',
+        texto: 'Este módulo avanzado cruza en tiempo real los registros de los módulos base (<strong>Leche, Pañales, Sueño</strong>) y <strong>Vitaminas</strong> para indicar si todo está al día (<strong>🟢 Todo al día</strong>) o si alguna regla requiere atención.',
         selector: '#alertasBadgeGlobal',
         posicion: 'bottom',
       },
@@ -6287,10 +6289,10 @@ const TUTORIALES_MODULOS = {
     ],
   },
   leche: {
-    nombre: '🍼 Tomas de Leche y Fórmula',
+    nombre: '🍼 Tomas de Leche y Fórmula (Módulo Base)',
     pasos: [
       {
-        titulo: '⏱️ Tiempo desde la Última Toma',
+        titulo: '⏱️ Tiempo desde la Última Toma (Módulo Base 2/6)',
         texto: 'Visualiza al instante cuánto tiempo ha transcurrido desde la última toma de leche y cuántos mililitros tomó.',
         selector: '#tab-leche .dash-grid',
         posicion: 'bottom',
@@ -6303,7 +6305,7 @@ const TUTORIALES_MODULOS = {
       },
       {
         titulo: '➕ Registrar Nueva Toma',
-        texto: 'Ingresa los <strong>ml</strong> de la toma, ajusta la fecha/hora si fue antes o pulsa <strong>🕒 Registrar ahora</strong> para actualizar la hora actual.',
+        texto: 'Ingresa los <strong>ml</strong> de la toma, ajusta la fecha/hora si fue antes o pulsa <strong>🕒 Registrar ahora</strong> para actualizar la hora actual y alimentar los gráficos de <strong>📊 Stats</strong>.',
         selector: '#formLeche',
         posicion: 'top',
       },
@@ -6322,10 +6324,10 @@ const TUTORIALES_MODULOS = {
     ],
   },
   comidas: {
-    nombre: '🍽️ Alimentación Complementaria',
+    nombre: '🍽️ Alimentación Complementaria (Módulo Base)',
     pasos: [
       {
-        titulo: '🗓️ Ciclo Semanal Editable',
+        titulo: '🗓️ Ciclo Semanal Editable (Módulo Base 4/6)',
         texto: 'Ajusta con <strong>− / ＋</strong> o escribe directamente el número de <strong>Semana</strong> en el que vas, además de consultar cuántos alimentos ha probado tu bebé.',
         selector: '#tab-comidas .semana-edit-card',
         posicion: 'bottom',
@@ -6338,7 +6340,7 @@ const TUTORIALES_MODULOS = {
       },
       {
         titulo: '🔍 Buscador Rápido con Lupa',
-        texto: 'Busca cualquier ingrediente por nombre para agregarlo o quitarlo inmediatamente del plato del día sin restricción de cantidad.',
+        texto: 'Busca cualquier ingrediente por nombre para agregarlo o quitarlo inmediatamente del plato del día sin restricción de cantidad por categoría.',
         selector: '.plato-busqueda-rapida-box',
         posicion: 'bottom',
       },
@@ -6356,30 +6358,30 @@ const TUTORIALES_MODULOS = {
       },
       {
         titulo: '👁️ Historial de Platos, Edición y Alergias',
-        texto: 'En cada plato guardado puedes tocar <strong>✏️ Editar</strong> para cambiar sus ingredientes o <strong>👁️ Ver</strong> para abrir su ficha y registrar si algún alimento provocó <strong>reacción alérgica</strong>.',
+        texto: 'En cada plato guardado puedes tocar <strong>✏️ Editar</strong> para cambiar sus ingredientes o <strong>👁️ Ver</strong> para abrir su ficha y registrar si algún alimento provocó <strong>reacción alérgica</strong> (sincronizado con <strong>👶 Info</strong>).',
         selector: '#tablaComidas',
         posicion: 'top',
       },
       {
         titulo: '🧺 Lista Maestra de 144 Alimentos',
-        texto: 'Consulta todo el catálogo con iconos referenciales, filtra por grupo o con la lupa, marca alimentos ya probados o agrega alimentos personalizados.',
+        texto: 'Consulta todo el catálogo con iconos referenciales de tamaño uniforme, filtra por grupo o con la lupa, marca alimentos ya probados o agrega alimentos personalizados.',
         selector: '#comidaCatalogoGrid',
         posicion: 'top',
       },
     ],
   },
   vitaminas: {
-    nombre: '💊 Vitaminas y Suplementos',
+    nombre: '💊 Vitaminas y Suplementos (Módulo Adicional)',
     pasos: [
       {
         titulo: '✅ Checklist Diario en Un Toque',
-        texto: 'Marca con un toque las vitaminas que tomó tu bebé en la fecha y hora seleccionadas. Las vitaminas tomadas se iluminan con su dosis y hora.',
+        texto: 'Marca con un toque las vitaminas que tomó tu bebé en la fecha y hora seleccionadas. Las vitaminas tomadas se iluminan con su dosis, unidad y hora.',
         selector: '#vitTipoHoy',
         posicion: 'bottom',
       },
       {
         titulo: '🧪 Unidades de Medida y Hora Sugerida',
-        texto: 'Agrega nuevas vitaminas configurando su <strong>cantidad</strong>, <strong>unidad de medida</strong> (gotas, ml, medida, pastilla, cápsula, porción, gramos, sobre, puff) y su <strong>hora sugerida</strong>.',
+        texto: 'Agrega nuevas vitaminas configurando su <strong>cantidad</strong>, <strong>unidad de medida</strong> (gotas, ml, medida, pastilla, cápsula, porción, gramos, sobre, puff, unidad) y su <strong>hora sugerida</strong>.',
         selector: '#formVitaminaTipo',
         posicion: 'top',
       },
@@ -6398,10 +6400,10 @@ const TUTORIALES_MODULOS = {
     ],
   },
   panales: {
-    nombre: '🧷 Pañales y Escala de Bristol',
+    nombre: '🧷 Pañales y Escala de Bristol (Módulo Base)',
     pasos: [
       {
-        titulo: '⏱️ Tiempo desde el Último Cambio y Feca',
+        titulo: '⏱️ Tiempo desde el Último Cambio y Feca (Módulo Base 3/6)',
         texto: 'Monitorea cuánto tiempo lleva con el pañal actual y cuándo fue su última deposición (<strong>💩</strong>).',
         selector: '#tab-panales .dash-grid',
         posicion: 'bottom',
@@ -6414,7 +6416,7 @@ const TUTORIALES_MODULOS = {
       },
       {
         titulo: '💩 Escala de Bristol Pediátrica (1 al 7)',
-        texto: 'Al marcar <strong>💩 Heces</strong>, se despliega la Escala de Bristol Pediátrica con sus 7 tipos visuales. Al elegir uno, verás el <strong>diagnóstico del estado de las heces</strong> y un <strong>tip práctico</strong> para mejorar.',
+        texto: 'Al marcar <strong>💩 Heces</strong>, se despliega la Escala de Bristol Pediátrica con sus 7 tipos visuales. Al elegir uno, verás la leyenda con el <strong>diagnóstico del estado de las heces</strong> y un <strong>tip práctico</strong> para mejorar.',
         selector: '#formPanales',
         posicion: 'top',
       },
@@ -6427,10 +6429,10 @@ const TUTORIALES_MODULOS = {
     ],
   },
   sueno: {
-    nombre: '😴 Descanso y Siestas',
+    nombre: '😴 Descanso y Siestas (Módulo Base)',
     pasos: [
       {
-        titulo: '🌅 Ventana de Vigilia y Último Sueño',
+        titulo: '🌅 Ventana de Vigilia y Último Sueño (Módulo Base 5/6)',
         texto: 'Observa cuánto tiempo lleva despierto (o durmiendo actualmente) y el resumen de su último tramo de sueño.',
         selector: '#tab-sueno .dash-grid',
         posicion: 'bottom',
@@ -6443,7 +6445,7 @@ const TUTORIALES_MODULOS = {
       },
       {
         titulo: '🌙 Registro Manual y Cruce de Medianoche',
-        texto: 'Agrega sueños anteriores indicando hora de inicio y fin. Si el sueño cruza las <strong>00:00 hrs</strong>, la app reparte automáticamente las horas de cada día.',
+        texto: 'Agrega sueños anteriores indicando hora de inicio y fin. Si el sueño cruza las <strong>00:00 hrs</strong>, la app reparte automáticamente las horas de cada día para los gráficos de <strong>📊 Stats</strong>.',
         selector: '#formSueno',
         posicion: 'top',
       },
@@ -6456,29 +6458,29 @@ const TUTORIALES_MODULOS = {
     ],
   },
   info: {
-    nombre: '👶 Ficha Clínica y Controles MINSAL',
+    nombre: '👶 Info: Ficha Clínica y Controles MINSAL (Módulo Base)',
     pasos: [
       {
-        titulo: '📸 Fotografía y Resumen Clínico',
-        texto: 'Actualiza la foto de perfil de tu bebé y consulta de un vistazo su edad exacta, peso actual, talla y grupo sanguíneo.',
+        titulo: '📸 Fotografía y Resumen Clínico (Módulo Base 6/6)',
+        texto: '<strong>👶 Info</strong> forma parte de los <strong>6 módulos base</strong> de NebuApp. Aquí actualizas la foto de perfil de tu bebé y consultas de un vistazo su edad exacta, peso actual, talla y grupo sanguíneo.',
         selector: '#tab-info .photo-row',
         posicion: 'bottom',
       },
       {
         titulo: '🔒 Datos del Bebé, Fecha Fija y Decimales con Coma',
-        texto: 'Configura nombre, <strong>Sexo biológico</strong> (para curvas MINSAL) y <strong>Grupo sanguíneo</strong>. La <strong>Fecha de nacimiento</strong> queda fija una vez establecida, y el <strong>Peso/Talla</strong> admiten hasta 2 decimales con coma (ej: <strong>7,3 kg</strong> o <strong>65,1 cm</strong>) actualizados por Control de Niño Sano.',
+        texto: 'Configura nombre, <strong>Sexo biológico</strong> (para las curvas MINSAL de <strong>📊 Stats</strong>) y <strong>Grupo sanguíneo</strong>. La <strong>Fecha de nacimiento</strong> queda fija una vez establecida, y el <strong>Peso/Talla</strong> muestran hasta 2 decimales con coma (ej: <strong>7,3 kg</strong> o <strong>65,1 cm</strong>) actualizados por Control de Niño Sano.',
         selector: '#formInfo',
         posicion: 'top',
       },
       {
         titulo: '🚨 Alergias Alimentarias por Categoría',
-        texto: 'Aquí se muestran únicamente los iconos SVG de los alimentos a los cuales tu bebé es alérgico. Pulsa <strong>＋ Escoger alimentos alérgicos</strong> para abrir el modal organizado por categorías.',
+        texto: 'En la ficha clínica solo se muestran los iconos SVG de los alimentos a los cuales tu bebé es alérgico. Pulsa <strong>＋ Escoger alimentos alérgicos</strong> para abrir el selector con lupa separado en las 6 categorías de alimentos.',
         selector: '#infoAlergiasIconos',
         posicion: 'top',
       },
       {
         titulo: '🩺 Controles de Niño Sano (Salud Pública MINSAL)',
-        texto: 'Registra cada control oficial (<strong>10 días, 15 días, 1 mes, 2 meses, ..., 24 meses</strong>) con Peso, Talla, Perímetro Encefálico (con hasta 2 decimales separados por coma) y hasta 1000 caracteres de Observaciones.',
+        texto: 'Registra cada control oficial (<strong>10 días, 15 días, 1 mes, 2 meses, ..., 24 meses</strong>) con Peso, Talla, Perímetro Encefálico (con hasta 2 decimales separados por coma) y hasta 1000 caracteres de Observaciones. Estos datos alimentan automáticamente las curvas de crecimiento en <strong>📊 Stats</strong>.',
         selector: '#cardControlesNinoSano',
         posicion: 'top',
       },
@@ -6490,14 +6492,14 @@ const TUTORIALES_MODULOS = {
       },
       {
         titulo: '👩👨 Fichas de Madre, Padre y FAQ',
-        texto: 'Consulta los datos de contacto de ambos padres y resuelve dudas rápidas en las Preguntas Frecuentes.',
+        texto: 'Consulta o edita los datos de contacto de ambos padres (nombre, teléfono, correo y grupo sanguíneo) y resuelve dudas rápidas en las Preguntas Frecuentes.',
         selector: '#verMadreBtn',
         posicion: 'top',
       },
     ],
   },
   bitacora: {
-    nombre: '📖 Bitácora del Bebé',
+    nombre: '📖 Bitácora del Bebé (Módulo Adicional)',
     pasos: [
       {
         titulo: '✍️ Registrar Hitos y Anotaciones',
@@ -6514,7 +6516,7 @@ const TUTORIALES_MODULOS = {
     ],
   },
   juegos: {
-    nombre: '🧸 Juegos y Estimulación',
+    nombre: '🧸 Juegos y Estimulación (Módulo Adicional)',
     pasos: [
       {
         titulo: '🧸 Actividad de Estimulación Temprana',
@@ -6546,6 +6548,12 @@ const TUTORIALES_MODULOS = {
     nombre: '⚙️ Configuración y Módulos',
     pasos: [
       {
+        titulo: '🎓 Tutorial Inicial de los 6 Módulos Base',
+        texto: 'Puedes pulsar <strong>🎓 Tutorial Inicial</strong> en cualquier momento para volver a realizar el recorrido guiado por los <strong>6 módulos base</strong> (<strong>Stats, Leche, Pañales, Comidas, Sueño e Info</strong>).',
+        selector: '#btnRepetirTutorialInicial',
+        posicion: 'bottom',
+      },
+      {
         titulo: '🔑 Código de Vinculación Familiar',
         texto: 'Copia o envía por WhatsApp este código único de 6 caracteres para que el otro padre o madre se vincule al mismo bebé.',
         selector: '#settingsModal .codigo-box',
@@ -6558,8 +6566,8 @@ const TUTORIALES_MODULOS = {
         posicion: 'top',
       },
       {
-        titulo: '☑️ Visibilidad y Orden de Módulos',
-        texto: 'Marca o desmarca qué módulos deseas mostrar y utiliza <strong>▲ / ▼</strong> para elegir cuáles aparecen como accesos principales en la barra inferior.',
+        titulo: '☑️ Visibilidad y Orden de Módulos (6 Base + Adicionales)',
+        texto: 'Los <strong>6 módulos base</strong> (<strong>📊 Stats, 🍼 Leche, 🧷 Pañales, 🍽️ Comidas, 😴 Sueño y 👶 Info</strong>) están habilitados por defecto. Marca o desmarca qué módulos mostrar y usa <strong>▲ / ▼</strong> para elegir los 4 accesos principales de la barra inferior.',
         selector: '#ordenTabsUI',
         posicion: 'top',
       },
@@ -6755,8 +6763,8 @@ const PASOS_TUTORIAL_INICIAL_BASE = [
   {
     modulo: 'stats',
     modLabel: '1. 📊 Stats (Módulo Base)',
-    titulo: '👋 ¡Bienvenido/a! 1/5 · Panel de Estadísticas',
-    texto: 'Este recorrido inicial es <strong>obligatorio para nuevos usuarios</strong> y te mostrará los <strong>5 módulos base disponibles</strong>.<br><br>En <strong>📊 Stats</strong> verás el resumen gráfico de las rutinas diarias de tu bebé (Leche, Pañales y Sueño) filtrables por 1 día, 7 días, 14 días o 1 mes.',
+    titulo: '👋 ¡Bienvenido/a! 1/6 · Panel de Estadísticas y Curvas MINSAL',
+    texto: 'Este recorrido inicial es <strong>obligatorio para nuevos usuarios</strong> y te mostrará los <strong>6 módulos base disponibles</strong> (<strong>Stats, Leche, Pañales, Comidas, Sueño e Info</strong>).<br><br>En <strong>📊 Stats</strong> verás el resumen gráfico de las rutinas diarias de tu bebé (Leche, Pañales y Sueño) filtrables por 1 día, 7 días, 14 días o 1 mes, además de la subpestaña de <strong>📈 Curvas de Crecimiento Infantil (MINSAL / OMS)</strong>.',
     selector: '#statsPanelRutina .seg-card',
     posicion: 'bottom',
     preparar: () => {
@@ -6768,7 +6776,7 @@ const PASOS_TUTORIAL_INICIAL_BASE = [
   {
     modulo: 'leche',
     modLabel: '2. 🍼 Leche (Módulo Base)',
-    titulo: '🍼 2/5 · Tomas de Leche y Meta Diaria',
+    titulo: '🍼 2/6 · Tomas de Leche y Meta Diaria',
     texto: 'En el módulo <strong>🍼 Leche</strong> puedes registrar cada toma en mililitros (<strong>ml</strong>), ver cuánto tiempo pasó desde la última toma, seguir el progreso de tu meta diaria y llevar el cálculo automático de tarros de fórmula.',
     selector: '#formLeche',
     posicion: 'top',
@@ -6779,7 +6787,7 @@ const PASOS_TUTORIAL_INICIAL_BASE = [
   {
     modulo: 'panales',
     modLabel: '3. 🧷 Pañales (Módulo Base)',
-    titulo: '🧷 3/5 · Cambios de Pañal y Escala de Bristol',
+    titulo: '🧷 3/6 · Cambios de Pañal y Escala de Bristol',
     texto: 'En <strong>🧷 Pañales</strong> registras cada cambio marcando <strong>💧 Orina</strong> y/o <strong>💩 Heces</strong>. Al marcar Heces se despliega la <strong>Escala de Bristol Pediátrica (tipos 1 al 7)</strong> con diagnóstico del estado digestivo y consejos prácticos.',
     selector: '#formPanales',
     posicion: 'top',
@@ -6790,8 +6798,8 @@ const PASOS_TUTORIAL_INICIAL_BASE = [
   {
     modulo: 'comidas',
     modLabel: '4. 🍽️ Comidas (Módulo Base)',
-    titulo: '🍽️ 4/5 · Plato Dinámico de Alimentación',
-    texto: 'En <strong>🍽️ Comidas</strong> armas el plato diario combinando los <strong>5 grupos de alimentos</strong> (Verdura, Fruta, Proteína, Grasa y Cereal/Tubérculo), usas la lupa de búsqueda rápida, marcas alimentos con <strong>＋ Nuevo</strong> y registras posibles alergias.',
+    titulo: '🍽️ 4/6 · Plato Dinámico de Alimentación',
+    texto: 'En <strong>🍽️ Comidas</strong> armas el plato diario combinando los <strong>5 grupos de alimentos</strong> (Verdura, Fruta, Proteína, Grasa y Cereal/Tubérculo) más aliños opcionales, usas la lupa de búsqueda rápida, marcas ingredientes con <strong>＋ Nuevo</strong> y registras posibles alergias.',
     selector: '#platoVisualSlots',
     posicion: 'top',
     preparar: () => {
@@ -6801,12 +6809,23 @@ const PASOS_TUTORIAL_INICIAL_BASE = [
   {
     modulo: 'sueno',
     modLabel: '5. 😴 Sueño (Módulo Base)',
-    titulo: '😴 5/5 · Descanso y Siestas en Vivo',
-    texto: 'Finalmente, en <strong>😴 Sueño</strong> controlas cuánto tiempo lleva despierto tu bebé, inicias o detienes una siesta en vivo con un toque (<strong>😴 Se durmió ahora / 🌅 Despertó</strong>) o registras sueños manuales.',
+    titulo: '😴 5/6 · Descanso y Siestas en Vivo',
+    texto: 'En <strong>😴 Sueño</strong> controlas cuánto tiempo lleva despierto tu bebé, inicias o detienes una siesta en vivo con un toque (<strong>😴 Se durmió ahora / 🌅 Despertó</strong>) o registras sueños manuales con reparto automático al cruzar medianoche.',
     selector: '#siestaCard',
     posicion: 'bottom',
     preparar: () => {
       activarTab('sueno');
+    },
+  },
+  {
+    modulo: 'info',
+    modLabel: '6. 👶 Info (Módulo Base)',
+    titulo: '👶 6/6 · Ficha Clínica, Alergias y Controles de Niño Sano',
+    texto: 'Finalmente, en <strong>👶 Info</strong> gestionas la ficha clínica del bebé: foto, sexo biológico (para curvas MINSAL), fecha de nacimiento fija, selector de <strong>alergias alimentarias por categoría</strong> y el registro de cada <strong>Control de Niño Sano</strong> (Peso, Talla y Perímetro Cefálico con hasta 2 decimales separados por coma, ej: <strong>7,3 kg</strong> o <strong>65,1 cm</strong>, y avisos automáticos 5 días antes y 1h después).',
+    selector: '#cardControlesNinoSano',
+    posicion: 'top',
+    preparar: () => {
+      activarTab('info');
     },
   },
 ];
