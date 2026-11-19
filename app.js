@@ -5979,7 +5979,14 @@ $('authForm').addEventListener('submit', async (e) => {
       const { data: autorizado, error: errWl } = await db.rpc('email_autorizado', { correo: email });
       if (errWl) throw errWl;
       if (!autorizado) throw new Error('Este correo no está autorizado para registrarse.');
-      const { data, error } = await db.auth.signUp({ email, password });
+      const redirectBase = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:')
+        ? 'https://rektres.github.io/NebuAppWeb/'
+        : `${window.location.origin}${window.location.pathname}`;
+      const { data, error } = await db.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: redirectBase },
+      });
       if (error) throw error;
       if (!data.session) {
         $('authError').textContent = 'Cuenta creada. Revisa tu correo para confirmarla y luego inicia sesión.';
@@ -5993,6 +6000,7 @@ $('authForm').addEventListener('submit', async (e) => {
   } catch (err) {
     let msg = err.message;
     if (msg === 'Invalid login credentials') msg = 'Correo o contraseña incorrectos';
+    else if (msg === 'Email not confirmed' || /email not confirmed/i.test(msg)) msg = 'Tu correo aún no ha sido confirmado. Revisa tu bandeja de entrada o pide al administrador confirmar tu cuenta.';
     else if (/database error/i.test(msg)) msg = 'Este correo no está autorizado para registrarse.';
     else if (esErrorPausaSupabase(err)) msg = MENSAJE_PAUSA_SUPABASE;
     $('authError').textContent = msg;
@@ -6001,6 +6009,23 @@ $('authForm').addEventListener('submit', async (e) => {
     $('authSubmit').disabled = false;
   }
 });
+
+// Detectar si el usuario regresa desde un link de confirmación de correo con #error=access_denied / otp_expired
+(function verificarHashConfirmacionAuth() {
+  const hash = window.location.hash || '';
+  if (hash.includes('error_code=otp_expired') || hash.includes('error=access_denied')) {
+    try {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    } catch {}
+    setTimeout(() => {
+      const errEl = $('authError');
+      if (errEl && !$('authScreen')?.classList.contains('hidden')) {
+        errEl.textContent = 'ℹ️ Este enlace de confirmación ya fue utilizado o expiró. Si ya lo habías abierto antes, tu cuenta ya está confirmada: ingresa tu correo y contraseña y pulsa "Entrar".';
+        errEl.classList.remove('hidden');
+      }
+    }, 350);
+  }
+})();
 
 // ---------- Vinculación del Bebé ----------
 const rolSeleccionado = () => document.querySelector('input[name="linkRol"]:checked')?.value || 'madre';
