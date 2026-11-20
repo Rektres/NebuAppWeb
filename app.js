@@ -1143,7 +1143,6 @@ let statsRange = localStorage.getItem('stats_range') || '7d';
 
 const chartTypes = {
   leche: localStorage.getItem('chart_type_leche') || 'bar',
-  vitaminas: localStorage.getItem('chart_type_vitaminas') || 'bar',
   panales: localStorage.getItem('chart_type_panales') || 'bar',
   sueno: localStorage.getItem('chart_type_sueno') || 'bar',
 };
@@ -1327,7 +1326,6 @@ function actualizarStatsUI() {
   };
   const suf = rangeLabels[statsRange] || 'últimos 7 días';
   $('tituloLeche').textContent = `🍼 Leche · ${suf} (ml)`;
-  $('tituloVitaminas').textContent = `💊 Vitaminas · ${suf} (gotas)`;
   $('tituloPanales').textContent = `🧷 Pañales · ${suf}`;
   $('tituloSueno').textContent = `😴 Sueño · ${suf} (horas)`;
 }
@@ -1405,30 +1403,7 @@ function renderChartsHorario(s, surface) {
     }, true),
   });
 
-  // 2. Vitaminas por hora hoy
-  const vitHoras = sumarVitaminasPorHoraHoy(cache.vitaminas);
-  const typeVit = chartTypes.vitaminas || 'bar';
-  charts.vitaminas = new Chart($('chartVitaminas'), {
-    type: typeVit,
-    data: {
-      labels: horasLabels,
-      datasets: [{
-        label: 'Vitaminas (gotas)',
-        data: vitHoras,
-        backgroundColor: s.ambar,
-        borderColor: s.ambar,
-        ...(typeVit === 'bar' ? BAR : LINEA),
-      }],
-    },
-    options: baseChartOpts({
-      callbacks: {
-        title: (items) => `Hoy a las ${items[0].label} h`,
-        label: (c) => ` ${c.parsed.y} gotas`,
-      },
-    }, true),
-  });
-
-  // 3. Pañales por hora hoy
+  // 2. Pañales por hora hoy
   const panHoras = sumarPanalesPorHoraHoy(cache.panales);
   const typePan = chartTypes.panales || 'bar';
   const optsPan = baseChartOpts({
@@ -1521,38 +1496,7 @@ function renderChartsDias(s, surface) {
     }),
   });
 
-  // 2. Vitaminas (dosis sueltas + checklist por nombre)
-  const vit = sumarPorDia(cache.vitaminas, 'fecha_hora', (r) => r.gotas);
-  const mapaTipos = new Map((cache.vitaminas_tipos || []).map((v) => [String(v.id), v]));
-  (cache.vitaminas_tipos_log || []).forEach((l) => {
-    if (l.fecha) {
-      const v = mapaTipos.get(String(l.vitamina_id));
-      const g = Number(l.gotas) || v?.gotas_default || 5;
-      vit[l.fecha] = (vit[l.fecha] || 0) + g;
-    }
-  });
-  const typeVit = chartTypes.vitaminas || 'bar';
-  charts.vitaminas = new Chart($('chartVitaminas'), {
-    type: typeVit,
-    data: {
-      labels,
-      datasets: [{
-        label: 'Vitaminas (gotas)',
-        data: dias.map((d) => vit[d.key] || 0),
-        backgroundColor: s.ambar,
-        borderColor: s.ambar,
-        ...(typeVit === 'bar' ? BAR : LINEA),
-      }],
-    },
-    options: baseChartOpts({
-      callbacks: {
-        title: (items) => dias[items[0].dataIndex]?.fullDate || items[0].label,
-        label: (c) => ` ${c.parsed.y} gotas`,
-      },
-    }),
-  });
-
-  // 3. Pañales
+  // 2. Pañales
   const heces = sumarPorDia(cache.panales, 'fecha_hora', (r) => (r.heces ? 1 : 0));
   const orina = sumarPorDia(cache.panales, 'fecha_hora', (r) => (r.orina ? 1 : 0));
   const typePan = chartTypes.panales || 'bar';
@@ -6229,7 +6173,7 @@ const TUTORIALES_MODULOS = {
     pasos: [
       {
         titulo: '📊 Submódulos de Estadísticas (Módulo Base 1/6)',
-        texto: 'Aquí puedes alternar entre los gráficos de <strong>📊 Rutina Diaria</strong> (Leche, Vitaminas, Pañales y Sueño) y las <strong>📈 Curvas de Crecimiento Infantil (MINSAL / OMS)</strong> alimentadas desde el módulo base <strong>👶 Info</strong>.',
+        texto: 'Aquí puedes alternar entre los gráficos de <strong>📊 Rutina Diaria</strong> (Leche, Pañales y Sueño) y las <strong>📈 Curvas de Crecimiento Infantil (MINSAL / OMS)</strong> alimentadas desde el módulo base <strong>👶 Info</strong>.',
         selector: '.stats-subtabs-card',
         posicion: 'bottom',
         preparar: () => cambiarSubTabStats('rutina'),
@@ -6243,7 +6187,7 @@ const TUTORIALES_MODULOS = {
       },
       {
         titulo: '📈 Gráficos Interactivos de Rutina',
-        texto: 'Visualiza el historial de <strong>Leche (ml), Vitaminas, Pañales y Sueño (horas)</strong>. Usa los botones <strong>📊 / 📈</strong> para cambiar entre barras y líneas, o <strong>⟲</strong> para restablecer el zoom.',
+        texto: 'Visualiza el historial de <strong>Leche (ml), Pañales y Sueño (horas)</strong>. Usa los botones <strong>📊 / 📈</strong> para cambiar entre barras y líneas, o <strong>⟲</strong> para restablecer el zoom.',
         selector: '#statsPanelRutina .chart-card',
         posicion: 'top',
         preparar: () => cambiarSubTabStats('rutina'),
