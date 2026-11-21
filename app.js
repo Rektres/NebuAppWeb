@@ -144,13 +144,12 @@ function toast(msg, isError = false) {
 function setNowDefaults() {
   const now = new Date();
   const f = dayKey(now), h = fmtTime(now);
-  for (const id of ['vitFecha', 'suenoFecha', 'panFechaHora', 'lecheFechaHora']) {
+  for (const id of ['suenoFecha', 'panFechaHora', 'lecheFechaHora']) {
     if ($(id)) {
       if (id.includes('FechaHora')) $(id).value = dtLocal(now);
       else $(id).value = f;
     }
   }
-  if ($('vitHora')) $('vitHora').value = h;
   if ($('suenoInicio')) $('suenoInicio').value = h;
   if ($('suenoFin')) $('suenoFin').value = h;
   if ($('vitTipoFecha')) $('vitTipoFecha').value = f;
@@ -447,32 +446,6 @@ function renderLecheResumen() {
       ? `🎉 ¡Meta cumplida! (+${totalHoy - objetivo} ml sobre el objetivo)`
       : `Faltan ${objetivo - totalHoy} ml para el objetivo 🎯`;
 
-  // Cálculo histórico de tarros abiertos y fórmula acumulada
-  const totalHistoricoMl = (cache.tomas || []).reduce((s, r) => s + r.cantidad_ml, 0);
-  const totalHistoricoGr = totalHistoricoMl * G_POR_ML;
-  const lataGramos = Number(bebe?.lata_gramos) || 800;
-
-  const tarrosAbiertos = totalHistoricoGr > 0 ? Math.ceil(totalHistoricoGr / lataGramos) : 0;
-  const tarrosCompletados = Math.floor(totalHistoricoGr / lataGramos);
-  const usadoTarroActualGr = Math.round(totalHistoricoGr - (tarrosCompletados * lataGramos));
-  const restanteTarroActualGr = Math.max(0, lataGramos - usadoTarroActualGr);
-  const porcentajeRestante = Math.round((restanteTarroActualGr / lataGramos) * 100);
-
-  $('tarrosAbiertosVal').textContent = tarrosAbiertos;
-  $('formulaTotalTxt').textContent = `${Math.round(totalHistoricoGr)} g (${totalHistoricoMl} ml)`;
-  $('tarroActualTxt').textContent = `${restanteTarroActualGr} g restantes (${porcentajeRestante}%)`;
-  $('tarroProgress').style.width = porcentajeRestante + '%';
-  $('lataInput').value = lataGramos;
-
-  const abierta = bebe?.lata_abierta_en ? new Date(bebe.lata_abierta_en).getTime() : 0;
-  if (document.activeElement !== $('lataAbiertaInput')) {
-    $('lataAbiertaInput').value = dtLocal(abierta ? new Date(abierta) : new Date());
-  }
-
-  $('lataStatus').textContent = tarrosAbiertos > 0
-    ? `Tarro #${tarrosAbiertos} en uso · ${usadoTarroActualGr} g consumidos de este tarro · ${tarrosCompletados} tarro${tarrosCompletados === 1 ? '' : 's'} terminado${tarrosCompletados === 1 ? '' : 's'} en total`
-    : 'Sin registros de tomas aún';
-
   const rows = cache.tomas || [];
   if (!rows.length) {
     $('ultimaTomaHace').textContent = '—';
@@ -570,13 +543,6 @@ function formatearDosisVitamina(cantidad, unidadKey) {
 
 function renderVitaminas() {
   renderVitaminaTipos();
-  $('tablaVitaminas').innerHTML = tablaHTML(
-    ['Hora', 'Dosis'],
-    groupByDay(cache.vitaminas || [], 'fecha_hora'),
-    (r) => `<tr><td>${fmtTime(new Date(r.fecha_hora))}</td><td>${r.gotas} gotas</td>${accionesTd('vitaminas', r.id)}</tr>`,
-    (rows) => `${rows.reduce((s, r) => s + r.gotas, 0)} gotas`,
-    (rows) => `${rows.reduce((s, r) => s + r.gotas, 0)} gotas`
-  );
 }
 
 const ordenarVitaminaTipos = (lista) => lista.slice().sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
@@ -3969,20 +3935,6 @@ $('formLeche').addEventListener('submit', async (e) => {
 
 $('lecheAhora').addEventListener('click', () => { $('lecheFechaHora').value = dtLocal(new Date()); });
 
-$('formVitaminas').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const v = Number($('vitGotas').value);
-  if (!v || v <= 0) { toast('Ingresa una cantidad válida', true); return; }
-  const submitBtn = e.target.querySelector('button[type="submit"]') || e.submitter;
-  if (submitBtn) submitBtn.disabled = true;
-  try {
-    const ok = await insertar('vitaminas', { gotas: v, fecha_hora: toISO($('vitFecha').value, $('vitHora').value) });
-    if (ok) { setNowDefaults(); renderVitaminas(); }
-  } finally {
-    if (submitBtn) submitBtn.disabled = false;
-  }
-});
-
 $('formVitaminaTipo').addEventListener('submit', async (e) => {
   e.preventDefault();
   const nombre = $('vitTipoNombre').value.trim();
@@ -4073,24 +4025,6 @@ $('formSueno').addEventListener('submit', async (e) => {
 $('objetivoInput').addEventListener('change', () => {
   const v = Number($('objetivoInput').value);
   if (v > 0) { localStorage.setItem('objetivo_leche', v); renderLecheResumen(); }
-});
-
-$('lataInput').addEventListener('change', async () => {
-  const v = Number($('lataInput').value);
-  await actualizarBebe({ lata_gramos: v > 0 ? v : 800 });
-});
-
-$('abrirLataBtn').addEventListener('click', async () => {
-  if ($('abrirLataBtn').disabled) return;
-  $('abrirLataBtn').disabled = true;
-  try {
-    const val = $('lataAbiertaInput').value;
-    const fecha = val ? new Date(val) : new Date();
-    const ok = await actualizarBebe({ lata_abierta_en: fecha.toISOString(), latas_usadas: (bebe?.latas_usadas || 0) + 1 });
-    if (ok) toast('🥫 Nueva lata registrada');
-  } finally {
-    $('abrirLataBtn').disabled = false;
-  }
 });
 
 // ---------- Bitácora ----------
@@ -6284,12 +6218,6 @@ const TUTORIALES_MODULOS = {
         selector: '#tablaLeche',
         posicion: 'top',
       },
-      {
-        titulo: '🥫 Control de Tarros de Fórmula',
-        texto: 'Calcula automáticamente los gramos de fórmula consumidos (4,3 g cada 30 ml), cuántos tarros has abierto y cuántos gramos restan en el tarro actual.',
-        selector: '#lataCard',
-        posicion: 'top',
-      },
     ],
   },
   comidas: {
@@ -6358,12 +6286,6 @@ const TUTORIALES_MODULOS = {
         titulo: '📖 Historial Detallado por Vitamina',
         texto: 'Revisa todas las tomas registradas para cada suplemento con su unidad correspondiente y botones de edición.',
         selector: '#tablaVitaminaTipos',
-        posicion: 'top',
-      },
-      {
-        titulo: '⚡ Registro Rápido de Gotas',
-        texto: 'También cuentas con un formulario directo para anotar dosis puntuales sueltas con fecha y hora.',
-        selector: '#formVitaminas',
         posicion: 'top',
       },
     ],
@@ -6746,7 +6668,7 @@ const PASOS_TUTORIAL_INICIAL_BASE = [
     modulo: 'leche',
     modLabel: '2. 🍼 Leche (Módulo Base)',
     titulo: '🍼 2/6 · Tomas de Leche y Meta Diaria',
-    texto: 'En el módulo <strong>🍼 Leche</strong> puedes registrar cada toma en mililitros (<strong>ml</strong>), ver cuánto tiempo pasó desde la última toma, seguir el progreso de tu meta diaria y llevar el cálculo automático de tarros de fórmula.',
+    texto: 'En el módulo <strong>🍼 Leche</strong> puedes registrar cada toma en mililitros (<strong>ml</strong>), ver cuánto tiempo pasó desde la última toma, seguir el progreso de tu meta diaria y consultar el historial completo de tomas.',
     selector: '#formLeche',
     posicion: 'top',
     preparar: () => {

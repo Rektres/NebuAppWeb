@@ -181,6 +181,8 @@
 html {
   font-size: 16px;
   -webkit-text-size-adjust: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -191,17 +193,24 @@ body {
   color: var(--text);
   min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
+  max-width: 100%;
+  overflow-x: hidden;
+  position: relative;
+}
+
+#appScreen {
+  max-width: 100vw;
   overflow-x: hidden;
 }
 
 .hidden { display: none !important; }
 
-/* Regla Maestra de Justificación Editorial (Punto 2 del Manual) */
+/* Regla Tipográfica Limpia sin desbordes ni guiones forzados en cajas estrechas */
 p, .bit-item p, .faq-item p, .form-hint, .siesta-info {
-  text-align: justify;
-  text-justify: inter-word;
-  text-align-last: left;
-  hyphens: auto;
+  text-align: left;
+  hyphens: none;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 /* Eyebrow Luxury Badge */
@@ -1719,27 +1728,43 @@ tr.month-row td {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+  overflow: hidden;
 }
 .comida-selector-head {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 10px;
+}
+.comida-selector-head > div {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.comida-selector-head button,
+#platoSelectorClose {
+  flex-shrink: 0;
+  white-space: nowrap;
+  width: auto !important;
 }
 .alimentos-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 8px;
-  max-height: 280px;
+  max-height: 290px;
   overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 2px;
 }
 .alimento-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  align-content: flex-start;
   gap: 8px;
-  padding: 7px 8px;
-  border-radius: 10px;
+  padding: 8px 9px;
+  border-radius: 11px;
   background: var(--surface);
   border: 1.5px solid var(--border);
   color: var(--text);
@@ -1747,6 +1772,9 @@ tr.month-row td {
   text-align: left;
   transition: all 0.15s ease;
   font-size: 0.78rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 .alimento-item:hover:not(:disabled) {
   border-color: var(--brand-accent);
@@ -1767,19 +1795,36 @@ tr.month-row td {
 .alimento-info {
   display: flex;
   flex-direction: column;
+  gap: 2px;
   min-width: 0;
-  flex: 1;
+  flex: 1 1 calc(100% - 44px);
+  overflow: hidden;
 }
 .alimento-info strong {
-  font-size: 0.77rem;
+  font-size: 0.78rem;
   font-weight: 700;
   white-space: normal;
-  line-height: 1.2;
-  word-break: break-word;
+  line-height: 1.22;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
 }
 .alimento-info small {
-  font-size: 0.67rem;
+  font-size: 0.68rem;
+  line-height: 1.22;
   color: var(--text-2);
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.alimento-item .plato-item-nuevo-btn {
+  flex: 1 1 100%;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  margin-top: 2px;
+  padding: 4px 8px;
 }
 .comida-ing-mini {
   display: flex;
@@ -2156,29 +2201,33 @@ tr.month-row td {
   gap: 5px;
   margin-top: 4px;
   width: 100%;
+  min-width: 0;
 }
 .plato-slot-item-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  padding: 4px 6px;
+  gap: 5px;
+  padding: 5px 7px;
   border-radius: 9px;
   background: var(--surface);
   border: 1px solid var(--border);
+  min-width: 0;
 }
 .plato-slot-item-left {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  flex: 1;
+  flex: 1 1 100%;
 }
 .plato-slot-item-left strong {
   font-size: 0.75rem;
-  line-height: 1.15;
+  line-height: 1.2;
   color: var(--text);
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .plato-slot-item-del {
   width: 20px;
@@ -2257,6 +2306,7 @@ tr.month-row td {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 .plato-item-nuevo-btn {
   font-size: 0.65rem;
@@ -2688,7 +2738,9 @@ tr.month-row td {
   top: 0;
   left: 0;
   z-index: 9999 !important;
-  max-width: min(370px, 92vw) !important;
+  max-width: min(355px, calc(100vw - 20px)) !important;
+  width: min(355px, calc(100vw - 20px)) !important;
+  box-sizing: border-box !important;
   background: var(--input-bg) !important;
   border: 1.5px solid color-mix(in srgb, var(--brand-accent) 50%, var(--border)) !important;
   border-radius: 18px !important;
@@ -2706,6 +2758,10 @@ tr.month-row td {
   border-radius: 18px !important;
   padding: 0 !important;
   background: transparent !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
 }
 
 .shepherd-header {
@@ -2714,20 +2770,28 @@ tr.month-row td {
   border-radius: 17px 17px 0 0 !important;
   border-bottom: 1px solid var(--border) !important;
   display: flex !important;
-  align-items: center !important;
+  flex-wrap: nowrap !important;
+  align-items: flex-start !important;
   justify-content: space-between !important;
   gap: 8px !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .shepherd-title {
   color: var(--text) !important;
-  font-size: 0.94rem !important;
+  font-size: 0.92rem !important;
   font-weight: 800 !important;
   letter-spacing: -0.02em !important;
-  line-height: 1.25 !important;
-  display: flex !important;
-  align-items: center !important;
-  gap: 6px !important;
+  line-height: 1.3 !important;
+  display: block !important;
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  white-space: normal !important;
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
   margin: 0 !important;
 }
 
@@ -2747,6 +2811,7 @@ tr.month-row td {
   justify-content: center !important;
   line-height: 1 !important;
   padding: 0 !important;
+  flex-shrink: 0 !important;
   transition: all 0.15s ease !important;
 }
 .shepherd-cancel-icon:hover {
@@ -2759,12 +2824,16 @@ tr.month-row td {
   font-size: 0.85rem !important;
   line-height: 1.5 !important;
   padding: 14px 16px !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow-wrap: break-word !important;
 }
 .shepherd-text p {
   margin: 0 0 8px 0 !important;
   text-align: left !important;
   hyphens: none !important;
   color: var(--text-2) !important;
+  overflow-wrap: break-word !important;
 }
 .shepherd-text p:last-child {
   margin-bottom: 0 !important;
@@ -2775,19 +2844,23 @@ tr.month-row td {
 }
 
 .shepherd-step-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.68rem;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 0.67rem;
   font-weight: 800;
+  line-height: 1.38;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.05em;
   color: var(--brand-accent);
   background: color-mix(in srgb, var(--brand-primary) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--brand-accent) 32%, transparent);
-  padding: 2px 8px;
-  border-radius: 999px;
-  margin-bottom: 8px;
+  padding: 5px 10px;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .shepherd-footer {
@@ -2799,6 +2872,8 @@ tr.month-row td {
   justify-content: flex-end !important;
   gap: 8px !important;
   flex-wrap: wrap !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .shepherd-button {
@@ -2807,12 +2882,15 @@ tr.month-row td {
   font-size: 0.8rem !important;
   font-weight: 700 !important;
   font-family: inherit !important;
-  line-height: 1.2 !important;
+  line-height: 1.25 !important;
   margin: 0 !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   gap: 5px !important;
+  white-space: normal !important;
+  text-align: center !important;
+  max-width: 100% !important;
   background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary)) !important;
   color: var(--accent-ink) !important;
   border: 1px solid color-mix(in srgb, var(--brand-accent) 45%, transparent) !important;
@@ -2907,6 +2985,214 @@ tr.month-row td {
   border-color: rgba(244, 63, 94, 0.45);
   color: var(--danger);
 }
+
+/* ---------- 21. Protección Integral Anti-Desborde en Modales, Cards y Módulos ---------- */
+.card,
+.dash-card,
+.modal-card,
+.auth-card,
+.plato-slot,
+.ctrl-sano-card,
+.bit-item,
+.faq-item {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.card h2,
+.card h3,
+.modal-head h2,
+.ctrl-sano-title {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  line-height: 1.28;
+}
+
+.modal-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-head h2 {
+  flex: 1 1 auto;
+  min-width: 130px;
+}
+
+.dash-grid > *,
+.form-grid > *,
+.peso-talla-row > *,
+.fila-2 > *,
+.past-fh > *,
+.ctrl-sano-metrics > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.stat-label,
+.stat-value,
+.stat-value-sm,
+.goal-status {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.check-pill {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: normal;
+  line-height: 1.25;
+}
+
+.orden-check-wrap {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.orden-item {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.comida-modal-row {
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.comida-modal-row-left {
+  flex: 1 1 170px;
+  min-width: 0;
+}
+
+.comida-modal-row-left > div {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: break-word;
+}
+
+.alergia-check-item {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.alergia-check-item > span {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: break-word;
+}
+
+#infoProximoControlBanner {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+#infoProximoControlBanner > div {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.ctrl-sano-metric {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ctrl-sano-metric span {
+  font-size: 0.65rem;
+  overflow-wrap: break-word;
+  line-height: 1.15;
+}
+
+.ctrl-sano-metric strong {
+  font-size: 0.82rem;
+  overflow-wrap: break-word;
+}
+
+/* Tarjetas de Alertas: evitar colisión entre título/descripción y badge de estado */
+#tab-alertas .card > div {
+  gap: 10px;
+  min-width: 0;
+}
+
+#tab-alertas .card > div > div:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+#alertasBadgeGlobal,
+#badgeInformeDiario,
+[id^="badgeAlerta"] {
+  flex-shrink: 0;
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* Barra inferior de pestañas: ajuste estricto a 100vw */
+.tabbar {
+  width: 100%;
+  max-width: 100vw;
+  box-sizing: border-box;
+}
+
+.tab-btn {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Header compacto en pantallas móviles estrechas */
+.header-actions {
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+@media (max-width: 400px) {
+  .app-header {
+    padding-left: 10px;
+    padding-right: 10px;
+    gap: 8px;
+  }
+  .header-actions .icon-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 0.95rem;
+    border-radius: 10px;
+  }
+  .card {
+    padding: 15px 14px;
+  }
+  .modal-card {
+    padding: 18px 16px calc(20px + env(safe-area-inset-bottom));
+  }
+  .plato-slot-head {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 350px) {
+  .peso-talla-row,
+  .fila-2,
+  .past-fh {
+    grid-template-columns: 1fr;
+  }
+  .ctrl-sano-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
 
 
 
